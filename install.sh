@@ -8,6 +8,10 @@
 # Or pin a specific version:
 #   VERSION=0.1.0 curl -sSL ... | sudo bash
 #
+# Uninstall:
+#   UNINSTALL=1 curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo bash
+#   (or if already downloaded: sudo bash install.sh --uninstall)
+#
 # What this script does:
 #   1. Detects OS (Linux/macOS) and architecture (amd64/arm64)
 #   2. Downloads the correct binary from the latest GitHub Release
@@ -32,6 +36,84 @@ info()    { echo -e "${BOLD}  --> $*${NC}"; }
 success() { echo -e "${GREEN}  ✓ $*${NC}"; }
 warn()    { echo -e "${YELLOW}  ⚠ $*${NC}"; }
 fail()    { echo -e "${RED}  ✗ $*${NC}"; exit 1; }
+
+# ---------------------------------------------------------------------------
+# Uninstall
+# ---------------------------------------------------------------------------
+do_uninstall() {
+  echo ""
+  echo -e "${BOLD}╔══════════════════════════════════════════╗${NC}"
+  echo -e "${BOLD}║   SMART Sniffer Agent — Uninstaller      ║${NC}"
+  echo -e "${BOLD}╚══════════════════════════════════════════╝${NC}"
+  echo ""
+
+  OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+
+  # Stop and remove service
+  if [ "$OS" = "linux" ]; then
+    if systemctl is-active --quiet smartha-agent 2>/dev/null; then
+      info "Stopping service..."
+      systemctl stop smartha-agent
+    fi
+    if [ -f /etc/systemd/system/smartha-agent.service ]; then
+      info "Removing systemd service..."
+      systemctl disable smartha-agent 2>/dev/null || true
+      rm -f /etc/systemd/system/smartha-agent.service
+      systemctl daemon-reload
+      success "Service removed."
+    fi
+  elif [ "$OS" = "darwin" ]; then
+    PLIST="/Library/LaunchDaemons/com.dablabs.smartha-agent.plist"
+    if launchctl list | grep -q com.dablabs.smartha-agent 2>/dev/null; then
+      info "Unloading launchd service..."
+      launchctl unload "$PLIST" 2>/dev/null || true
+    fi
+    if [ -f "$PLIST" ]; then
+      info "Removing plist..."
+      rm -f "$PLIST"
+      success "Service removed."
+    fi
+  fi
+
+  # Remove binary
+  if [ -f "$INSTALL_BIN" ]; then
+    info "Removing binary..."
+    rm -f "$INSTALL_BIN"
+    success "Binary removed."
+  fi
+
+  # Remove config
+  if [ -d "$INSTALL_CFG" ]; then
+    info "Removing config directory ($INSTALL_CFG)..."
+    rm -rf "$INSTALL_CFG"
+    success "Config removed."
+  fi
+
+  # macOS log files
+  if [ "$OS" = "darwin" ]; then
+    rm -f /var/log/smartha-agent.log /var/log/smartha-agent.error.log 2>/dev/null
+  fi
+
+  echo ""
+  echo -e "${GREEN}  ✓ SMART Sniffer Agent has been completely removed.${NC}"
+  echo ""
+  exit 0
+}
+
+# Check for --uninstall flag (via args or environment variable)
+UNINSTALL=false
+for arg in "$@"; do
+  case "$arg" in
+    --uninstall|-u|uninstall) UNINSTALL=true ;;
+  esac
+done
+# Also support: UNINSTALL=1 curl ... | sudo bash
+if [ "${UNINSTALL:-}" = "1" ] || [ "${UNINSTALL}" = "true" ]; then
+  if [ "$EUID" -ne 0 ]; then
+    fail "Please run as root: sudo bash $0 --uninstall"
+  fi
+  do_uninstall
+fi
 
 # ---------------------------------------------------------------------------
 # Service install functions (defined before use)
@@ -84,9 +166,10 @@ SVCEOF
   echo "  Config   : $INSTALL_CFG/config.yaml"
   echo ""
   echo "  Commands:"
-  echo "    Status:  systemctl status $SERVICE_NAME"
-  echo "    Logs:    journalctl -u $SERVICE_NAME -f"
-  echo "    Restart: systemctl restart $SERVICE_NAME"
+  echo "    Status:    systemctl status $SERVICE_NAME"
+  echo "    Logs:      journalctl -u $SERVICE_NAME -f"
+  echo "    Restart:   systemctl restart $SERVICE_NAME"
+  echo "    Uninstall: UNINSTALL=1 curl -sSL https://raw.githubusercontent.com/$REPO/main/install.sh | sudo bash"
   echo ""
 }
 
@@ -151,10 +234,11 @@ PLISTEOF
   echo "  Logs     : /var/log/smartha-agent.log"
   echo ""
   echo "  Commands:"
-  echo "    Stop:    sudo launchctl unload $PLIST_DEST"
-  echo "    Start:   sudo launchctl load -w $PLIST_DEST"
-  echo "    Restart: sudo launchctl kickstart -k system/$PLIST_NAME"
-  echo "    Logs:    tail -f /var/log/smartha-agent.log"
+  echo "    Stop:      sudo launchctl unload $PLIST_DEST"
+  echo "    Start:     sudo launchctl load -w $PLIST_DEST"
+  echo "    Restart:   sudo launchctl kickstart -k system/$PLIST_NAME"
+  echo "    Logs:      tail -f /var/log/smartha-agent.log"
+  echo "    Uninstall: UNINSTALL=1 curl -sSL https://raw.githubusercontent.com/$REPO/main/install.sh | sudo bash"
   echo ""
 }
 

@@ -252,6 +252,7 @@ Binaries output to `agent/build/`.
 
 ## Roadmap
 
+- [ ] HAOS add-on — run the agent directly on Home Assistant OS
 - [ ] Integration icons for HA integrations page
 - [ ] Auto-discovery via mDNS/Zeroconf
 - [ ] MQTT agent mode
