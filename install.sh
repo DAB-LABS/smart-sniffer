@@ -390,6 +390,11 @@ fi
 PORT="${PORT:-9099}"
 SCAN_INTERVAL="${SCAN_INTERVAL:-60s}"
 
+# If the user entered a bare number (e.g. "30"), append "s" for Go duration.
+if echo "$SCAN_INTERVAL" | grep -qE '^[0-9]+$'; then
+  SCAN_INTERVAL="${SCAN_INTERVAL}s"
+fi
+
 # ---------------------------------------------------------------------------
 # Install binary (stop service first to avoid "Text file busy")
 # ---------------------------------------------------------------------------
