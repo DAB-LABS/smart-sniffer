@@ -159,6 +159,22 @@ We generated placeholder PNG icons (dark charcoal circle with a hard disk + magn
 
 The bash script called `install_linux_service` and `install_macos_service` at line ~192 before the function definitions at line ~199. Bash requires functions to be defined before they're called. Fixed by moving the function definitions to the top of the script, right after the helper functions.
 
+### install.sh config corruption via `curl | bash`
+
+When piped through `curl | bash`, stdin is the script itself — not the terminal. The `read` prompts consumed script text as input, writing literal shell expressions like `PORT="${PORT:-9099}"` into `config.yaml`. Fixed by redirecting `read` from `/dev/tty` when stdin isn't a terminal.
+
+### install.sh "Text file busy" on reinstall
+
+Overwriting the binary while the agent was still running caused `cp: cannot create regular file: Text file busy`. Fixed by stopping the systemd/launchd service before copying the new binary.
+
+### install.sh uninstall env var clobbering
+
+The uninstall check logic set `UNINSTALL=false` at the top, which overwrote the `UNINSTALL=1` environment variable passed by the caller. Fixed by saving the env var into `_UNINSTALL_ENV` before any reassignment. Also corrected the uninstall one-liner syntax — `UNINSTALL=1` must be on the `bash` side of the pipe (`curl ... | sudo UNINSTALL=1 bash`), not the `curl` side.
+
+### install.sh bare number scan interval
+
+Entering `30` instead of `30s` for the scan interval wrote `scan_interval: 30` to config.yaml. Go's `time.Duration` can't unmarshal a bare integer — it needs a duration string like `30s`. Fixed by detecting bare numbers and appending `s` automatically.
+
 ### `__pycache__` and build binaries in the repo
 
 The `.gitignore` covers `__pycache__/` and `agent/build/`, but these were committed before the gitignore existed. They're harmless but should be cleaned up with `git rm -r --cached` in a future commit.
@@ -240,6 +256,8 @@ Both installers support pinning a version via environment variable (`VERSION=0.1
   - NVMe drive(s) for NVMe path testing
 - **Home Assistant Test instance** — LXC container on the same Proxmox host, running the `smart_sniffer` integration pointed at the local agent
 - **Home Assistant Production instance** — separate, used for final validation
+- **Kali Linux VM** (QEMU on Proxmox) — used for install.sh end-to-end testing. QEMU virtual disk correctly reports as UNSUPPORTED (no SMART data). Verified install, reinstall, uninstall, and bearer token auth.
+- **MacBook Air** (Apple Silicon) — used for macOS install.sh testing. Verified install, uninstall, and HA data flow (entities go unavailable on uninstall, recover on reinstall).
 
 ---
 
@@ -251,11 +269,14 @@ Immediate:
 - [ ] Clean committed build artifacts from git history
 - [ ] Update README entity table with all current sensors
 - [ ] Update `early-warning-attributes.md` YAML examples (binary → enum)
-- [ ] Validate release workflow (push `v0.1.0` tag, watch Actions)
-- [ ] Test `install.sh` on Linux (Proxmox host or LXC)
+- [x] Validate release workflow (push `v0.1.0` tag, watch Actions) — ✅ working
+- [x] Test `install.sh` on Linux — ✅ tested on Kali VM (QEMU). Install, reinstall, uninstall all working. Auth token verified.
+- [x] Test `install.sh` on macOS — ✅ tested on MacBook Air. Install, uninstall working. HA integration confirmed receiving data.
+- [ ] Test `install.ps1` on Windows
 
 Future:
 
+- [ ] **HAOS add-on** — Docker-based add-on packaging the Go agent + smartmontools for direct HAOS installs (no separate machine needed)
 - [ ] Design final integration icons and PR to `home-assistant/brands`
 - [ ] Add `--config` CLI flag to Go agent for explicit config file path
 - [ ] Auto-discovery via mDNS/Zeroconf (agents advertise, HA finds them)

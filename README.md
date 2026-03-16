@@ -69,6 +69,17 @@ VERSION=0.1.0 curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer
 
 The installer detects your OS and architecture, downloads the correct binary from [GitHub Releases](https://github.com/DAB-LABS/smart-sniffer/releases), verifies the SHA256 checksum, installs `smartmontools` if missing, prompts for configuration, and sets up a system service.
 
+<details>
+<summary>Uninstall the agent</summary>
+
+```bash
+curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo UNINSTALL=1 bash
+```
+
+Stops the service, removes the binary, config, and service files.
+
+</details>
+
 ### 2. Add the integration to Home Assistant
 
 **Via HACS (recommended):**
@@ -203,6 +214,8 @@ scan_interval: 60s
 ```
 
 All options can also be set via CLI flags: `--port`, `--token`, `--scan-interval`.
+
+**Authentication:** When a `token` is set, every request to the agent must include an `Authorization: Bearer <token>` header — requests without it receive a `401 Unauthorized` response. When adding the agent in Home Assistant, enter the same token in the integration's config flow. If no token is set, the agent serves data openly without auth.
 
 **Service management:**
 
