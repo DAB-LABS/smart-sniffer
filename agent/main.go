@@ -111,6 +111,10 @@ func main() {
 	var mdnsServer *zeroconf.Server
 	if cfg.MDNSEnabled() {
 		hostname, _ := os.Hostname()
+		// Strip domain suffix — dots in mDNS instance names break DNS label parsing.
+		if idx := strings.IndexByte(hostname, '.'); idx != -1 {
+			hostname = hostname[:idx]
+		}
 		authFlag := "0"
 		if cfg.Token != "" {
 			authFlag = "1"
