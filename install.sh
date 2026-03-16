@@ -441,9 +441,13 @@ fi
 # Health check
 # ---------------------------------------------------------------------------
 info "Waiting for agent to start..."
+HEALTH_CURL="curl -sf http://localhost:$PORT/api/health"
+if [ -n "$TOKEN" ]; then
+  HEALTH_CURL="curl -sf -H \"Authorization: Bearer $TOKEN\" http://localhost:$PORT/api/health"
+fi
 for i in 1 2 3 4 5; do
   sleep 2
-  if curl -sf "http://localhost:$PORT/api/health" &>/dev/null; then
+  if eval "$HEALTH_CURL" &>/dev/null; then
     success "Health check passed — agent is running!"
     break
   fi
