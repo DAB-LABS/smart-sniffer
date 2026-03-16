@@ -9,7 +9,7 @@
 #   VERSION=0.1.0 curl -sSL ... | sudo bash
 #
 # Uninstall:
-#   UNINSTALL=1 curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo bash
+#   curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo UNINSTALL=1 bash
 #   (or if already downloaded: sudo bash install.sh --uninstall)
 #
 # What this script does:
@@ -101,14 +101,16 @@ do_uninstall() {
 }
 
 # Check for --uninstall flag (via args or environment variable)
-UNINSTALL=false
+# IMPORTANT: Save env var BEFORE overwriting, since UNINSTALL=1 may come
+# from the caller's environment (e.g. curl ... | sudo UNINSTALL=1 bash)
+_UNINSTALL_ENV="${UNINSTALL:-}"
+UNINSTALL_REQUESTED=false
 for arg in "$@"; do
   case "$arg" in
-    --uninstall|-u|uninstall) UNINSTALL=true ;;
+    --uninstall|-u|uninstall) UNINSTALL_REQUESTED=true ;;
   esac
 done
-# Also support: UNINSTALL=1 curl ... | sudo bash
-if [ "${UNINSTALL:-}" = "1" ] || [ "${UNINSTALL}" = "true" ]; then
+if [ "$_UNINSTALL_ENV" = "1" ] || [ "$_UNINSTALL_ENV" = "true" ] || [ "$UNINSTALL_REQUESTED" = "true" ]; then
   if [ "$EUID" -ne 0 ]; then
     fail "Please run as root: sudo bash $0 --uninstall"
   fi
@@ -169,7 +171,7 @@ SVCEOF
   echo "    Status:    systemctl status $SERVICE_NAME"
   echo "    Logs:      journalctl -u $SERVICE_NAME -f"
   echo "    Restart:   systemctl restart $SERVICE_NAME"
-  echo "    Uninstall: UNINSTALL=1 curl -sSL https://raw.githubusercontent.com/$REPO/main/install.sh | sudo bash"
+  echo "    Uninstall: curl -sSL https://raw.githubusercontent.com/$REPO/main/install.sh | sudo UNINSTALL=1 bash"
   echo ""
 }
 
@@ -238,7 +240,7 @@ PLISTEOF
   echo "    Start:     sudo launchctl load -w $PLIST_DEST"
   echo "    Restart:   sudo launchctl kickstart -k system/$PLIST_NAME"
   echo "    Logs:      tail -f /var/log/smartha-agent.log"
-  echo "    Uninstall: UNINSTALL=1 curl -sSL https://raw.githubusercontent.com/$REPO/main/install.sh | sudo bash"
+  echo "    Uninstall: curl -sSL https://raw.githubusercontent.com/$REPO/main/install.sh | sudo UNINSTALL=1 bash"
   echo ""
 }
 
@@ -389,9 +391,17 @@ PORT="${PORT:-9099}"
 SCAN_INTERVAL="${SCAN_INTERVAL:-60s}"
 
 # ---------------------------------------------------------------------------
-# Install binary
+# Install binary (stop service first to avoid "Text file busy")
 # ---------------------------------------------------------------------------
 echo ""
+if [ "$PLATFORM" = "linux" ] && systemctl is-active --quiet smartha-agent 2>/dev/null; then
+  info "Stopping running agent before upgrade..."
+  systemctl stop smartha-agent
+fi
+if [ "$PLATFORM" = "darwin" ] && launchctl list | grep -q com.dablabs.smartha-agent 2>/dev/null; then
+  info "Stopping running agent before upgrade..."
+  launchctl unload /Library/LaunchDaemons/com.dablabs.smartha-agent.plist 2>/dev/null || true
+fi
 info "Installing binary to $INSTALL_BIN..."
 cp "$TMPDIR/$BINARY_FILE" "$INSTALL_BIN"
 chmod +x "$INSTALL_BIN"
