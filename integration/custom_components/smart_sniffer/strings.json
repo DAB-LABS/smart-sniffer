@@ -1,0 +1,51 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to SMART Sniffer Agent",
+        "description": "Enter the connection details for the SMART Sniffer agent running on the target machine.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "token": "Bearer Token (optional)",
+          "scan_interval": "Polling Interval (seconds)"
+        },
+        "data_description": {
+          "host": "IP address or hostname of the machine running the SMART Sniffer agent.",
+          "port": "HTTP port the agent is listening on (default 9099).",
+          "token": "Leave blank if the agent has no auth configured.",
+          "scan_interval": "How often to poll the agent for updated SMART data."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to the SMART Sniffer agent. Check the host, port, and token.",
+      "unknown": "An unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "This SMART Sniffer agent is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "SMART Sniffer Settings",
+        "description": "Adjust connection and polling settings. The host cannot be changed — remove and re-add the integration to change it.",
+        "data": {
+          "port": "Port",
+          "token": "Bearer Token",
+          "scan_interval": "Polling Interval (seconds)"
+        },
+        "data_description": {
+          "port": "HTTP port the agent is listening on.",
+          "token": "Leave blank if the agent has no auth configured.",
+          "scan_interval": "How often to poll for updated SMART data (in seconds)."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect with the new settings. Check the port and token.",
+      "unknown": "An unexpected error occurred."
+    }
+  }
+}

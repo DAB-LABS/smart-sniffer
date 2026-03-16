@@ -1,0 +1,14 @@
+# SMART Sniffer Agent configuration
+# Copy this file to config.yaml and edit as needed.
+
+# HTTP listen port (default: 9099)
+port: 9099
+
+# Bearer token for API authentication.
+# If set, all requests must include "Authorization: Bearer <token>".
+# Leave empty or omit to disable auth.
+token: ""
+
+# How often to re-scan drives and refresh SMART data (default: 60s).
+# Accepts Go duration strings: 30s, 1m, 5m, etc.
+scan_interval: 60s

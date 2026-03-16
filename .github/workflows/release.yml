@@ -1,0 +1,81 @@
+# Build and publish SMART Sniffer Agent binaries on tagged releases.
+#
+# Trigger: push a tag like v0.1.0
+#   git tag v0.1.0
+#   git push origin v0.1.0
+#
+# The workflow:
+#   1. Checks out the code
+#   2. Cross-compiles for all supported platforms
+#   3. Generates SHA256 checksums
+#   4. Creates a GitHub Release with all artifacts attached
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build all platforms
+        working-directory: agent
+        run: make all VERSION=${{ steps.version.outputs.VERSION }}
+
+      - name: Generate checksums
+        working-directory: agent/build
+        run: |
+          sha256sum smartha-agent-* > checksums.txt
+          cat checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: SMART Sniffer Agent v${{ steps.version.outputs.VERSION }}
+          body: |
+            ## SMART Sniffer Agent v${{ steps.version.outputs.VERSION }}
+
+            ### Quick Install
+
+            **Linux / macOS (one command):**
+            ```bash
+            curl -sSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | sudo bash
+            ```
+
+            **Windows (PowerShell as Admin):**
+            ```powershell
+            irm https://raw.githubusercontent.com/${{ github.repository }}/main/install.ps1 | iex
+            ```
+
+            ### Manual Download
+            Download the binary for your platform below, then see the [README](https://github.com/${{ github.repository }}#installation) for manual installation instructions.
+
+            ### Checksums
+            Verify your download with `sha256sum -c checksums.txt`.
+          files: |
+            agent/build/smartha-agent-linux-amd64
+            agent/build/smartha-agent-linux-arm64
+            agent/build/smartha-agent-darwin-amd64
+            agent/build/smartha-agent-darwin-arm64
+            agent/build/smartha-agent-windows-amd64.exe
+            agent/build/checksums.txt
+          generate_release_notes: true

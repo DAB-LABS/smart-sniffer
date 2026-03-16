@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+
+  <!-- Service identity -->
+  <key>Label</key>
+  <string>com.dablabs.smartha-agent</string>
+
+  <!-- Binary to run. Must be the full installed path. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/smartha-agent</string>
+  </array>
+
+  <!-- Working directory — agent looks here for config.yaml -->
+  <key>WorkingDirectory</key>
+  <string>/etc/smartha-agent</string>
+
+  <!-- Explicit PATH so launchd finds smartctl in Homebrew (/opt/homebrew/bin)
+       and MacPorts (/opt/local/bin). launchd starts with a minimal PATH that
+       does not include these locations. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:/opt/local/bin</string>
+  </dict>
+
+  <!-- Start automatically at boot -->
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- Only restart if the process crashes (exits via signal).
+       If it exits cleanly with a non-zero code (e.g. preflight failure),
+       launchd will NOT restart it — avoiding an error spam loop. -->
+  <key>KeepAlive</key>
+  <dict>
+    <key>Crashed</key>
+    <true/>
+  </dict>
+
+  <!-- Log stdout and stderr to files (rotated by macOS automatically) -->
+  <key>StandardOutPath</key>
+  <string>/var/log/smartha-agent.log</string>
+  <key>StandardErrorPath</key>
+  <string>/var/log/smartha-agent.error.log</string>
+
+  <!-- Run as root — required because smartctl needs elevated privileges -->
+  <key>UserName</key>
+  <string>root</string>
+
+  <!-- Throttle restart attempts — wait 10s before re-launching on crash -->
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+</dict>
+</plist>
+
+<!--
+==============================================================================
+Installation (macOS)
+==============================================================================
+
+1. Build and install the binary:
+     make darwin-arm64   # or darwin-amd64 for Intel Macs
+     sudo cp build/smartha-agent-darwin-arm64 /usr/local/bin/smartha-agent
+
+2. Create the config directory and optional config file:
+     sudo mkdir -p /etc/smartha-agent
+     sudo cp config.yaml.example /etc/smartha-agent/config.yaml
+     sudo nano /etc/smartha-agent/config.yaml   # edit as needed
+
+3. Install the plist into LaunchDaemons (system-wide, runs as root):
+     sudo cp com.dablabs.smartha-agent.plist /Library/LaunchDaemons/
+     sudo chown root:wheel /Library/LaunchDaemons/com.dablabs.smartha-agent.plist
+     sudo chmod 644 /Library/LaunchDaemons/com.dablabs.smartha-agent.plist
+
+4. Load and start the service:
+     sudo launchctl load -w /Library/LaunchDaemons/com.dablabs.smartha-agent.plist
+
+5. Verify it is running:
+     sudo launchctl list | grep smartha
+     curl http://localhost:9099/api/health
+
+==============================================================================
+Management
+==============================================================================
+
+  Stop:      sudo launchctl unload /Library/LaunchDaemons/com.dablabs.smartha-agent.plist
+  Start:     sudo launchctl load   /Library/LaunchDaemons/com.dablabs.smartha-agent.plist
+  Restart:   sudo launchctl kickstart -k system/com.dablabs.smartha-agent
+  Logs:      tail -f /var/log/smartha-agent.log
+  Status:    sudo launchctl print system/com.dablabs.smartha-agent
+
+==============================================================================
+Uninstall
+==============================================================================
+
+  sudo launchctl unload /Library/LaunchDaemons/com.dablabs.smartha-agent.plist
+  sudo rm /Library/LaunchDaemons/com.dablabs.smartha-agent.plist
+  sudo rm /usr/local/bin/smartha-agent
+  sudo rm -rf /etc/smartha-agent
+-->

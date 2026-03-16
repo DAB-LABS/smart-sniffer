@@ -1,0 +1,60 @@
+# SMART Sniffer Agent — Cross-compilation Makefile
+#
+# Usage:
+#   make              — build for the current platform
+#   make all          — build for all supported platforms
+#   make checksums    — generate SHA256 checksums for all binaries
+#   make release      — build all + generate checksums (used by CI)
+#   make clean        — remove build artifacts
+#   make linux-amd64  — build a specific target
+
+BINARY   := smartha-agent
+VERSION  := 0.1.0
+LDFLAGS  := -ldflags "-s -w -X main.version=$(VERSION)"
+OUTDIR   := build
+
+# Default: build for the host platform.
+.PHONY: build
+build:
+	go build $(LDFLAGS) -o $(OUTDIR)/$(BINARY) .
+
+# All supported cross-compilation targets.
+.PHONY: all
+all: linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64
+
+.PHONY: linux-amd64
+linux-amd64:
+	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o $(OUTDIR)/$(BINARY)-linux-amd64 .
+
+.PHONY: linux-arm64
+linux-arm64:
+	GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o $(OUTDIR)/$(BINARY)-linux-arm64 .
+
+.PHONY: darwin-amd64
+darwin-amd64:
+	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o $(OUTDIR)/$(BINARY)-darwin-amd64 .
+
+.PHONY: darwin-arm64
+darwin-arm64:
+	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o $(OUTDIR)/$(BINARY)-darwin-arm64 .
+
+.PHONY: windows-amd64
+windows-amd64:
+	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o $(OUTDIR)/$(BINARY)-windows-amd64.exe .
+
+# Generate SHA256 checksums for all binaries in the build directory.
+.PHONY: checksums
+checksums:
+	@echo "Generating checksums..."
+	@cd $(OUTDIR) && sha256sum $(BINARY)-* > checksums.txt 2>/dev/null || \
+		cd $(OUTDIR) && shasum -a 256 $(BINARY)-* > checksums.txt
+	@echo "Checksums written to $(OUTDIR)/checksums.txt"
+	@cat $(OUTDIR)/checksums.txt
+
+# Build all targets and generate checksums (CI entrypoint).
+.PHONY: release
+release: all checksums
+
+.PHONY: clean
+clean:
+	rm -rf $(OUTDIR)

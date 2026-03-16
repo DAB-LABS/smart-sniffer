@@ -1,0 +1,52 @@
+[Unit]
+Description=SMART Sniffer Agent — SMART disk health REST API
+Documentation=https://github.com/DAB-LABS/smart-sniffer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/smartha-agent
+WorkingDirectory=/etc/smartha-agent
+Restart=on-failure
+RestartSec=10
+
+# smartctl requires root privileges to read drive data.
+User=root
+
+# Harden the service (optional — adjust as needed).
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/etc/smartha-agent
+NoNewPrivileges=false
+PrivateTmp=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=smartha-agent
+
+[Install]
+WantedBy=multi-user.target
+
+# ------------------------------------------------------------------
+# Installation:
+#   sudo cp smartha-agent /usr/local/bin/
+#   sudo mkdir -p /etc/smartha-agent
+#   sudo cp config.yaml /etc/smartha-agent/
+#   sudo cp smartha-agent.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now smartha-agent
+#
+# TODO: macOS launchd
+#   Create a plist at ~/Library/LaunchDaemons/com.dablabs.smartha-agent.plist
+#   with ProgramArguments pointing to the binary and KeepAlive = true.
+#   Load with: sudo launchctl load -w <plist path>
+#
+# TODO: Windows service
+#   Use a wrapper like NSSM (https://nssm.cc/) to install the .exe as
+#   a Windows service:
+#     nssm install SmarthaAgent "C:\path\to\smartha-agent.exe"
+#     nssm set SmarthaAgent AppDirectory "C:\path\to\config"
+#     nssm start SmarthaAgent
+# ------------------------------------------------------------------
