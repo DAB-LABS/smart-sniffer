@@ -16,6 +16,9 @@ __pycache__/
 *.swo
 *~
 
+# Local
+revisions/
+
 # OS
 .DS_Store
 Thumbs.db
