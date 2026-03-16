@@ -273,17 +273,35 @@ success "smartctl found: $(smartctl --version | head -1)"
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-echo ""
-echo -e "${BOLD}  Configuration${NC}"
-echo "  (Press Enter to accept defaults)"
-echo ""
 
-read -rp "  Port [9099]: " PORT
+# When piped through bash (curl | bash), stdin is the script itself, not the
+# terminal. Redirect reads from /dev/tty so interactive prompts still work.
+# If /dev/tty isn't available (e.g. CI), fall back to defaults silently.
+if [ -t 0 ]; then
+  TTY_IN="/dev/stdin"
+elif [ -e /dev/tty ]; then
+  TTY_IN="/dev/tty"
+else
+  TTY_IN=""
+fi
+
+if [ -n "$TTY_IN" ]; then
+  echo ""
+  echo -e "${BOLD}  Configuration${NC}"
+  echo "  (Press Enter to accept defaults)"
+  echo ""
+
+  read -rp "  Port [9099]: " PORT < "$TTY_IN"
+  read -rp "  Bearer token for API auth (leave blank to disable): " TOKEN < "$TTY_IN"
+  read -rp "  Scan interval [60s]: " SCAN_INTERVAL < "$TTY_IN"
+else
+  info "Non-interactive mode detected — using defaults."
+  PORT=""
+  TOKEN=""
+  SCAN_INTERVAL=""
+fi
+
 PORT="${PORT:-9099}"
-
-read -rp "  Bearer token for API auth (leave blank to disable): " TOKEN
-
-read -rp "  Scan interval [60s]: " SCAN_INTERVAL
 SCAN_INTERVAL="${SCAN_INTERVAL:-60s}"
 
 # ---------------------------------------------------------------------------
