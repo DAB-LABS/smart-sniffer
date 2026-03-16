@@ -2,7 +2,7 @@
   <img src="images/SMARTsniffer.png" alt="SMART Sniffer" width="100%">
 </p>
 
-**Proactive disk health monitoring for Home Assistant.**
+**Proactive disk health monitoring for Home Assistant.**<br>
 *Sniffing SMART circuits so your drives don't ghost you.* 👻☠️
 
 <p align="center">
