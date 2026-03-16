@@ -3,7 +3,8 @@
 </p>
 
 <p align="center">
-  <strong>Monitor disk SMART health across all your machines — right from Home Assistant.</strong>
+  <strong>Proactive disk health monitoring for Home Assistant.</strong><br>
+  <em>Sniffing SMART circuits so your drives don't ghost you.</em> 👻☠️
 </p>
 
 <p align="center">
@@ -14,59 +15,144 @@
 
 ---
 
-SMART Sniffer is a two-part system for Home Assistant: a lightweight **Go agent** that reads SMART data via `smartctl` and exposes it over HTTP, and a **HACS-compatible custom integration** that turns that data into HA devices, sensors, and proactive health alerts.
+Reallocated sectors. Uncorrectable errors. Pending failures quietly piling up. 🧙‍♀️🙀
 
-Most SMART tools only show you the pass/fail verdict — a *lagging* indicator. Drives can report "PASSED" right up until catastrophic failure. SMART Sniffer watches the individual attributes that [research shows](https://www.backblaze.com/b2/hard-drive-test-data.html) actually predict failure, and tells you *before* it's too late.
+SMART drives say "PASSED" right up until the end. ☠️🪦
 
-## How It Works
+Learn to smell the decay. 🧟‍♂️
 
-Install the agent on each machine you want to monitor. Add each agent as a device in HA. Every drive appears as its own device with full sensor entities. Optional bearer token auth secures the connection.
+SMART Sniffer follows the trail, sniffing out the [early warning signs](https://www.backblaze.com/b2/hard-drive-test-data.html) your drives won't tell you about and reporting them to Home Assistant before the drive ghosts you for good. One agent per machine. Every drive gets a health score. Alerts fire automatically. No automations required. 👻
 
-<p align="center">
-  <img src="images/architecture.svg" alt="Architecture diagram" width="100%">
-</p>
+<br>
+
+## Features
+
+**Early warning alerts** — The Attention Needed sensor monitors leading indicators of failure across ATA, SATA, and NVMe drives. Four clear states: `NO` · `MAYBE` · `YES` · `UNSUPPORTED`.
+
+**Zero-config notifications** — Persistent notifications fire automatically when drive health changes. No automations or blueprints to set up. Alerts escalate, de-escalate, and auto-dismiss.
+
+**Multi-machine monitoring** — Install a lightweight Go agent on each machine. Each drive appears as its own HA device with full sensor entities and diagnostics.
+
+**Secure by default** — Optional bearer token authentication between agent and integration. SHA256-verified binary downloads.
+
+<br>
+
+## Quick Start
+
+**Requires:** `smartmontools` on each monitored machine — the installer handles this automatically (Homebrew on macOS, apt/dnf/yum on Linux).
+
+### 1. Install the agent
+
+Run on each machine you want to monitor:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo bash
+```
+
+<details>
+<summary>Windows (PowerShell as Admin)</summary>
+
+```powershell
+irm https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.ps1 | iex
+```
+
+> **Note:** The Windows agent builds but has not been validated yet. [Let us know how it goes.](https://github.com/DAB-LABS/smart-sniffer/issues)
+
+</details>
+
+<details>
+<summary>Pin a specific version</summary>
+
+```bash
+VERSION=0.1.0 curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo bash
+```
+
+</details>
+
+The installer detects your OS and architecture, downloads the correct binary from [GitHub Releases](https://github.com/DAB-LABS/smart-sniffer/releases), verifies the SHA256 checksum, installs `smartmontools` if missing, prompts for configuration, and sets up a system service.
+
+### 2. Add the integration to Home Assistant
+
+**Via HACS (recommended):**
+
+1. Open HACS → three-dot menu → **Custom repositories**
+2. Add `https://github.com/DAB-LABS/smart-sniffer` · Category: **Integration**
+3. Download **SMART Sniffer** → Restart HA
+
+**Manual:** Copy `custom_components/smart_sniffer/` into your HA `custom_components/` directory and restart.
+
+### 3. Connect to the agent
+
+**Settings → Devices & Services → Add Integration → SMART Sniffer**
+
+Enter the agent's host, port, optional token, and polling interval. Every drive appears as its own device.
+
+<br>
 
 ## Screenshots
 
 <table>
   <tr>
-    <td align="center"><strong>Samsung SSD — Sensors</strong></td>
+    <td align="center"><strong>SATA SSD — Sensors</strong></td>
     <td align="center"><strong>Apple NVMe — Sensors</strong></td>
-    <td align="center"><strong>Samsung SSD — Diagnostics</strong></td>
+  </tr>
+  <tr>
+    <td><img src="images/sensors-samsung-screenshot.png" width="320"></td>
+    <td><img src="images/sensors-apple-screenshot.png" width="320"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>SATA SSD — Diagnostics</strong></td>
     <td align="center"><strong>Apple NVMe — Diagnostics</strong></td>
   </tr>
   <tr>
-    <td><img src="images/sensors-samsung-screenshot.png" width="220"></td>
-    <td><img src="images/sensors-apple-screenshot.png" width="220"></td>
-    <td><img src="images/diag-samsung-screenshot.png" width="220"></td>
-    <td><img src="images/diag-apple-screenshot.png" width="220"></td>
+    <td><img src="images/diag-samsung-screenshot.png" width="320"></td>
+    <td><img src="images/diag-apple-screenshot.png" width="320"></td>
   </tr>
 </table>
 
-<table>
-  <tr>
-    <td align="center"><strong>USB Drive — Unsupported (no SMART passthrough)</strong></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="images/unsupported-screenshot.png" width="280"></td>
-  </tr>
-</table>
+<details>
+<summary><strong>🔌 What about USB drives?</strong></summary>
 
-## Entities Per Drive
+<br>
 
-Each drive discovered by the agent gets its own HA device with these entities:
+External drives connected via USB enclosures typically block SMART passthrough. SMART Sniffer detects this and marks the drive as `UNSUPPORTED` with `Health: Unknown`.
+
+<img src="images/unsupported-screenshot.png" width="280">
+
+This is the most common "why isn't my drive showing data?" scenario. It's a hardware limitation of the USB bridge chip, not a bug.
+
+</details>
+
+<br>
+
+## How It Works
+
+<p align="center">
+  <img src="images/architecture.svg" alt="Architecture diagram" width="100%">
+</p>
+
+Each machine runs a lightweight `smartha-agent` binary that wraps `smartctl` and serves SMART data over HTTP. The HA integration polls each agent and creates devices, sensors, and health alerts for every drive it finds.
+
+<br>
+
+<details>
+<summary><strong>Entities per drive</strong></summary>
+
+<br>
+
+Each drive gets its own HA device. Entities are created dynamically — if a drive doesn't report an attribute, the sensor is simply not created.
 
 **Sensors:**
 
 | Entity | Description |
 |--------|-------------|
 | Attention Needed | Proactive health alert — `NO` / `MAYBE` / `YES` / `UNSUPPORTED` |
-| Health | SMART pass/fail binary sensor — OK, Problem, or Unknown |
+| Health | SMART pass/fail — OK, Problem, or Unknown |
 | Temperature | Current drive temp (°C) |
 | Power-On Hours | Total hours powered on |
 | SMART Status | Raw SMART verdict (PASSED / FAILED) |
 
-**Diagnostic sensors** (created only if the drive reports them):
+**Diagnostic sensors** (conditional):
 
 | Entity | Description |
 |--------|-------------|
@@ -79,58 +165,36 @@ Each drive discovered by the agent gets its own HA device with these entities:
 | Command Timeout | Internal command timeouts |
 | Available Spare | NVMe reserve block pool (%) |
 | Available Spare Threshold | Manufacturer-set minimum spare (%) |
-| Current Pending Sector Count | Sectors waiting for reallocation (ATA, if supported) |
+| Current Pending Sector Count | Sectors waiting for reallocation (ATA) |
 
-## Attention Needed — Early Warning System
+</details>
 
-The **Attention Needed** sensor is the centerpiece. It evaluates individual SMART attributes every poll cycle and classifies the drive into one of four states:
+<details>
+<summary><strong>Attention Needed — how it classifies drives</strong></summary>
 
-| State | Icon | Meaning |
-|-------|------|---------|
-| **NO** | ✅ | All clear. No action needed. |
-| **MAYBE** | ⚠️ | Early degradation signals. Monitor closely. |
-| **YES** | 🔴 | Data at risk. **Back up immediately.** |
-| **UNSUPPORTED** | ❓ | No SMART data available (common with USB enclosures). |
+<br>
 
-When a drive's state changes, the integration automatically fires **persistent notifications** in HA — no automations or blueprints required. Notifications escalate, de-escalate, and auto-dismiss as conditions change.
+The Attention Needed sensor evaluates individual SMART attributes every poll cycle:
 
-See [docs/attention-severity-logic.md](docs/attention-severity-logic.md) for the full classification rules and notification behavior.
+| State | Meaning | Action |
+|-------|---------|--------|
+| **NO** | All monitored indicators clear | None required |
+| **MAYBE** | Early degradation signals detected | Monitor closely, plan replacement |
+| **YES** | Data integrity at risk | **Back up immediately** |
+| **UNSUPPORTED** | No usable SMART data | Common with USB enclosures |
 
-## Quick Install — Agent
+**Critical triggers (→ YES):** Reallocated sectors, pending sectors, uncorrectable errors, NVMe critical_warning, NVMe media_errors, spare depletion below threshold.
 
-### One-liner (Linux / macOS)
+**Warning triggers (→ MAYBE):** Reallocated events, spin retry count, command timeouts, NVMe spare < 20%, NVMe percentage_used ≥ 90%.
 
-```bash
-curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo bash
-```
+When a drive's state changes, a persistent notification fires in HA automatically. Notifications escalate on worsening conditions and dismiss when resolved. See [attention-severity-logic.md](docs/attention-severity-logic.md) for the full specification.
 
-### One-liner (Windows PowerShell as Admin)
+</details>
 
-```powershell
-irm https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.ps1 | iex
-```
+<details>
+<summary><strong>Agent configuration</strong></summary>
 
-### Pin a specific version
-
-```bash
-VERSION=0.1.0 curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo bash
-```
-
-The installer detects your OS and architecture, downloads the correct binary from [GitHub Releases](https://github.com/DAB-LABS/smart-sniffer/releases), verifies the SHA256 checksum, installs `smartmontools` if missing, prompts for configuration, and sets up a system service.
-
-### Manual Install
-
-Download the binary for your platform from the [Releases](https://github.com/DAB-LABS/smart-sniffer/releases) page, then:
-
-```bash
-sudo cp smartha-agent-linux-amd64 /usr/local/bin/smartha-agent
-sudo chmod +x /usr/local/bin/smartha-agent
-sudo mkdir -p /etc/smartha-agent
-sudo cp config.yaml.example /etc/smartha-agent/config.yaml
-sudo smartha-agent
-```
-
-### Configuration
+<br>
 
 Create `config.yaml` in the working directory or `/etc/smartha-agent/`:
 
@@ -142,50 +206,22 @@ scan_interval: 60s
 
 All options can also be set via CLI flags: `--port`, `--token`, `--scan-interval`.
 
-### Service Management
+**Service management:**
 
-**Linux (systemd):**
-```bash
-systemctl status smartha-agent
-journalctl -u smartha-agent -f
-systemctl restart smartha-agent
-```
+| Platform | Status | Logs | Restart |
+|----------|--------|------|---------|
+| Linux | `systemctl status smartha-agent` | `journalctl -u smartha-agent -f` | `systemctl restart smartha-agent` |
+| macOS | `launchctl list \| grep smartha` | `tail -f /var/log/smartha-agent.log` | `sudo launchctl kickstart -k system/com.dablabs.smartha-agent` |
+| Windows | `Get-Service SmartHA-Agent` | Event Viewer | `Restart-Service SmartHA-Agent` |
 
-**macOS (launchd):**
-```bash
-sudo launchctl kickstart -k system/com.dablabs.smartha-agent
-tail -f /var/log/smartha-agent.log
-```
+</details>
 
-**Windows:**
-```powershell
-Get-Service SmartHA-Agent
-Restart-Service SmartHA-Agent
-```
+<details>
+<summary><strong>Building from source</strong></summary>
 
-## Install — HA Integration
+<br>
 
-### HACS (Recommended)
-
-1. Add this repository as a [custom repository in HACS](https://hacs.xyz/docs/faq/custom_repositories): `https://github.com/DAB-LABS/smart-sniffer` → Category: **Integration**
-2. Search for "SMART Sniffer" and install
-3. Restart Home Assistant
-
-### Manual
-
-Copy `custom_components/smart_sniffer/` into your HA `custom_components/` directory and restart.
-
-### Adding a Host
-
-**Settings → Devices & Services → Add Integration → SMART Sniffer**
-
-Enter the agent's host, port, optional bearer token, and polling interval. Each drive detected by the agent appears as a separate HA device.
-
-Settings can be changed later without removing the integration — go to the integration's options.
-
-## Building from Source
-
-### Agent (Go 1.22+)
+Requires Go 1.22+.
 
 ```bash
 cd agent
@@ -197,34 +233,40 @@ make clean        # remove build artifacts
 
 Binaries output to `agent/build/`.
 
-### Supported Platforms
-
 | Platform | Architecture | Binary | Status |
 |----------|-------------|--------|--------|
 | Linux | amd64, arm64 | `smartha-agent-linux-amd64`, `-arm64` | Tested |
 | macOS | amd64 (Intel), arm64 (Apple Silicon) | `smartha-agent-darwin-amd64`, `-arm64` | Tested |
 | Windows | amd64 | `smartha-agent-windows-amd64.exe` | Not yet tested |
 
-> **Note:** The Windows agent builds and the installer script are in place, but have not been validated on a Windows machine yet. If you try it, [let us know how it goes](https://github.com/DAB-LABS/smart-sniffer/issues).
+</details>
+
+<br>
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| [Attention Severity Logic](docs/attention-severity-logic.md) | Full state machine, classification rules, notification lifecycle |
+| Doc | Description |
+|-----|-------------|
+| [Attention Severity Logic](docs/attention-severity-logic.md) | State machine, classification rules, notification lifecycle |
 | [Early Warning Attributes](docs/early-warning-attributes.md) | Which SMART attributes predict failure and why |
 | [Attribute Name Variants](docs/smart-attribute-name-variants.md) | Manufacturer-specific `smartctl` name mapping research |
 | [Build Journal](docs/build-journal.md) | Design decisions, iteration history, known issues |
 
 ## Roadmap
 
-- [ ] Integration icons for HA integrations page (brands repo PR)
+- [ ] Integration icons for HA integrations page
 - [ ] Auto-discovery via mDNS/Zeroconf
 - [ ] MQTT agent mode
 - [ ] Custom Lovelace card
 - [ ] Configurable alert thresholds via options flow
 - [ ] SAS/SCSI drive support
 
-## License
+## Contributing
 
-MIT — see [LICENSE](LICENSE).
+Found a bug? Have a drive that isn't mapping correctly? [Open an issue.](https://github.com/DAB-LABS/smart-sniffer/issues) Drive-specific `smartctl -a --json` output samples are especially welcome — they help us catch manufacturer name variants we haven't seen yet.
+
+---
+
+<p align="center">
+  MIT License · Built by <a href="https://github.com/DAB-LABS">DAB-LABS</a>
+</p>
