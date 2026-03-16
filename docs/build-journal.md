@@ -274,12 +274,15 @@ Immediate:
 - [x] Test `install.sh` on macOS — ✅ tested on MacBook Air. Install, uninstall working. HA integration confirmed receiving data.
 - [ ] Test `install.ps1` on Windows
 
+Next (v0.3.0):
+
+- [ ] **Auto-discovery via mDNS/Zeroconf** — agents advertise `_smartha._tcp.local.`, HA discovers them automatically via built-in Zeroconf. Agent uses `grandcat/zeroconf` Go library. Config flow gets `async_step_zeroconf()` with pre-filled host/port and conditional token prompt.
+
 Future:
 
-- [ ] **HAOS add-on** — Docker-based add-on packaging the Go agent + smartmontools for direct HAOS installs (no separate machine needed)
+- [ ] **HAOS App** — Docker-based HA App (formerly "add-on") packaging the Go agent + smartmontools for direct HAOS installs (no separate machine needed). Likely a separate repo (`smart-sniffer-addon`). Needs privileged device access for `smartctl`.
 - [ ] Design final integration icons and PR to `home-assistant/brands`
 - [ ] Add `--config` CLI flag to Go agent for explicit config file path
-- [ ] Auto-discovery via mDNS/Zeroconf (agents advertise, HA finds them)
 - [ ] MQTT agent mode for environments where direct HTTP isn't ideal
 - [ ] Custom Lovelace card for drive health at a glance
 - [ ] Configurable thresholds via HA options flow

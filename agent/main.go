@@ -13,10 +13,13 @@ import (
 	"os/exec"
 	"os/signal"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/grandcat/zeroconf"
 )
 
 // version is set at build time via -ldflags "-X main.version=...".
@@ -61,11 +64,16 @@ func main() {
 	if cfg.Token != "" {
 		authLabel = "enabled"
 	}
+	mdnsLabel := "disabled"
+	if cfg.MDNSEnabled() {
+		mdnsLabel = "enabled"
+	}
 	log.Printf("SMART Sniffer Agent v%s", version)
 	log.Printf("smartctl version: %s", smartctlVer)
 	log.Printf("Drives detected: %d", len(drives))
 	log.Printf("Listening on: 0.0.0.0:%d", cfg.Port)
 	log.Printf("Auth: %s", authLabel)
+	log.Printf("mDNS: %s", mdnsLabel)
 
 	// --- Cache / background scanner ---
 	cache := NewDriveCache(cfg.ScanInterval)
@@ -99,14 +107,54 @@ func main() {
 
 	go cache.RunBackground(ctx)
 
+	// --- mDNS / Zeroconf service advertisement ---
+	var mdnsServer *zeroconf.Server
+	if cfg.MDNSEnabled() {
+		hostname, _ := os.Hostname()
+		authFlag := "0"
+		if cfg.Token != "" {
+			authFlag = "1"
+		}
+		txt := []string{
+			"txtvers=1",
+			"version=" + version,
+			"hostname=" + hostname,
+			"os=" + detectOS(),
+			"auth=" + authFlag,
+			"drives=" + strconv.Itoa(len(drives)),
+		}
+		instance := "smartha-" + hostname
+		mdnsServer, err = zeroconf.Register(instance, "_smartha._tcp", "local.", cfg.Port, txt, nil)
+		if err != nil {
+			log.Printf("WARNING: mDNS registration failed: %v", err)
+		} else {
+			log.Printf("mDNS: advertising %s._smartha._tcp.local. on port %d", instance, cfg.Port)
+		}
+	}
+
 	<-ctx.Done()
 	log.Println("Shutting down…")
+
+	// Deregister mDNS before stopping HTTP.
+	if mdnsServer != nil {
+		mdnsServer.Shutdown()
+		log.Println("mDNS: deregistered")
+	}
 
 	shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutCtx); err != nil {
 		log.Printf("HTTP shutdown error: %v", err)
 	}
+}
+
+// detectOS returns the runtime OS as a short string for mDNS TXT records.
+func detectOS() string {
+	out, err := exec.Command("uname", "-s").Output()
+	if err != nil {
+		return "unknown"
+	}
+	return strings.ToLower(strings.TrimSpace(string(out)))
 }
 
 // ---------------------------------------------------------------------------

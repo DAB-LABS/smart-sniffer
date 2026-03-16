@@ -12,3 +12,9 @@ token: ""
 # How often to re-scan drives and refresh SMART data (default: 60s).
 # Accepts Go duration strings: 30s, 1m, 5m, etc.
 scan_interval: 60s
+
+# Enable mDNS/Zeroconf service advertisement (default: true).
+# When enabled, the agent advertises itself on the local network so
+# Home Assistant can auto-discover it.
+# Set to false to disable (or use --no-mdns flag).
+mdns: true

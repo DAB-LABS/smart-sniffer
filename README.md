@@ -31,6 +31,8 @@ SMART Sniffer follows the trail, sniffing out the [early warning signs](https://
 
 **Multi-machine monitoring** — Install a lightweight Go agent on each machine. Each drive appears as its own HA device with full sensor entities and diagnostics.
 
+**Auto-discovery** — Agents advertise themselves on the local network via mDNS/Zeroconf. Home Assistant discovers them automatically — no manual IP entry needed.
+
 **Secure by default** — Optional bearer token authentication between agent and integration. SHA256-verified binary downloads.
 
 <br>
@@ -217,6 +219,8 @@ All options can also be set via CLI flags: `--port`, `--token`, `--scan-interval
 
 **Authentication:** When a `token` is set, every request to the agent must include an `Authorization: Bearer <token>` header — requests without it receive a `401 Unauthorized` response. When adding the agent in Home Assistant, enter the same token in the integration's config flow. If no token is set, the agent serves data openly without auth.
 
+**Auto-discovery:** The agent advertises itself on the local network via mDNS (Zeroconf) by default. HA automatically detects running agents and prompts you to set them up — no manual IP entry needed. Disable with `mdns: false` in config or `--no-mdns` flag. Note: mDNS is link-local, so agents on different VLANs won't be discovered without an mDNS reflector.
+
 **Service management:**
 
 | Platform | Status | Logs | Restart |
@@ -265,9 +269,8 @@ Binaries output to `agent/build/`.
 
 ## Roadmap
 
-- [ ] HAOS add-on — run the agent directly on Home Assistant OS
+- [ ] HAOS App — run the agent directly on Home Assistant OS
 - [ ] Integration icons for HA integrations page
-- [ ] Auto-discovery via mDNS/Zeroconf
 - [ ] MQTT agent mode
 - [ ] Custom Lovelace card
 - [ ] Configurable alert thresholds via options flow

@@ -15,6 +15,7 @@ type Config struct {
 	Port         int           `yaml:"port"`
 	Token        string        `yaml:"token"`
 	ScanInterval time.Duration `yaml:"scan_interval"`
+	MDNS         *bool         `yaml:"mdns"` // pointer so we can detect "not set" vs "set to false"
 }
 
 // defaultConfig returns sane defaults.
@@ -47,6 +48,7 @@ func LoadConfig() (*Config, error) {
 	port := flag.Int("port", 0, "HTTP listen port (default 9099)")
 	token := flag.String("token", "", "Bearer token for API auth (optional)")
 	interval := flag.Duration("scan-interval", 0, "Drive rescan interval (e.g. 30s, 2m)")
+	noMDNS := flag.Bool("no-mdns", false, "Disable mDNS/Zeroconf service advertisement")
 	flag.Parse()
 
 	if *port != 0 {
@@ -58,6 +60,10 @@ func LoadConfig() (*Config, error) {
 	if *interval != 0 {
 		cfg.ScanInterval = *interval
 	}
+	if *noMDNS {
+		f := false
+		cfg.MDNS = &f
+	}
 
 	// Sanity checks
 	if cfg.Port < 1 || cfg.Port > 65535 {
@@ -68,4 +74,12 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// MDNSEnabled returns true if mDNS advertisement is enabled (default: true).
+func (c *Config) MDNSEnabled() bool {
+	if c.MDNS == nil {
+		return true // default on
+	}
+	return *c.MDNS
 }

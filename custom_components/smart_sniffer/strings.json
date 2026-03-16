@@ -16,6 +16,16 @@
           "token": "Leave blank if the agent has no auth configured.",
           "scan_interval": "How often to poll the agent for updated SMART data."
         }
+      },
+      "zeroconf_confirm": {
+        "title": "SMART Sniffer Agent Discovered",
+        "description": "Found agent on **{hostname}** ({host}:{port}) with {drives} drive(s).",
+        "data": {
+          "token": "Bearer Token"
+        },
+        "data_description": {
+          "token": "Enter the bearer token if auth is enabled on this agent. Leave blank otherwise."
+        }
       }
     },
     "error": {
@@ -24,7 +34,8 @@
     },
     "abort": {
       "already_configured": "This SMART Sniffer agent is already configured."
-    }
+    },
+    "flow_title": "SMART Sniffer ({hostname})"
   },
   "options": {
     "step": {
