@@ -8,7 +8,10 @@ from typing import Any
 import aiohttp
 import voluptuous as vol
 
-from homeassistant.components.zeroconf import ZeroconfServiceInfo
+try:
+    from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
+except ImportError:  # HA < 2025.x compat
+    from homeassistant.components.zeroconf import ZeroconfServiceInfo
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
