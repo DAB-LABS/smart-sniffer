@@ -2,10 +2,8 @@
   <img src="images/SMARTsniffer.png" alt="SMART Sniffer" width="100%">
 </p>
 
-<p align="center">
-  <strong>Proactive disk health monitoring for Home Assistant.</strong><br>
-  <em>Sniffing SMART circuits so your drives don't ghost you.</em> 👻☠️
-</p>
+**Proactive disk health monitoring for Home Assistant.**
+*Sniffing SMART circuits so your drives don't ghost you.* 👻☠️
 
 <p align="center">
   <a href="https://github.com/DAB-LABS/smart-sniffer/releases/latest"><img src="https://img.shields.io/github/v/release/DAB-LABS/smart-sniffer?style=flat-square" alt="Release"></a>
