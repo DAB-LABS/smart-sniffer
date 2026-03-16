@@ -32,22 +32,23 @@ Install the agent on each machine you want to monitor. Add each agent as a devic
   <tr>
     <td align="center"><strong>Samsung SSD — Sensors</strong></td>
     <td align="center"><strong>Apple NVMe — Sensors</strong></td>
-    <td align="center"><strong>USB Drive — Unsupported</strong></td>
-  </tr>
-  <tr>
-    <td><img src="images/sensors-samsung-screenshot.png" width="250"></td>
-    <td><img src="images/sensors-apple-screenshot.png" width="250"></td>
-    <td><img src="images/unsupported-screenshot.png" width="250"></td>
-  </tr>
-  <tr>
     <td align="center"><strong>Samsung SSD — Diagnostics</strong></td>
     <td align="center"><strong>Apple NVMe — Diagnostics</strong></td>
-    <td></td>
   </tr>
   <tr>
-    <td><img src="images/diag-samsung-screenshot.png" width="250"></td>
-    <td><img src="images/diag-apple-screenshot.png" width="250"></td>
-    <td></td>
+    <td><img src="images/sensors-samsung-screenshot.png" width="220"></td>
+    <td><img src="images/sensors-apple-screenshot.png" width="220"></td>
+    <td><img src="images/diag-samsung-screenshot.png" width="220"></td>
+    <td><img src="images/diag-apple-screenshot.png" width="220"></td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td align="center"><strong>USB Drive — Unsupported (no SMART passthrough)</strong></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="images/unsupported-screenshot.png" width="280"></td>
   </tr>
 </table>
 
@@ -198,11 +199,13 @@ Binaries output to `agent/build/`.
 
 ### Supported Platforms
 
-| Platform | Architecture | Binary |
-|----------|-------------|--------|
-| Linux | amd64, arm64 | `smartha-agent-linux-amd64`, `-arm64` |
-| macOS | amd64 (Intel), arm64 (Apple Silicon) | `smartha-agent-darwin-amd64`, `-arm64` |
-| Windows | amd64 | `smartha-agent-windows-amd64.exe` |
+| Platform | Architecture | Binary | Status |
+|----------|-------------|--------|--------|
+| Linux | amd64, arm64 | `smartha-agent-linux-amd64`, `-arm64` | Tested |
+| macOS | amd64 (Intel), arm64 (Apple Silicon) | `smartha-agent-darwin-amd64`, `-arm64` | Tested |
+| Windows | amd64 | `smartha-agent-windows-amd64.exe` | Not yet tested |
+
+> **Note:** The Windows agent builds and the installer script are in place, but have not been validated on a Windows machine yet. If you try it, [let us know how it goes](https://github.com/DAB-LABS/smart-sniffer/issues).
 
 ## Documentation
 
