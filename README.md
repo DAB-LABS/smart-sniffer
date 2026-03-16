@@ -94,9 +94,15 @@ Stops the service, removes the binary, config, and service files.
 
 ### 3. Connect to the agent
 
-**Settings → Devices & Services → Add Integration → SMART Sniffer**
+**Auto-discovery (recommended):** The agent advertises itself via mDNS. After a few seconds Home Assistant will show a discovery notification — just click **Add** and you're done. If the agent has a bearer token, you'll be prompted for it.
 
-Enter the agent's host, port, optional token, and polling interval. Every drive appears as its own device.
+<p align="center">
+  <img src="images/discovery-screenshot-mock.svg" alt="Auto-discovery prompt" width="400">
+</p>
+
+**Manual:** **Settings → Devices & Services → Add Integration → SMART Sniffer** — enter the agent's host, port, optional token, and polling interval.
+
+Every drive on the machine appears as its own HA device.
 
 <br>
 

@@ -28,14 +28,14 @@ The architecture diagram in the README covers the high-level picture. This docum
 
 ---
 
-## Repo Structure (v0.1.0)
+## Repo Structure (v0.3.0)
 
 ```
 smart-sniffer/
 ├── agent/                          # Go agent
-│   ├── main.go                     # HTTP server, smartctl execution, caching
-│   ├── config.go                   # Config loading: config.yaml → CLI flags
-│   ├── config.yaml.example         # Template config
+│   ├── main.go                     # HTTP server, smartctl execution, caching, mDNS registration
+│   ├── config.go                   # Config loading: config.yaml → CLI flags + mDNS toggle
+│   ├── config.yaml.example         # Template config (port, token, scan_interval, mdns)
 │   ├── Makefile                    # Cross-compilation + checksums
 │   ├── go.mod / go.sum             # Go module
 │   ├── systemd/                    # Linux service file
@@ -47,7 +47,7 @@ smart-sniffer/
 ├── custom_components/               # HA custom integration (HACS-compatible location)
 │   └── smart_sniffer/
 │       ├── __init__.py             # Platform setup + update listener
-│       ├── config_flow.py          # Config flow + options flow
+│       ├── config_flow.py          # Config flow + options flow + Zeroconf discovery
 │       ├── coordinator.py          # DataUpdateCoordinator + notifications
 │       ├── sensor.py               # All sensor entities + attention enum
 │       ├── binary_sensor.py        # Health binary sensor
@@ -55,8 +55,11 @@ smart-sniffer/
 │       ├── diagnostics.py          # HA diagnostics with redaction
 │       ├── const.py                # Constants (DOMAIN, CONF_*)
 │       ├── manifest.json           # HA integration metadata
-│       ├── strings.json            # UI strings (config + options flows)
-│       └── translations/en.json
+│       ├── strings.json            # UI strings (config + options + zeroconf flows)
+│       ├── translations/en.json
+│       └── brand/                  # HACS-required integration icons
+│           ├── icon.png / icon@2x.png
+│           └── logo.png / logo@2x.png
 │
 ├── .github/workflows/
 │   └── release.yml                 # GitHub Actions: build + release on v* tag
@@ -131,6 +134,14 @@ The fix: at entity creation time, `sensor.py` calls `_extract_attribute()` for a
 
 Originally used `hub`, which shows "Add hub" in the HA UI. But SMART Sniffer doesn't monitor a hub — each config entry represents a machine running the agent, and the drives are the real devices. Changed to `device` so the UI says "Add device" instead, which better matches the mental model.
 
+### Why mDNS/Zeroconf for auto-discovery?
+
+HA has built-in Zeroconf support — integrations declare a service type in `manifest.json` and HA listens for it automatically. No custom scanning, no SSDP, no MQTT discovery needed. The agent registers `_smartha._tcp.local.` with TXT records (version, hostname, OS, auth status, drive count) using the `grandcat/zeroconf` Go library. HA picks it up and routes to `async_step_zeroconf()` in the config flow.
+
+The instance name is `smartha-<hostname>`, which naturally deduplicates across machines. Each agent gets a unique mDNS identity, and the config flow uses `host:port` as the HA unique ID to prevent duplicate entries.
+
+One limitation: mDNS is link-local (multicast on the LAN segment). Agents on different VLANs won't be discovered without an mDNS reflector like Avahi or a router-level relay. The README documents this.
+
 ### Config resolution: file → flags
 
 The Go agent loads config from `config.yaml` (working directory, then `/etc/smartha-agent/`), then CLI flags override. CLI always wins. This means the installers can write `config.yaml` and the agent picks it up automatically, but a user can always override with `--port 8080` for testing.
@@ -174,6 +185,22 @@ The uninstall check logic set `UNINSTALL=false` at the top, which overwrote the 
 ### install.sh bare number scan interval
 
 Entering `30` instead of `30s` for the scan interval wrote `scan_interval: 30` to config.yaml. Go's `time.Duration` can't unmarshal a bare integer — it needs a duration string like `30s`. Fixed by detecting bare numbers and appending `s` automatically.
+
+### mDNS instance name breaks with dotted hostnames
+
+The `grandcat/zeroconf` library registers an mDNS service instance using the machine hostname. On macOS, `os.Hostname()` can return `MacBook-Air.localdomain` — the dots violate DNS label rules and cause `dns-sd -B` to show no instances. Fixed by stripping the domain suffix: `if idx := strings.IndexByte(hostname, '.'); idx != -1 { hostname = hostname[:idx] }`.
+
+### `ZeroconfServiceInfo` import path changed in HA 2025.x
+
+Adding `async_step_zeroconf()` to the config flow required importing `ZeroconfServiceInfo`. In older HA it lived at `homeassistant.components.zeroconf`; newer versions moved it to `homeassistant.helpers.service_info.zeroconf`. Using the old path caused `Failed to set up: Import error` on Production HA. Fixed with a try/except fallback.
+
+### Blank confirmation form for no-auth discovered agents
+
+When an agent without bearer token auth was discovered via Zeroconf, the confirm step showed an empty form with just a "Submit" button — confusing UX. Fixed by auto-confirming when `not self._discovery_auth and user_input is None` (setting `user_input = {}` to skip the form entirely).
+
+### `grandcat/zeroconf` pinned stale Go x/ deps
+
+Adding `github.com/grandcat/zeroconf v1.0.0` pulled in 2020-era `golang.org/x/{net,crypto,sys}` versions. Building with Go 1.25 failed with `invalid reference to syscall.recvmsg`. Fixed by running `go get golang.org/x/net@latest golang.org/x/crypto@latest golang.org/x/sys@latest` to pull current versions.
 
 ### `__pycache__` and build binaries in the repo
 
@@ -274,9 +301,9 @@ Immediate:
 - [x] Test `install.sh` on macOS — ✅ tested on MacBook Air. Install, uninstall working. HA integration confirmed receiving data.
 - [ ] Test `install.ps1` on Windows
 
-Next (v0.3.0):
+v0.3.0 (shipped):
 
-- [ ] **Auto-discovery via mDNS/Zeroconf** — agents advertise `_smartha._tcp.local.`, HA discovers them automatically via built-in Zeroconf. Agent uses `grandcat/zeroconf` Go library. Config flow gets `async_step_zeroconf()` with pre-filled host/port and conditional token prompt.
+- [x] **Auto-discovery via mDNS/Zeroconf** — agents advertise `_smartha._tcp.local.`, HA discovers them automatically via built-in Zeroconf. Agent uses `grandcat/zeroconf` Go library. Config flow has `async_step_zeroconf()` with pre-filled host/port and conditional token prompt. Tested on macOS (MacBook Air) with both auth and no-auth flows.
 
 Future:
 

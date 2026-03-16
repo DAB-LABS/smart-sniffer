@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="180" viewBox="0 0 400 180">
+  <defs>
+    <filter id="shadow" x="-5%" y="-5%" width="115%" height="115%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  <!-- Card background -->
+  <rect x="10" y="10" width="380" height="160" rx="16" fill="#fff" filter="url(#shadow)" stroke="#e0e0e0" stroke-width="1"/>
+
+  <!-- Icon placeholder circle -->
+  <circle cx="52" cy="62" r="24" fill="#1a73e8" opacity="0.12"/>
+  <!-- Hard drive icon -->
+  <g transform="translate(38,48)" fill="#1a73e8">
+    <rect x="0" y="2" width="28" height="18" rx="3" fill="none" stroke="#1a73e8" stroke-width="2"/>
+    <circle cx="22" cy="11" r="2" fill="#1a73e8"/>
+    <line x1="4" y1="11" x2="14" y2="11" stroke="#1a73e8" stroke-width="2" stroke-linecap="round"/>
+  </g>
+
+  <!-- Title -->
+  <text x="88" y="55" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif" font-size="16" font-weight="600" fill="#1d1d1f">SMART Sniffer (MacBook-Air)</text>
+  <!-- Subtitle -->
+  <text x="88" y="75" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif" font-size="13" fill="#666">Discovered on local network via mDNS</text>
+
+  <!-- Divider -->
+  <line x1="30" y1="100" x2="370" y2="100" stroke="#e8e8e8" stroke-width="1"/>
+
+  <!-- Buttons -->
+  <rect x="200" y="116" width="80" height="36" rx="18" fill="none" stroke="#dadce0" stroke-width="1.5"/>
+  <text x="240" y="139" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif" font-size="14" font-weight="500" fill="#5f6368" text-anchor="middle">Ignore</text>
+
+  <rect x="296" y="116" width="80" height="36" rx="18" fill="#1a73e8"/>
+  <text x="336" y="139" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif" font-size="14" font-weight="500" fill="#fff" text-anchor="middle">Add</text>
+</svg>
