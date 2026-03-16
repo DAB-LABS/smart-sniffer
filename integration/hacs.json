@@ -1,7 +1,0 @@
-{
-  "name": "SMART Sniffer",
-  "homeassistant": "2025.1.0",
-  "render_readme": true,
-  "zip_release": false,
-  "content_in_root": false
-}

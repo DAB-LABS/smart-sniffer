@@ -173,7 +173,7 @@ Restart-Service SmartHA-Agent
 
 ### Manual
 
-Copy `integration/custom_components/smart_sniffer/` into your HA `custom_components/` directory and restart.
+Copy `custom_components/smart_sniffer/` into your HA `custom_components/` directory and restart.
 
 ### Adding a Host
 

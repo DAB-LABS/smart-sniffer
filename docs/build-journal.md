@@ -1,0 +1,276 @@
+# SMART Sniffer — Build Journal
+
+**Started:** March 2026
+**Authors:** David Bailey, with Claude (Anthropic)
+**Repo:** `github.com/DAB-LABS/smart-sniffer`
+
+This document captures the full story of SMART Sniffer from concept through v0.1.0 — the goals, the design decisions, the things that broke, and what's left. Written for future-us to look back on and remember *why* things are the way they are.
+
+---
+
+## The Problem
+
+Home Assistant has no built-in way to monitor disk SMART health data across machines. If you're running HA on a Proxmox host with multiple drives, or you have NAS boxes and workstations on the network, you can't see drive health from the HA dashboard without stitching together shell commands, MQTT scripts, or third-party tools that each solve only a piece of the puzzle.
+
+The bigger problem: SMART's official pass/fail status is a *lagging* indicator. Drives can report "PASSED" right up until catastrophic failure. Backblaze's data shows that individual attributes — reallocated sectors, pending sectors, uncorrectable errors — are far more predictive. We wanted a system that watches those attributes and tells you *before* SMART officially fails.
+
+---
+
+## What We Built
+
+A two-part system:
+
+**Part 1 — `smartha-agent` (Go):** A lightweight HTTP server that wraps `smartctl --json`, caches scan results, and serves them over REST. Runs on any machine (Linux, macOS, Windows) with `smartmontools` installed. One agent per machine.
+
+**Part 2 — `smart_sniffer` integration (Python/HA):** A HACS-compatible Home Assistant custom integration that polls one or more agents and creates HA devices and entities per drive. Each agent host is added via the HA config flow.
+
+The architecture diagram in the README covers the high-level picture. This document covers everything behind it.
+
+---
+
+## Repo Structure (v0.1.0)
+
+```
+smart-sniffer/
+├── agent/                          # Go agent
+│   ├── main.go                     # HTTP server, smartctl execution, caching
+│   ├── config.go                   # Config loading: config.yaml → CLI flags
+│   ├── config.yaml.example         # Template config
+│   ├── Makefile                    # Cross-compilation + checksums
+│   ├── go.mod / go.sum             # Go module
+│   ├── systemd/                    # Linux service file
+│   ├── launchd/                    # macOS plist
+│   ├── windows/                    # Windows service scripts (legacy)
+│   ├── install-linux.sh            # Legacy platform-specific installer
+│   └── install-macos.sh            # Legacy platform-specific installer
+│
+├── custom_components/               # HA custom integration (HACS-compatible location)
+│   └── smart_sniffer/
+│       ├── __init__.py             # Platform setup + update listener
+│       ├── config_flow.py          # Config flow + options flow
+│       ├── coordinator.py          # DataUpdateCoordinator + notifications
+│       ├── sensor.py               # All sensor entities + attention enum
+│       ├── binary_sensor.py        # Health binary sensor
+│       ├── attention.py            # Shared severity logic (imported by 3 modules)
+│       ├── diagnostics.py          # HA diagnostics with redaction
+│       ├── const.py                # Constants (DOMAIN, CONF_*)
+│       ├── manifest.json           # HA integration metadata
+│       ├── strings.json            # UI strings (config + options flows)
+│       └── translations/en.json
+│
+├── .github/workflows/
+│   └── release.yml                 # GitHub Actions: build + release on v* tag
+│
+├── install.sh                      # Unified Linux/macOS installer (curl|bash)
+├── install.ps1                     # Windows PowerShell installer (irm|iex)
+│
+├── docs/
+│   ├── build-journal.md            # ← You are here
+│   ├── attention-severity-logic.md # Full attention state/notification docs
+│   ├── early-warning-attributes.md # Which SMART attributes predict failure
+│   └── smart-attribute-name-variants.md  # Manufacturer name mapping research
+│
+├── brands-repo-pr/                 # Prepared icons for HA brands repo PR
+│   └── custom_integrations/smart_sniffer/
+│       ├── icon.png / icon@2x.png
+│       └── logo.png / logo@2x.png
+│
+├── images/SMARTsniffer.png         # GitHub header image
+├── hacs.json                       # HACS repo metadata
+├── README.md
+└── LICENSE (MIT)
+```
+
+---
+
+## Design Decisions
+
+### Why a separate Go agent instead of running smartctl from HA directly?
+
+Three reasons:
+
+1. **Remote machines.** HA runs on one box. Your drives are on many. The agent model means you install a lightweight binary on each machine and HA discovers them all.
+2. **Privilege isolation.** `smartctl` needs root. Running it from HA means giving HA root (or complex sudoers rules). The agent runs as root on the target and exposes read-only data over HTTP — HA only needs network access.
+3. **Language fit.** Go produces a single static binary with no runtime dependencies — ideal for a system daemon you `scp` onto a Proxmox host and forget about.
+
+### Why an enum sensor for Attention Needed instead of a binary sensor?
+
+We iterated on this. The progression was:
+
+1. **Binary sensor** (device_class: problem) — on/off, simple. But it conflated "drive is fine" and "we have no data" into the same "off" state.
+2. **Binary sensor + severity attribute** — added `severity: critical/warning/none` as an attribute. Better, but HA doesn't let you easily automate on attribute values.
+3. **Enum sensor** with four states: `YES` / `MAYBE` / `NO` / `UNSUPPORTED` — this is what shipped. Each state maps to a severity level and gets its own icon. HA can trigger automations directly on state values.
+
+The key insight was the `UNSUPPORTED` state. USB enclosures often block SMART passthrough, so the drive appears in the API but returns no usable data. Before we added this state, those drives showed "OK" — which is a lie. Now they show "Unsupported" with an informational icon, which is accurate.
+
+An earlier name for this state was `PENDING`, but we realized that implies "waiting for data" — which only happens before the first poll. Since HA entities don't exist until after the first poll, no user would ever see `PENDING`. `UNSUPPORTED` accurately describes the permanent condition of USB bridges blocking SMART.
+
+### Why persistent notifications instead of automations/blueprints?
+
+David's take: "I'm not a fan of blueprints." Fair enough.
+
+We considered three approaches for alerting users when a drive needs attention:
+
+1. **Blueprint automation** — user imports a blueprint and configures it. Requires setup.
+2. **Service calls from the sensor** — the sensor itself fires notifications. Couples presentation to data.
+3. **Persistent notifications from the coordinator** — zero user setup. The coordinator evaluates attention state after every poll and manages notifications with stable per-drive IDs.
+
+We went with option 3. The coordinator tracks previous states to handle transitions correctly: first poll is a silent baseline (avoids notification spam on HA restart), escalation/de-escalation overwrites the existing notification (same ID), and resolution dismisses it. Full transition rules are documented in `docs/attention-severity-logic.md`.
+
+### Why a shared `attention.py` module?
+
+Three modules need attention logic: `sensor.py` (the enum sensor), `binary_sensor.py` (the health sensor's no-data check), and `coordinator.py` (notification decisions). Putting the logic in any one of them would create circular imports. The shared module pattern solves this cleanly — `attention.py` has no imports from the other modules.
+
+### Why `SKIP_IF_NOT_PRESENT` for some sensors?
+
+Samsung SSDs (specifically the 870 EVO, our test drive) don't implement ATA attribute ID 197 (Current Pending Sector Count). Without the skip gate, the sensor would show "Unknown" permanently — which is confusing because it looks like something is wrong.
+
+The fix: at entity creation time, `sensor.py` calls `_extract_attribute()` for attributes in the `SKIP_IF_NOT_PRESENT` set. If the value is `None`, the entity is simply never created. The drive's device page only shows sensors for attributes it actually reports. Same logic applies to `Spin_Retry_Count` (HDD-only) and `Command_Timeout`.
+
+### Why `integration_type: device` instead of `hub`?
+
+Originally used `hub`, which shows "Add hub" in the HA UI. But SMART Sniffer doesn't monitor a hub — each config entry represents a machine running the agent, and the drives are the real devices. Changed to `device` so the UI says "Add device" instead, which better matches the mental model.
+
+### Config resolution: file → flags
+
+The Go agent loads config from `config.yaml` (working directory, then `/etc/smartha-agent/`), then CLI flags override. CLI always wins. This means the installers can write `config.yaml` and the agent picks it up automatically, but a user can always override with `--port 8080` for testing.
+
+---
+
+## Things That Broke (and How We Fixed Them)
+
+### "Current Pending Sector Count: Unknown" on Samsung 870 EVO
+
+Samsung SSDs don't report ATA ID 197. The sensor was being created regardless and showing "Unknown" permanently. Fixed with the `SKIP_IF_NOT_PRESENT` gate described above.
+
+### Health showing "OK" for USB drives with no data
+
+The health binary sensor defaulted to `False` (OK) when evaluation found no failures. A USB drive that returned zero SMART data would show "OK" — dangerously misleading. Fixed by adding `_has_usable_smart_data()` to `attention.py`. When no data is present, health returns `None` (HA renders as "Unknown") and attention returns `UNSUPPORTED`.
+
+### `mdi:harddisk-alert` icon doesn't exist
+
+Used this for the Attention Needed sensor — the icon just didn't render. Replaced with a `_STATE_ICONS` dict that maps each enum state to a valid MDI icon: `check-circle-outline` (NO), `alert-circle-outline` (MAYBE), `alert-octagon` (YES), `help-circle-outline` (UNSUPPORTED).
+
+### Integration icon "not available" on HA integrations page
+
+We generated placeholder PNG icons (dark charcoal circle with a hard disk + magnifying glass motif) and placed them in the integration directory and at the repo root. They don't work for the HA integrations page — that requires a PR to the `home-assistant/brands` repository. The placeholder images are saved in `brands-repo-pr/` for when David designs final icons.
+
+### install.sh function ordering bug
+
+The bash script called `install_linux_service` and `install_macos_service` at line ~192 before the function definitions at line ~199. Bash requires functions to be defined before they're called. Fixed by moving the function definitions to the top of the script, right after the helper functions.
+
+### `__pycache__` and build binaries in the repo
+
+The `.gitignore` covers `__pycache__/` and `agent/build/`, but these were committed before the gitignore existed. They're harmless but should be cleaned up with `git rm -r --cached` in a future commit.
+
+---
+
+## The Attention System — How It Works
+
+This is the most complex piece. Rather than duplicate the full docs here, see `docs/attention-severity-logic.md` for the complete specification. The short version:
+
+The system evaluates every drive after each poll and classifies it into one of four states based on SMART attribute values. Critical indicators (reallocated sectors, pending sectors, uncorrectable errors, NVMe critical_warning/media_errors/spare depletion) → `YES`. Warning indicators (reallocated events, spin retry, command timeout, NVMe low spare/high percentage_used) → `MAYBE`. All clear → `NO`. No usable data → `UNSUPPORTED`.
+
+The coordinator tracks state transitions and fires/updates/dismisses persistent notifications automatically. The first poll after HA starts is always a silent baseline — no notifications fire until the state *changes*.
+
+See also: `docs/early-warning-attributes.md` for the research behind which attributes we monitor and why, and `docs/smart-attribute-name-variants.md` for the manufacturer-specific attribute name mapping.
+
+---
+
+## Build & Release Pipeline
+
+### GitHub Actions (`.github/workflows/release.yml`)
+
+Push a `v*` tag to trigger:
+
+1. Checks out the code
+2. Sets up Go from `agent/go.mod`
+3. Runs `make all VERSION=x.y.z` in `agent/` — produces 5 binaries (linux-amd64, linux-arm64, darwin-amd64, darwin-arm64, windows-amd64)
+4. Generates SHA256 checksums
+5. Creates a GitHub Release with all artifacts + one-liner install commands in the release notes
+
+### Makefile targets
+
+- `make` — build for current platform
+- `make all` — cross-compile all 5 targets
+- `make checksums` — SHA256 for all binaries in `build/`
+- `make release` — `all` + `checksums` (CI entrypoint)
+- `make clean` — remove build directory
+
+### Installers
+
+**`install.sh` (Linux + macOS)** — `curl -sSL ... | sudo bash`
+
+Detects OS and architecture, downloads the correct binary from GitHub Releases, verifies SHA256 checksum, installs smartmontools if missing, prompts for port/token/interval, writes config, installs as systemd service (Linux) or launchd daemon (macOS), runs a health check.
+
+**`install.ps1` (Windows)** — `irm ... | iex`
+
+Same flow adapted for PowerShell: downloads binary, verifies checksum, checks for smartmontools (offers winget/choco install), prompts for config, installs as a Windows service with automatic restart on failure.
+
+Both installers support pinning a version via environment variable (`VERSION=0.1.0`).
+
+---
+
+## Known Issues & Tech Debt
+
+1. **`--config` flag not implemented in Go agent.** The Windows installer passes `--config "C:\...\config.yaml"` to the service, but `config.go` doesn't have a `--config` flag — it hardcodes the search paths (`config.yaml` in CWD, `/etc/smartha-agent/config.yaml`). The installer's service invocation needs to either set the working directory or the agent needs to gain a `--config` flag. This will fail on Windows as-is.
+
+2. **Committed build artifacts.** `agent/agent`, `agent/build/smartha-agent`, `agent/build/smartha-agent-darwin-arm64`, `agent/build/smartha-agent-linux-amd64`, and `integration/custom_components/smart_sniffer/__pycache__/` were committed before `.gitignore` was in place. Should be cleaned with `git rm -r --cached`.
+
+3. **Integration icons.** The HA integrations page shows "icon not available" because custom integration icons require a PR to `github.com/home-assistant/brands`. Placeholder PNGs exist in `brands-repo-pr/` but final designs are pending.
+
+4. **Legacy install scripts.** `agent/install-linux.sh`, `agent/install-macos.sh`, and `agent/windows/install-service.ps1` are the original platform-specific scripts. They're superseded by the unified `install.sh` and `install.ps1` at the repo root. The legacy scripts should be removed or marked deprecated once the new ones are validated.
+
+5. **`early-warning-attributes.md` references binary sensor for attention.** This doc was written before the attention sensor was converted from binary to enum. The YAML examples at the bottom still reference `binary_sensor.{drive}_attention_needed`. Should be updated to `sensor.{drive}_attention_needed` with enum state checks.
+
+6. **README entity table is stale.** Doesn't list: Attention Needed (enum), Power Cycle Count, Reallocated Event Count, Spin Retry Count, Command Timeout, Available Spare, Available Spare Threshold. The README was written before the early-warning expansion.
+
+7. **SK Hynix wear leveling name unverified.** Noted in `smart-attribute-name-variants.md`. Need a `smartctl -a` dump from an SK Hynix SSD to confirm the attribute name.
+
+8. **No tests.** Neither the Go agent nor the Python integration have automated tests. The agent has been tested manually against real drives on Proxmox. The integration has been tested on a HA Test instance (LXC container).
+
+---
+
+## Test Environment
+
+- **Proxmox VE host** running the Go agent, with:
+  - Samsung 870 EVO 500GB (SATA SSD) — primary test drive for ATA path
+  - Samsung 860 EVO 1TB (SATA SSD) — second ATA drive
+  - External USB drive (via USB enclosure) — tests the UNSUPPORTED/no-data path
+  - NVMe drive(s) for NVMe path testing
+- **Home Assistant Test instance** — LXC container on the same Proxmox host, running the `smart_sniffer` integration pointed at the local agent
+- **Home Assistant Production instance** — separate, used for final validation
+
+---
+
+## What's Next
+
+Immediate:
+
+- [ ] Fix `--config` flag in Go agent (or fix Windows installer to use working directory)
+- [ ] Clean committed build artifacts from git history
+- [ ] Update README entity table with all current sensors
+- [ ] Update `early-warning-attributes.md` YAML examples (binary → enum)
+- [ ] Validate release workflow (push `v0.1.0` tag, watch Actions)
+- [ ] Test `install.sh` on Linux (Proxmox host or LXC)
+
+Future:
+
+- [ ] Design final integration icons and PR to `home-assistant/brands`
+- [ ] Add `--config` CLI flag to Go agent for explicit config file path
+- [ ] Auto-discovery via mDNS/Zeroconf (agents advertise, HA finds them)
+- [ ] MQTT agent mode for environments where direct HTTP isn't ideal
+- [ ] Custom Lovelace card for drive health at a glance
+- [ ] Configurable thresholds via HA options flow
+- [ ] SAS/SCSI drive support
+- [ ] Automated tests for both agent and integration
+
+---
+
+## Reference Docs
+
+These companion documents cover specific subsystems in depth. Prefer reading them over this journal for implementation details:
+
+- **[attention-severity-logic.md](attention-severity-logic.md)** — Complete attention state machine, severity rules, notification lifecycle, transition table
+- **[early-warning-attributes.md](early-warning-attributes.md)** — Which SMART attributes predict failure and why we monitor them
+- **[smart-attribute-name-variants.md](smart-attribute-name-variants.md)** — Manufacturer-specific attribute name research for the `ata_name_map`
