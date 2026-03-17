@@ -71,6 +71,10 @@ VERSION=0.1.0 curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer
 
 The installer detects your OS and architecture, downloads the correct binary from [GitHub Releases](https://github.com/DAB-LABS/smart-sniffer/releases), verifies the SHA256 checksum, installs `smartmontools` if missing, prompts for configuration, and sets up a system service.
 
+<p align="center">
+  <img src="images/agent_install_uninstall_screenshot.png" alt="Agent install on Linux" width="520">
+</p>
+
 <details>
 <summary>Uninstall the agent</summary>
 
@@ -271,6 +275,7 @@ Binaries output to `agent/build/`.
 | [Attention Severity Logic](docs/attention-severity-logic.md) | State machine, classification rules, notification lifecycle |
 | [Early Warning Attributes](docs/early-warning-attributes.md) | Which SMART attributes predict failure and why |
 | [Attribute Name Variants](docs/smart-attribute-name-variants.md) | Manufacturer-specific `smartctl` name mapping research |
+| [Mock Agent](docs/mock-agent.md) | Testing tool — fake agent with controllable drives |
 | [Build Journal](docs/build-journal.md) | Design decisions, iteration history, known issues |
 
 ## Roadmap
