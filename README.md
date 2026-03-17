@@ -273,6 +273,7 @@ Binaries output to `agent/build/`.
 | Doc | Description |
 |-----|-------------|
 | [Attention Severity Logic](docs/attention-severity-logic.md) | State machine, classification rules, notification lifecycle |
+| [Trigger → Entity Map](docs/attention-trigger-entity-map.md) | Every attention trigger mapped to its sensor entity and icon |
 | [Early Warning Attributes](docs/early-warning-attributes.md) | Which SMART attributes predict failure and why |
 | [Attribute Name Variants](docs/smart-attribute-name-variants.md) | Manufacturer-specific `smartctl` name mapping research |
 | [Mock Agent](docs/mock-agent.md) | Testing tool — fake agent with controllable drives |
@@ -284,6 +285,7 @@ Binaries output to `agent/build/`.
 - [ ] Integration icons for HA integrations page
 - [ ] MQTT agent mode
 - [ ] Custom Lovelace card
+- [ ] Temperature-based attention triggers (absolute threshold + trend over time)
 - [ ] Configurable alert thresholds via options flow
 - [ ] SAS/SCSI drive support
 

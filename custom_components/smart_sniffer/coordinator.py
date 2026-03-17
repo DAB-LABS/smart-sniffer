@@ -109,9 +109,10 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(seconds=interval),
         )
 
-        # Track the last known attention state per drive for transition detection.
-        # None = drive not yet seen (first poll baseline).
+        # Track the last known attention state and reasons per drive for
+        # transition detection. None = drive not yet seen (first poll baseline).
         self._prev_state: dict[str, str | None] = {}
+        self._prev_reasons: dict[str, list[str]] = {}
 
     @property
     def _base_url(self) -> str:
@@ -177,10 +178,14 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     drive_id, state,
                 )
                 self._prev_state[drive_id] = state
+                self._prev_reasons[drive_id] = reasons
                 continue
 
-            if state == prev:
-                continue  # No change.
+            prev_reasons = self._prev_reasons.get(drive_id, [])
+            reasons_changed = sorted(reasons) != sorted(prev_reasons)
+
+            if state == prev and not reasons_changed:
+                continue  # No change in state or reasons.
 
             notif_id = _notif_id(drive_id)
 
@@ -203,8 +208,10 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                           notification_id=notif_id)
 
             elif state in (STATE_MAYBE, STATE_YES):
-                # Attention needed — fire or escalate/de-escalate.
-                if prev == STATE_NO:
+                # Attention needed — fire, escalate/de-escalate, or refresh reasons.
+                if state == prev and reasons_changed:
+                    action = "reasons updated"
+                elif prev == STATE_NO:
                     action = "now requires attention"
                 elif prev == STATE_MAYBE and state == STATE_YES:
                     action = "ESCALATED to critical"
@@ -224,10 +231,12 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                           notification_id=notif_id)
 
             self._prev_state[drive_id] = state
+            self._prev_reasons[drive_id] = reasons
 
         # Clean up state for drives that disappeared (e.g., USB unplugged).
         removed = set(self._prev_state.keys()) - current_drive_ids
         for drive_id in removed:
             _LOGGER.debug("SMART Sniffer: %s no longer present, cleaning up", drive_id)
             del self._prev_state[drive_id]
+            self._prev_reasons.pop(drive_id, None)
             pn_dismiss(self.hass, _notif_id(drive_id))

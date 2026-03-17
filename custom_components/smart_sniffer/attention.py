@@ -128,6 +128,13 @@ def evaluate_attention(
     warning_reasons:  list[str] = []
 
     # ------------------------------------------------------------------
+    # SMART overall status (applies to all protocols)
+    # ------------------------------------------------------------------
+    status = smart_data.get("smart_status", {})
+    if isinstance(status, dict) and status.get("passed") is False:
+        critical_reasons.append("SMART overall status: FAILED")
+
+    # ------------------------------------------------------------------
     # NVMe evaluation
     # ------------------------------------------------------------------
     nvme_log = smart_data.get("nvme_smart_health_information_log", {})

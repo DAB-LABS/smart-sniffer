@@ -312,6 +312,7 @@ Future:
 - [ ] Add `--config` CLI flag to Go agent for explicit config file path
 - [ ] MQTT agent mode for environments where direct HTTP isn't ideal
 - [ ] Custom Lovelace card for drive health at a glance
+- [ ] **Temperature-based attention triggers** — absolute threshold (e.g., > 55°C = MAYBE) and trend-over-time detection (sustained rise). Requires storing historical temperature readings in the coordinator.
 - [ ] Configurable thresholds via HA options flow
 - [ ] SAS/SCSI drive support
 - [ ] Automated tests for both agent and integration

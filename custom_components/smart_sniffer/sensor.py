@@ -54,6 +54,8 @@ ATA_ONLY_KEYS: frozenset[str] = frozenset({
 })
 
 NVME_ONLY_KEYS: frozenset[str] = frozenset({
+    "critical_warning",
+    "media_errors",
     "available_spare",
     "available_spare_threshold",
 })
@@ -158,6 +160,20 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
 
     # --- NVMe only ---
     SensorEntityDescription(
+        key="critical_warning",
+        name="Critical Warning",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:alert-decagram",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="media_errors",
+        name="Media Errors",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:alert-decagram-outline",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
         key="available_spare",
         name="Available Spare",
         state_class=SensorStateClass.MEASUREMENT,
@@ -211,6 +227,8 @@ def _extract_attribute(drive_data: dict[str, Any], key: str) -> Any | None:
             "power_cycle_count":            lambda: nvme_log.get("power_cycles"),
             "wear_leveling_count":          lambda: nvme_log.get("percentage_used"),
             "reported_uncorrectable_errors":lambda: nvme_log.get("media_errors"),
+            "critical_warning":             lambda: nvme_log.get("critical_warning"),
+            "media_errors":                 lambda: nvme_log.get("media_errors"),
             "available_spare":              lambda: nvme_log.get("available_spare"),
             "available_spare_threshold":    lambda: nvme_log.get("available_spare_threshold"),
         }
@@ -341,12 +359,43 @@ async def async_setup_entry(
             SmartSnifferAttentionSensor(coordinator, drive_id, drive_data)
         )
 
+        # --- Attention Reasons sensor (one per drive, always created) ---
+        entities.append(
+            SmartSnifferAttentionReasonsSensor(coordinator, drive_id, drive_data)
+        )
+
     async_add_entities(entities, update_before_add=False)
 
 
 # ---------------------------------------------------------------------------
 # SMART attribute sensor
 # ---------------------------------------------------------------------------
+
+# Sensor keys whose non-zero values trigger critical attention (YES).
+_CRITICAL_SENSOR_KEYS: frozenset[str] = frozenset({
+    "reallocated_sector_count",
+    "current_pending_sector_count",
+    "reported_uncorrectable_errors",
+    "critical_warning",
+    "media_errors",
+})
+
+# Sensor keys whose non-zero values trigger warning attention (MAYBE).
+_WARNING_SENSOR_KEYS: frozenset[str] = frozenset({
+    "reallocated_event_count",
+    "spin_retry_count",
+    "command_timeout",
+})
+
+# NVMe sensors with threshold-based triggers (not simple non-zero).
+# These are handled specially in the icon property.
+_NVME_SPARE_KEY = "available_spare"
+_NVME_WEAR_KEY = "wear_leveling_count"
+
+# Alert icons — used when a diagnostic sensor is actively triggering attention.
+_ALERT_ICON_CRITICAL = "mdi:alert-octagon"
+_ALERT_ICON_WARNING  = "mdi:alert-circle"
+
 
 class SmartSnifferSensor(CoordinatorEntity[SmartSnifferCoordinator], SensorEntity):
     """Representation of a single SMART attribute as a HA sensor."""
@@ -363,6 +412,7 @@ class SmartSnifferSensor(CoordinatorEntity[SmartSnifferCoordinator], SensorEntit
         super().__init__(coordinator)
         self.entity_description = description
         self._drive_id = drive_id
+        self._default_icon = description.icon
 
         model = drive_data.get("model", "Unknown Drive")
         serial = drive_data.get("serial", drive_id)
@@ -377,6 +427,40 @@ class SmartSnifferSensor(CoordinatorEntity[SmartSnifferCoordinator], SensorEntit
             "model": model,
             "serial_number": serial,
         }
+
+    @property
+    def icon(self) -> str | None:
+        """Dynamic icon — switches to alert icon when this sensor triggers attention."""
+        key = self.entity_description.key
+        value = self.native_value
+
+        # Non-zero triggers (ATA + NVMe critical_warning/media_errors).
+        if value is not None and isinstance(value, (int, float)) and value > 0:
+            if key in _CRITICAL_SENSOR_KEYS:
+                return _ALERT_ICON_CRITICAL
+            if key in _WARNING_SENSOR_KEYS:
+                return _ALERT_ICON_WARNING
+
+        # NVMe available_spare — threshold-based (needs drive's own threshold).
+        if key == _NVME_SPARE_KEY and value is not None and isinstance(value, (int, float)):
+            # Get the threshold from the same drive's data.
+            drive_data = self.coordinator.data.get(self._drive_id, {})
+            threshold = _extract_attribute(drive_data, "available_spare_threshold")
+            if threshold is not None and value <= threshold:
+                return _ALERT_ICON_CRITICAL
+            if value < 20:
+                return _ALERT_ICON_WARNING
+
+        # NVMe percentage_used (mapped to wear_leveling_count) — ≥90% = warning.
+        if key == _NVME_WEAR_KEY and value is not None and isinstance(value, (int, float)):
+            if value >= 90:
+                return _ALERT_ICON_WARNING
+
+        # SMART Status — FAILED = critical.
+        if key == "smart_status" and value == "FAILED":
+            return _ALERT_ICON_CRITICAL
+
+        return self._default_icon
 
     @property
     def native_value(self) -> Any | None:
@@ -473,6 +557,77 @@ class SmartSnifferAttentionSensor(
             "reasons": reasons if reasons else ["No issues detected"],
             "issue_count": len(reasons),
         }
+
+
+# ---------------------------------------------------------------------------
+# Attention Reasons sensor (text: human-readable trigger summary)
+# ---------------------------------------------------------------------------
+
+class SmartSnifferAttentionReasonsSensor(
+    CoordinatorEntity[SmartSnifferCoordinator], SensorEntity
+):
+    """Text sensor showing human-readable reasons for the current attention state.
+
+    Provides an at-a-glance answer to "why does this drive need attention?"
+    directly on the device page, without needing to inspect entity attributes.
+
+    When attention is NO:          "No issues detected"
+    When attention is UNSUPPORTED: "No usable SMART data"
+    When attention is MAYBE/YES:   Semicolon-separated list of trigger reasons.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Attention Reasons"
+    _attr_icon = "mdi:text-box-search-outline"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self,
+        coordinator: SmartSnifferCoordinator,
+        drive_id: str,
+        drive_data: dict[str, Any],
+    ) -> None:
+        super().__init__(coordinator)
+        self._drive_id = drive_id
+
+        model = drive_data.get("model", "Unknown Drive")
+        serial = drive_data.get("serial", drive_id)
+
+        self._attr_unique_id = (
+            f"{coordinator.config_entry.entry_id}_{drive_id}_attention_reasons"
+        )
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, drive_id)},
+            "name": f"{model} ({serial})",
+            "manufacturer": _guess_manufacturer(model),
+            "model": model,
+            "serial_number": serial,
+        }
+
+    @property
+    def native_value(self) -> str:
+        drive_data = self.coordinator.data.get(self._drive_id)
+        if drive_data is None:
+            return "Drive data unavailable"
+        state, _, reasons = evaluate_attention(drive_data)
+        if state == STATE_NO:
+            return "No issues detected"
+        if state == STATE_UNSUPPORTED:
+            return "No usable SMART data"
+        return "; ".join(reasons)
+
+    @property
+    def icon(self) -> str:
+        """Dynamic icon matching the attention state."""
+        drive_data = self.coordinator.data.get(self._drive_id)
+        if drive_data is None:
+            return "mdi:text-box-search-outline"
+        state, _, _ = evaluate_attention(drive_data)
+        if state == STATE_YES:
+            return "mdi:alert-octagon"
+        if state == STATE_MAYBE:
+            return "mdi:alert-circle-outline"
+        return "mdi:text-box-search-outline"
 
 
 # ---------------------------------------------------------------------------
