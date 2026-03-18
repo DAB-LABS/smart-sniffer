@@ -4,7 +4,7 @@
 
 If you discover a security vulnerability in SMART Sniffer, please report it responsibly.
 
-**Email:** david.a.bailey@gmail.com
+**Email:** dbailey@live.com
 
 **Do not** open a public GitHub issue for security vulnerabilities. Please use email so we can assess and address the issue before public disclosure.
 
