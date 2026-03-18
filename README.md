@@ -7,6 +7,7 @@
 
 <p align="center">
   <a href="https://github.com/DAB-LABS/smart-sniffer/releases/latest"><img src="https://img.shields.io/github/v/release/DAB-LABS/smart-sniffer?style=flat-square" alt="Release"></a>
+  <img src="https://img.shields.io/badge/status-beta-orange?style=flat-square" alt="Beta">
   <a href="https://github.com/DAB-LABS/smart-sniffer/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/DAB-LABS/smart-sniffer/release.yml?style=flat-square&label=build" alt="Build"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/DAB-LABS/smart-sniffer?style=flat-square" alt="License"></a>
 </p>
@@ -114,20 +115,36 @@ Every drive on the machine appears as its own HA device.
 
 <table>
   <tr>
+    <td align="center"><strong>NVMe SSD — Sensors</strong></td>
+    <td align="center"><strong>NVMe SSD — Diagnostics</strong></td>
+  </tr>
+  <tr>
+    <td><img src="images/nvme-sensors.png" width="300"></td>
+    <td><img src="images/nvme-diagnostics.png" width="300"></td>
+  </tr>
+  <tr>
     <td align="center"><strong>SATA SSD — Sensors</strong></td>
-    <td align="center"><strong>Apple NVMe — Sensors</strong></td>
-  </tr>
-  <tr>
-    <td><img src="images/sensors-samsung-screenshot.png" width="320"></td>
-    <td><img src="images/sensors-apple-screenshot.png" width="320"></td>
-  </tr>
-  <tr>
     <td align="center"><strong>SATA SSD — Diagnostics</strong></td>
-    <td align="center"><strong>Apple NVMe — Diagnostics</strong></td>
   </tr>
   <tr>
-    <td><img src="images/diag-samsung-screenshot.png" width="320"></td>
-    <td><img src="images/diag-apple-screenshot.png" width="320"></td>
+    <td><img src="images/sata-ssd-sensors.png" width="300"></td>
+    <td><img src="images/sata-ssd-diagnostics.png" width="300"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Attention: YES (Critical)</strong></td>
+    <td align="center"><strong>Trigger Reason in Diagnostics</strong></td>
+  </tr>
+  <tr>
+    <td><img src="images/attention-yes-sensors.png" width="300"></td>
+    <td><img src="images/attention-yes-diagnostics.png" width="300"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Attention: MAYBE (Warning)</strong></td>
+    <td align="center"><strong>Warning Reason in Diagnostics</strong></td>
+  </tr>
+  <tr>
+    <td><img src="images/attention-maybe-sensors.png" width="300"></td>
+    <td><img src="images/attention-maybe-diagnostics.png" width="300"></td>
   </tr>
 </table>
 
@@ -289,9 +306,21 @@ Binaries output to `agent/build/`.
 - [ ] Configurable alert thresholds via options flow
 - [ ] SAS/SCSI drive support
 
+## Testing
+
+The integration has been tested against the included [Mock Agent](docs/mock-agent.md) — a standalone Python tool that simulates a `smartha-agent` with fully controllable fake drives. It serves the same API as the real agent, with a web dashboard for changing SMART attributes in real time. Useful for validating attention state transitions, notification behavior, and new drive types without waiting for real hardware to degrade.
+
+```bash
+python3 tools/mock-agent.py --port 9100 --preload sata_hdd,nvme,usb_blocked
+```
+
+Point the HA integration at `localhost:9100` and you're testing.
+
 ## Contributing
 
-Found a bug? Have a drive that isn't mapping correctly? [Open an issue.](https://github.com/DAB-LABS/smart-sniffer/issues) Drive-specific `smartctl -a --json` output samples are especially welcome — they help us catch manufacturer name variants we haven't seen yet.
+Found a bug? Have a drive that isn't mapping correctly? See [CONTRIBUTING.md](CONTRIBUTING.md) for how to help.
+
+Drive-specific `smartctl -a --json` output samples are especially welcome — they help us catch manufacturer name variants we haven't seen yet.
 
 ---
 
