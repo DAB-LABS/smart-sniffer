@@ -3,7 +3,7 @@
 </p>
 
 **Proactive disk health monitoring for Home Assistant.**<br>
-*Sniffing SMART circuits so your drives don't ghost you.* 👻☠️
+*Sniff early. Sniff often.* 🕵️‍♂️
 
 <p align="center">
   <a href="https://github.com/DAB-LABS/smart-sniffer/releases/latest"><img src="https://img.shields.io/github/v/release/DAB-LABS/smart-sniffer?style=flat-square" alt="Release"></a>
@@ -14,13 +14,13 @@
 
 ---
 
-Reallocated sectors. Uncorrectable errors. Pending failures quietly piling up. 🧙‍♀️🙀
+Uncorrectable errors. Pending failures quietly piling up. 🙀
 
-SMART drives say "PASSED" right up until the end. ☠️🪦
+SMART drives say "PASSED" right up until the end. 😵
 
-Learn to smell the decay. 🧟‍♂️
+Sniff early. Sniff often. 🕵️‍♂️
 
-SMART Sniffer follows the trail, sniffing out the [early warning signs](https://www.backblaze.com/b2/hard-drive-test-data.html) your drives won't tell you about and reporting them to Home Assistant before the drive ghosts you for good. One agent per machine. Every drive gets a health score. Alerts fire automatically. No automations required. 👻
+SMART Sniffer follows the trail, sniffing out the [early warning signs](https://www.backblaze.com/b2/hard-drive-test-data.html) your drives won't tell you about and reporting them to Home Assistant before it's too late. One agent per machine. Every drive gets a health score. Alerts fire automatically. No automations required.
 
 <br>
 
