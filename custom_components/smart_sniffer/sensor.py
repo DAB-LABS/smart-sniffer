@@ -297,7 +297,22 @@ def _extract_attribute(drive_data: dict[str, Any], key: str) -> Any | None:
         if attr.get("name") in names:
             raw = attr.get("raw", {})
             if isinstance(raw, dict):
-                return raw.get("value")
+                raw_value = raw.get("value")
+                # WD/HGST drives pack min/max/current into a single 48-bit
+                # raw value for Temperature_Celsius (e.g., 214749675563
+                # instead of 43).  The actual temp is in the low 16 bits.
+                # Parse raw.string first (e.g., "43 (Min/Max 20/50)"),
+                # fall back to masking if needed.
+                if key == "temperature" and isinstance(raw_value, int) and raw_value > 300:
+                    raw_string = raw.get("string", "")
+                    if raw_string:
+                        import re
+                        m = re.match(r"(\d+)", str(raw_string))
+                        if m:
+                            return int(m.group(1))
+                    # Fallback: low 16 bits hold current temp.
+                    return raw_value & 0xFFFF
+                return raw_value
             return raw
 
     return None

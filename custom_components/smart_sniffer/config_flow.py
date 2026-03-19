@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import ipaddress
 import logging
 from typing import Any
 
@@ -66,7 +68,7 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
 
             try:
                 await self._test_connection(host, port, token)
-            except aiohttp.ClientError:
+            except (aiohttp.ClientError, asyncio.TimeoutError, TimeoutError):
                 errors["base"] = "cannot_connect"
             except Exception:  # noqa: BLE001
                 _LOGGER.exception("Unexpected error during config flow")
@@ -84,11 +86,41 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    @staticmethod
+    def _pick_best_ip(discovery_info: ZeroconfServiceInfo) -> str:
+        """Choose the best IP from discovery info.
+
+        Prefers RFC 1918 private addresses (192.168.x, 10.x, 172.16-31.x)
+        over VPN/tunnel IPs (Tailscale 100.x, WireGuard, etc.).  Falls back
+        to whatever is available.
+        """
+        # discovery_info may expose ip_address (single) and ip_addresses (list).
+        candidates: list[str] = []
+        if hasattr(discovery_info, "ip_addresses") and discovery_info.ip_addresses:
+            candidates = [str(a) for a in discovery_info.ip_addresses]
+        elif discovery_info.ip_address:
+            candidates = [str(discovery_info.ip_address)]
+
+        if not candidates:
+            return str(discovery_info.ip_address)
+
+        # Prefer private (RFC 1918) addresses over anything else.
+        for ip_str in candidates:
+            try:
+                addr = ipaddress.ip_address(ip_str)
+                if addr.is_private and not ip_str.startswith("100."):
+                    return ip_str
+            except ValueError:
+                continue
+
+        # No private IP found — return the first candidate.
+        return candidates[0]
+
     async def async_step_zeroconf(
         self, discovery_info: ZeroconfServiceInfo
     ) -> ConfigFlowResult:
         """Handle discovery via mDNS/Zeroconf."""
-        host = str(discovery_info.ip_address)
+        host = self._pick_best_ip(discovery_info)
         port = discovery_info.port
         properties = discovery_info.properties
 
@@ -126,7 +158,7 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
                 await self._test_connection(
                     self._discovery_host, self._discovery_port, token
                 )
-            except aiohttp.ClientError:
+            except (aiohttp.ClientError, asyncio.TimeoutError, TimeoutError):
                 errors["base"] = "cannot_connect"
             except Exception:  # noqa: BLE001
                 _LOGGER.exception("Unexpected error during zeroconf confirm")
@@ -202,7 +234,7 @@ class SmartSnifferOptionsFlow(OptionsFlowWithConfigEntry):
                     url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)
                 ) as resp:
                     resp.raise_for_status()
-            except aiohttp.ClientError:
+            except (aiohttp.ClientError, asyncio.TimeoutError, TimeoutError):
                 errors["base"] = "cannot_connect"
             except Exception:  # noqa: BLE001
                 _LOGGER.exception("Unexpected error in options flow")
