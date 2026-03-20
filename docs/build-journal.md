@@ -196,7 +196,19 @@ Adding `async_step_zeroconf()` to the config flow required importing `ZeroconfSe
 
 ### Blank confirmation form for no-auth discovered agents
 
-When an agent without bearer token auth was discovered via Zeroconf, the confirm step showed an empty form with just a "Submit" button — confusing UX. Fixed by auto-confirming when `not self._discovery_auth and user_input is None` (setting `user_input = {}` to skip the form entirely).
+When an agent without bearer token auth was discovered via Zeroconf, the confirm step showed an empty form with just a "Submit" button — confusing UX. Initially fixed by auto-confirming (setting `user_input = {}` to skip the form entirely). Later revised in v0.4.22 — auto-confirm was too aggressive, silently adding agents without user consent. Now all discoveries (auth and no-auth) show a confirmation form with agent details (hostname, IP, port, drive count). No-auth agents get an empty schema (description + Submit button), auth agents get the token field. Users always confirm before an agent is added.
+
+### WD/HGST packed temperature value (v0.4.21)
+
+Western Digital and HGST drives pack min/max/current temperatures into a single 48-bit raw value for ATA attribute 194 (Temperature_Celsius). A WD Ultrastar WD140EDGZ reported `raw.value: 214749675563` instead of the actual temperature (43°C). The raw string field contained the correct reading: `"43 (Min/Max 20/50)"`. Fixed `_extract_attribute()` in `sensor.py` to parse `raw.string` first when the raw value exceeds 300, with a bitmask fallback (`raw_value & 0xFFFF`) for drives that don't populate the string field. First community-reported issue.
+
+### Tailscale IP selected during Zeroconf discovery (v0.4.21)
+
+The mDNS agent advertises on all network interfaces, including Tailscale's virtual interface (100.x.x.x). HA's Zeroconf discovery grabbed the Tailscale IP, couldn't reach it from the local network, and timed out. Fixed by adding `_pick_best_ip()` to the config flow — prefers RFC 1918 private addresses (192.168.x, 10.x, 172.16-31.x) over VPN/tunnel IPs. Tailscale's 100.x CGNAT range is explicitly deprioritized.
+
+### `asyncio.TimeoutError` not caught in config flow (v0.4.21)
+
+Connection timeouts during config flow and options flow raised `asyncio.TimeoutError`, which wasn't in the `except` clause — it fell through to the generic "Unexpected error" handler and logged a full stack trace instead of showing the clean "Unable to connect" message. Fixed by adding `asyncio.TimeoutError` and `TimeoutError` to all three exception handlers (user step, zeroconf confirm, options flow).
 
 ### `grandcat/zeroconf` pinned stale Go x/ deps
 
@@ -264,7 +276,7 @@ Both installers support pinning a version via environment variable (`VERSION=0.1
 
 4. **Legacy install scripts.** `agent/install-linux.sh`, `agent/install-macos.sh`, and `agent/windows/install-service.ps1` are the original platform-specific scripts. They're superseded by the unified `install.sh` and `install.ps1` at the repo root. The legacy scripts should be removed or marked deprecated once the new ones are validated.
 
-5. **`early-warning-attributes.md` references binary sensor for attention.** This doc was written before the attention sensor was converted from binary to enum. The YAML examples at the bottom still reference `binary_sensor.{drive}_attention_needed`. Should be updated to `sensor.{drive}_attention_needed` with enum state checks.
+5. ~~**`early-warning-attributes.md` references binary sensor for attention.**~~ Fixed in v0.4.22 — updated to enum sensor references with correct states and YAML examples.
 
 6. **README entity table is stale.** Doesn't list: Attention Needed (enum), Power Cycle Count, Reallocated Event Count, Spin Retry Count, Command Timeout, Available Spare, Available Spare Threshold. The README was written before the early-warning expansion.
 
@@ -295,7 +307,7 @@ Immediate:
 - [ ] Fix `--config` flag in Go agent (or fix Windows installer to use working directory)
 - [ ] Clean committed build artifacts from git history
 - [ ] Update README entity table with all current sensors
-- [ ] Update `early-warning-attributes.md` YAML examples (binary → enum)
+- [x] Update `early-warning-attributes.md` YAML examples (binary → enum) — ✅ fixed in v0.4.22
 - [x] Validate release workflow (push `v0.1.0` tag, watch Actions) — ✅ working
 - [x] Test `install.sh` on Linux — ✅ tested on Kali VM (QEMU). Install, reinstall, uninstall all working. Auth token verified.
 - [x] Test `install.sh` on macOS — ✅ tested on MacBook Air. Install, uninstall working. HA integration confirmed receiving data.

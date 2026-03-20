@@ -9,14 +9,14 @@
 
 The official SMART pass/fail verdict (`smart_status.passed` in smartctl JSON) is determined by the drive's own firmware. Drives can and do report PASSED right up until catastrophic failure. Backblaze's longitudinal studies on millions of drive-hours found that specific individual attributes are far more predictive than the headline status.
 
-SMART Sniffer exposes two binary sensors per drive for this reason:
+SMART Sniffer exposes two sensors per drive for this reason:
 
-| Sensor | What it tracks | Indicator type |
-|---|---|---|
-| **Health** | SMART official pass/fail + NVMe critical_warning | Lagging |
-| **Attention Needed** | Individual early-warning attributes (below) | Leading |
+| Sensor | Type | What it tracks | Indicator type |
+|---|---|---|---|
+| **Health** | Binary sensor | SMART official pass/fail + NVMe critical_warning | Lagging |
+| **Attention Needed** | Enum sensor | Individual early-warning attributes (below) | Leading |
 
-The `Attention Needed` sensor carries a `reasons` attribute listing exactly what triggered it, making it easy to build informative automations.
+The `Attention Needed` sensor is an enum with four states: `NO` (clear), `MAYBE` (warning), `YES` (critical), `UNSUPPORTED` (no usable SMART data). It carries a `reasons` attribute listing exactly what triggered it, making it easy to build informative automations.
 
 ---
 
@@ -70,52 +70,61 @@ NVMe drives use a different health log structure. The following map to the `atte
 
 ## How the Attention Needed Sensor Works
 
-`binary_sensor.{drive}_attention_needed` fires (`on`) when any of the above conditions are met. The `reasons` attribute contains a human-readable list:
+`sensor.{drive}_attention_needed` evaluates every poll cycle and returns one of four enum states:
+
+| State | Meaning |
+|---|---|
+| `NO` | All monitored indicators clear |
+| `MAYBE` | Early degradation signals detected (warning) |
+| `YES` | Data integrity at risk (critical) |
+| `UNSUPPORTED` | No usable SMART data (e.g., USB enclosures) |
+
+The `reasons` attribute contains a human-readable list of what triggered the state:
 
 ```yaml
-# Example state when triggered
-state: "on"
+# Example: critical state
+state: "YES"
 attributes:
   reasons:
     - "Reallocated Sector Count: 3 (expected 0)"
     - "Current Pending Sector Count: 1 (expected 0)"
-  issue_count: 2
 ```
 
 ```yaml
-# Example state when clear
-state: "off"
+# Example: all clear
+state: "NO"
 attributes:
   reasons:
     - "No issues detected"
-  issue_count: 0
 ```
+
+The integration also fires persistent notifications automatically on state transitions — no automations needed. See [attention-severity-logic.md](attention-severity-logic.md) for the full notification lifecycle.
 
 ---
 
 ## Clearing Attention / Acknowledgment
 
-The `attention_needed` sensor is **self-clearing**: when the underlying condition resolves, it automatically returns to `off`. In practice, for most failure-type attributes (reallocated sectors, uncorrectable errors), the count will not go back to zero — the sensor stays `on` until the drive is replaced.
+The `attention_needed` sensor is **self-clearing**: when the underlying condition resolves, it automatically returns to `NO`. In practice, for most failure-type attributes (reallocated sectors, uncorrectable errors), the count will not go back to zero — the sensor stays in `YES` or `MAYBE` until the drive is replaced.
 
-**Recommended HA automation pattern for acknowledgment:**
+**Optional HA automation pattern for custom alerting:**
 
 ```yaml
 automation:
   - alias: "Disk attention alert"
     trigger:
       - platform: state
-        entity_id: binary_sensor.your_drive_attention_needed
-        to: "on"
+        entity_id: sensor.your_drive_attention_needed
+        to: "YES"
     action:
       - service: persistent_notification.create
         data:
           title: "Drive Attention Required"
           message: >
-            {{ state_attr('binary_sensor.your_drive_attention_needed', 'reasons') | join('\n') }}
+            {{ state_attr('sensor.your_drive_attention_needed', 'reasons') | join('\n') }}
           notification_id: "disk_attention_{{ trigger.entity_id }}"
 ```
 
-Dismissing the persistent notification acts as the acknowledgment. If the drive condition worsens (new reasons added), a new notification fires.
+Note: The integration already fires persistent notifications automatically on state changes, so this automation is only needed if you want additional custom alerting (e.g., mobile push, Slack, email).
 
 For suppressing repeat notifications on a known-stable degraded drive:
 

@@ -148,10 +148,6 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
         """Confirm discovered agent and optionally collect token."""
         errors: dict[str, str] = {}
 
-        # No auth — auto-confirm without showing a blank form.
-        if not self._discovery_auth and user_input is None:
-            user_input = {}
-
         if user_input is not None:
             token = user_input.get(CONF_TOKEN, "")
             try:
@@ -175,8 +171,12 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
                     },
                 )
 
-        # Auth enabled — show form to collect the token.
-        schema = vol.Schema({vol.Optional(CONF_TOKEN, default=""): str})
+        # Auth enabled — show form with token field.
+        # No auth — show confirmation with no input fields (just Submit).
+        if self._discovery_auth:
+            schema = vol.Schema({vol.Optional(CONF_TOKEN, default=""): str})
+        else:
+            schema = vol.Schema({})
 
         return self.async_show_form(
             step_id="zeroconf_confirm",
