@@ -25,8 +25,6 @@ set -e
 
 REPO="DAB-LABS/smart-sniffer"
 BINARY_NAME="smartha-agent"
-INSTALL_BIN="/usr/local/bin/$BINARY_NAME"
-INSTALL_CFG="/etc/smartha-agent"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -36,6 +34,49 @@ info()    { echo -e "${BOLD}  --> $*${NC}"; }
 success() { echo -e "${GREEN}  ✓ $*${NC}"; }
 warn()    { echo -e "${YELLOW}  ⚠ $*${NC}"; }
 fail()    { echo -e "${RED}  ✗ $*${NC}"; exit 1; }
+
+# ---------------------------------------------------------------------------
+# Install-path defaults (may be overridden by resolve_install_paths below)
+# ---------------------------------------------------------------------------
+INSTALL_BIN="/usr/local/bin/$BINARY_NAME"
+INSTALL_CFG="/etc/smartha-agent"
+
+# ---------------------------------------------------------------------------
+# Resolve writable install paths
+#
+# Standard Linux/macOS:  /usr/local/bin  +  /etc/smartha-agent
+# Immutable-rootfs (ZimaOS, etc.):  /DATA/smartha-agent  (bin + config)
+# Generic fallback:  /opt/smartha-agent  (bin + config)
+#
+# The probe runs as root (installer requires sudo), so a writability failure
+# genuinely means the filesystem is read-only, not a permissions issue.
+# ---------------------------------------------------------------------------
+resolve_install_paths() {
+  # Candidate 1: standard paths (works on most Linux, macOS, Proxmox, etc.)
+  if mkdir -p /usr/local/bin 2>/dev/null && [ -w /usr/local/bin ]; then
+    INSTALL_BIN="/usr/local/bin/$BINARY_NAME"
+    INSTALL_CFG="/etc/smartha-agent"
+    return
+  fi
+
+  # Candidate 2: /DATA (ZimaOS, CasaOS, and similar NAS distros)
+  if [ -d /DATA ] && mkdir -p /DATA/smartha-agent 2>/dev/null && [ -w /DATA/smartha-agent ]; then
+    INSTALL_BIN="/DATA/smartha-agent/$BINARY_NAME"
+    INSTALL_CFG="/DATA/smartha-agent"
+    warn "Immutable root filesystem detected — installing to /DATA/smartha-agent/"
+    return
+  fi
+
+  # Candidate 3: /opt (generic fallback)
+  if mkdir -p /opt/smartha-agent 2>/dev/null && [ -w /opt/smartha-agent ]; then
+    INSTALL_BIN="/opt/smartha-agent/$BINARY_NAME"
+    INSTALL_CFG="/opt/smartha-agent"
+    warn "Standard paths not writable — installing to /opt/smartha-agent/"
+    return
+  fi
+
+  fail "No writable install location found. Tried /usr/local/bin, /DATA/smartha-agent, /opt/smartha-agent."
+}
 
 # ---------------------------------------------------------------------------
 # Uninstall
@@ -75,18 +116,34 @@ do_uninstall() {
     fi
   fi
 
-  # Remove binary
-  if [ -f "$INSTALL_BIN" ]; then
-    info "Removing binary..."
-    rm -f "$INSTALL_BIN"
-    success "Binary removed."
-  fi
+  # Remove binary and config from all candidate locations
+  FOUND=false
+  for BIN_PATH in \
+    "/usr/local/bin/$BINARY_NAME" \
+    "/DATA/smartha-agent/$BINARY_NAME" \
+    "/opt/smartha-agent/$BINARY_NAME"; do
+    if [ -f "$BIN_PATH" ]; then
+      info "Removing binary ($BIN_PATH)..."
+      rm -f "$BIN_PATH"
+      success "Binary removed."
+      FOUND=true
+    fi
+  done
 
-  # Remove config
-  if [ -d "$INSTALL_CFG" ]; then
-    info "Removing config directory ($INSTALL_CFG)..."
-    rm -rf "$INSTALL_CFG"
-    success "Config removed."
+  for CFG_PATH in \
+    "/etc/smartha-agent" \
+    "/DATA/smartha-agent" \
+    "/opt/smartha-agent"; do
+    if [ -d "$CFG_PATH" ]; then
+      info "Removing config directory ($CFG_PATH)..."
+      rm -rf "$CFG_PATH"
+      success "Config removed."
+      FOUND=true
+    fi
+  done
+
+  if [ "$FOUND" = "false" ]; then
+    warn "No installed files found in any known location."
   fi
 
   # macOS log files
@@ -134,7 +191,7 @@ install_linux_service() {
     systemctl stop "$SERVICE_NAME"
   fi
 
-  cat > "$SERVICE_DEST" <<'SVCEOF'
+  cat > "$SERVICE_DEST" <<SVCEOF
 [Unit]
 Description=SMART Sniffer Agent — disk health REST API
 After=network-online.target
@@ -142,8 +199,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/smartha-agent
-WorkingDirectory=/etc/smartha-agent
+ExecStart=$INSTALL_BIN
+WorkingDirectory=$INSTALL_CFG
 User=root
 Restart=on-failure
 RestartSec=5
@@ -197,10 +254,10 @@ install_macos_service() {
     <string>${PLIST_NAME}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/smartha-agent</string>
+        <string>${INSTALL_BIN}</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>/etc/smartha-agent</string>
+    <string>${INSTALL_CFG}</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
@@ -278,6 +335,10 @@ esac
 
 BINARY_FILE="${BINARY_NAME}-${PLATFORM}-${GOARCH}"
 info "Detected platform: ${PLATFORM}/${GOARCH}"
+
+# Probe for writable install paths (must run after root check)
+resolve_install_paths
+info "Install location: $INSTALL_BIN"
 
 # ---------------------------------------------------------------------------
 # Resolve version and download URL
