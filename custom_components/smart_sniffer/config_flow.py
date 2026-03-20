@@ -130,6 +130,42 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
         candidates.sort(key=_score)
         return candidates[0]
 
+    def _migrate_legacy_unique_ids(self, hostname: str, host: str, port: int) -> None:
+        """Migrate existing config entries from IP-based to hostname-based unique IDs.
+
+        Before v0.4.24, unique IDs were "{ip}:{port}". This caused duplicates
+        when mDNS reflectors or multi-homed hosts advertised multiple IPs.
+        Now we use "smartha-{hostname}" for stable deduplication.
+
+        This scans existing entries and updates any that match by IP or hostname
+        so the new discovery is properly deduplicated.
+        """
+        for entry in self._async_current_entries():
+            if entry.domain != DOMAIN:
+                continue
+            old_uid = entry.unique_id or ""
+            # Already migrated.
+            if old_uid.startswith("smartha-"):
+                continue
+            # Match by IP:port (old format) or by hostname in entry title/data.
+            entry_host = entry.data.get(CONF_HOST, "")
+            entry_port = entry.data.get(CONF_PORT, 0)
+            entry_title = entry.title or ""
+            if (
+                old_uid == f"{host}:{port}"
+                or (entry_host == host and entry_port == port)
+                or hostname.lower() in entry_title.lower()
+            ):
+                _LOGGER.info(
+                    "Migrating SMART Sniffer unique_id: %s → smartha-%s",
+                    old_uid,
+                    hostname,
+                )
+                self.hass.config_entries.async_update_entry(
+                    entry,
+                    unique_id=f"smartha-{hostname}",
+                )
+
     async def async_step_zeroconf(
         self, discovery_info: ZeroconfServiceInfo
     ) -> ConfigFlowResult:
@@ -137,15 +173,21 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
         host = self._pick_best_ip(discovery_info)
         port = discovery_info.port
         properties = discovery_info.properties
+        hostname = properties.get("hostname", host)
 
-        # Deduplicate — don't prompt for agents already configured.
-        await self.async_set_unique_id(f"{host}:{port}")
-        self._abort_if_unique_id_configured()
+        # Migrate any existing IP-based unique IDs to hostname-based.
+        self._migrate_legacy_unique_ids(hostname, host, port)
+
+        # Deduplicate — hostname-based ID is stable across interfaces/VLANs.
+        await self.async_set_unique_id(f"smartha-{hostname}")
+        self._abort_if_unique_id_configured(
+            updates={CONF_HOST: host}  # Update IP if it changed (e.g. DHCP)
+        )
 
         # Stash discovery data for the confirmation step.
         self._discovery_host = host
         self._discovery_port = port
-        self._discovery_hostname = properties.get("hostname", host)
+        self._discovery_hostname = hostname
         self._discovery_drives = properties.get("drives", "?")
         self._discovery_auth = properties.get("auth", "0") == "1"
 
