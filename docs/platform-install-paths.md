@@ -42,6 +42,36 @@ The Go agent (`smartha-agent`) searches for `config.yaml` in two locations, in o
 
 The systemd service unit sets `WorkingDirectory` to match `INSTALL_CFG`, so the relative path resolves correctly regardless of where the config was installed. No changes to the Go binary are needed for alternate install paths.
 
+## Network Interface Filtering
+
+Machines with Docker, VPNs (ZeroTier, Tailscale, WireGuard), or virtual bridges have multiple network interfaces. Without filtering, the agent advertises mDNS on all of them, causing Home Assistant to see duplicate discoveries at unreachable IPs.
+
+### Smart Defaults
+
+When no `advertise_interface` is configured, the agent automatically skips known virtual interface prefixes: `docker*`, `br-*`, `veth*`, `zt*`, `tailscale*`, `ts*`, `wg*`, `virbr*`, `vbox*`, `vmnet*`, `lo`. It advertises on all remaining interfaces.
+
+### Explicit Interface
+
+Set `advertise_interface` in `config.yaml` to restrict mDNS to a single interface:
+
+```yaml
+advertise_interface: eth0
+```
+
+The installer presents an interface picker during setup on machines with multiple interfaces. Users can also set this manually after install.
+
+### Preferred IP TXT Record
+
+The agent includes an `ip=` field in its mDNS TXT record containing its best LAN IP address. The HA integration trusts this over its own IP scoring when present. This ensures HA always connects to the right address, even when mDNS reflectors or multi-homed networks are involved.
+
+### CLI Override
+
+Use `--interface` to override the config file:
+
+```bash
+smartha-agent --interface eth0
+```
+
 ## Uninstaller
 
 The uninstaller checks all candidate locations automatically. It doesn't need to know where the agent was originally installed — it scans all three paths and removes any files it finds.

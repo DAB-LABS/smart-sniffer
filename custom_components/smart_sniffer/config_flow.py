@@ -174,10 +174,20 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
         self, discovery_info: ZeroconfServiceInfo
     ) -> ConfigFlowResult:
         """Handle discovery via mDNS/Zeroconf."""
-        host = self._pick_best_ip(discovery_info)
         port = discovery_info.port
         properties = discovery_info.properties
-        hostname = properties.get("hostname", host)
+        hostname = properties.get("hostname", "")
+
+        # Agent v0.4.25+ includes an "ip" TXT field with its preferred LAN
+        # address. Trust it over our own scoring when present.
+        agent_preferred_ip = properties.get("ip", "")
+        if agent_preferred_ip:
+            host = agent_preferred_ip
+        else:
+            host = self._pick_best_ip(discovery_info)
+
+        if not hostname:
+            hostname = host
 
         # Migrate any existing IP-based unique IDs to hostname-based.
         self._migrate_legacy_unique_ids(hostname, host, port)

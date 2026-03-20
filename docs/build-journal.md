@@ -34,7 +34,7 @@ The architecture diagram in the README covers the high-level picture. This docum
 smart-sniffer/
 ├── agent/                          # Go agent
 │   ├── main.go                     # HTTP server, smartctl execution, caching, mDNS registration
-│   ├── config.go                   # Config loading: config.yaml → CLI flags + mDNS toggle
+│   ├── config.go                   # Config loading: config.yaml → CLI flags, mDNS toggle, interface filtering
 │   ├── config.yaml.example         # Template config (port, token, scan_interval, mdns)
 │   ├── Makefile                    # Cross-compilation + checksums
 │   ├── go.mod / go.sum             # Go module
@@ -256,7 +256,7 @@ Push a `v*` tag to trigger:
 
 **`install.sh` (Linux + macOS)** — `curl -sSL ... | sudo bash`
 
-Detects OS and architecture, downloads the correct binary from GitHub Releases, verifies SHA256 checksum, installs smartmontools if missing, prompts for port/token/interval, writes config, installs as systemd service (Linux) or launchd daemon (macOS), runs a health check.
+Detects OS and architecture, downloads the correct binary from GitHub Releases, verifies SHA256 checksum, installs smartmontools if missing, prompts for port/token/interval, presents a network interface picker for mDNS advertisement (labels Docker/ZeroTier/Tailscale/WireGuard interfaces), writes config, installs as systemd service (Linux) or launchd daemon (macOS), runs a health check. As of v0.4.24, probes for writable install paths on immutable-rootfs platforms (ZimaOS, CasaOS) — see `docs/platform-install-paths.md`.
 
 **`install.ps1` (Windows)** — `irm ... | iex`
 
@@ -268,7 +268,7 @@ Both installers support pinning a version via environment variable (`VERSION=0.1
 
 ## Known Issues & Tech Debt
 
-1. **`--config` flag not implemented in Go agent.** The Windows installer passes `--config "C:\...\config.yaml"` to the service, but `config.go` doesn't have a `--config` flag — it hardcodes the search paths (`config.yaml` in CWD, `/etc/smartha-agent/config.yaml`). The installer's service invocation needs to either set the working directory or the agent needs to gain a `--config` flag. This will fail on Windows as-is.
+1. ~~**`--config` flag not implemented in Go agent.**~~ Resolved in v0.4.25. The agent now accepts `--config /path/to/config.yaml` to specify an explicit config file path. Auto-detection (CWD then `/etc/smartha-agent/`) still works as the default.
 
 2. ~~**Committed build artifacts.**~~ Cleaned in v0.4.22. Removed `agent/agent`, `agent/build/`, and `__pycache__/` from tracking via `git rm -r --cached`.
 
@@ -278,7 +278,7 @@ Both installers support pinning a version via environment variable (`VERSION=0.1
 
 5. ~~**`early-warning-attributes.md` references binary sensor for attention.**~~ Fixed in v0.4.22 — updated to enum sensor references with correct states and YAML examples.
 
-6. **README entity table is stale.** Doesn't list: Attention Needed (enum), Power Cycle Count, Reallocated Event Count, Spin Retry Count, Command Timeout, Available Spare, Available Spare Threshold. The README was written before the early-warning expansion.
+6. ~~**README entity table is stale.**~~ Reviewed in v0.4.24 — table is now current with enum states and all sensors listed.
 
 7. **SK Hynix wear leveling name unverified.** Noted in `smart-attribute-name-variants.md`. Need a `smartctl -a` dump from an SK Hynix SSD to confirm the attribute name.
 
@@ -297,6 +297,7 @@ Both installers support pinning a version via environment variable (`VERSION=0.1
 - **Home Assistant Production instance** — separate, used for final validation
 - **Kali Linux VM** (QEMU on Proxmox) — used for install.sh end-to-end testing. QEMU virtual disk correctly reports as UNSUPPORTED (no SMART data). Verified install, reinstall, uninstall, and bearer token auth.
 - **MacBook Air** (Apple Silicon) — used for macOS install.sh testing. Verified install, uninstall, and HA data flow (entities go unavailable on uninstall, recover on reinstall).
+- **ZimaOS** (CasaOS/IceWhale, x86_64) — immutable rootfs NAS. Verified writable path probing (`/DATA/smartha-agent/`), interface filtering (skips docker0, zt*, veth*, br-*, virbr0), preferred IP TXT record, and mDNS discovery at correct LAN IP. 3 NVMe drives detected.
 
 ---
 

@@ -441,11 +441,85 @@ if [ -n "$TTY_IN" ]; then
   read -rp "  Port [9099]: " PORT < "$TTY_IN"
   read -rp "  Bearer token for API auth (leave blank to disable): " TOKEN < "$TTY_IN"
   read -rp "  Scan interval [60s]: " SCAN_INTERVAL < "$TTY_IN"
+
+  # --- Network interface picker for mDNS advertisement ---
+  # Detect interfaces with IPv4 addresses.  Tag known virtual/VPN interfaces
+  # so the user can make an informed choice without needing networking expertise.
+  echo ""
+  echo -e "${BOLD}  Network interface for mDNS discovery${NC}"
+  echo "  (Home Assistant uses this to auto-discover the agent)"
+  echo ""
+
+  VIRTUAL_PREFIXES="docker|br-|veth|zt|tailscale|ts|wg|virbr|vbox|vmnet|lo"
+  IFACE_LIST=""
+  IFACE_COUNT=0
+
+  # Build numbered interface list.
+  for iface in $(ls /sys/class/net 2>/dev/null || ifconfig -l 2>/dev/null | tr ' ' '\n'); do
+    # Get first IPv4 address for this interface.
+    if command -v ip &>/dev/null; then
+      ip4=$(ip -4 addr show "$iface" 2>/dev/null | grep -oP 'inet \K[0-9.]+' | head -1)
+    else
+      ip4=$(ifconfig "$iface" 2>/dev/null | grep -oE 'inet [0-9.]+' | awk '{print $2}' | head -1)
+    fi
+    [ -z "$ip4" ] && continue  # skip interfaces with no IPv4
+
+    IFACE_COUNT=$((IFACE_COUNT + 1))
+    label=""
+    if echo "$iface" | grep -qiE "^($VIRTUAL_PREFIXES)"; then
+      # Identify the type of virtual interface.
+      case "$iface" in
+        docker*|br-*) label="Docker" ;;
+        veth*)        label="Docker container" ;;
+        zt*)          label="ZeroTier" ;;
+        tailscale*|ts*) label="Tailscale" ;;
+        wg*)          label="WireGuard" ;;
+        virbr*)       label="libvirt" ;;
+        vbox*)        label="VirtualBox" ;;
+        vmnet*)       label="VMware" ;;
+        lo*)          label="loopback" ;;
+        *)            label="virtual" ;;
+      esac
+      echo -e "    ${IFACE_COUNT}) ${iface}$(printf '%*s' $((16 - ${#iface})) '')${ip4}  ${YELLOW}(${label})${NC}"
+    else
+      echo -e "    ${IFACE_COUNT}) ${iface}$(printf '%*s' $((16 - ${#iface})) '')${ip4}"
+    fi
+    IFACE_LIST="${IFACE_LIST}${iface} "
+  done
+
+  echo -e "    A) All interfaces (auto-filter virtual)"
+  echo ""
+
+  ADV_IFACE=""
+  if [ "$IFACE_COUNT" -gt 1 ]; then
+    read -rp "  Advertise on interface [A]: " IFACE_CHOICE < "$TTY_IN"
+    if [ -n "$IFACE_CHOICE" ] && [ "$IFACE_CHOICE" != "A" ] && [ "$IFACE_CHOICE" != "a" ]; then
+      # Convert number to interface name.
+      CHOSEN_IDX=0
+      for iface_name in $IFACE_LIST; do
+        CHOSEN_IDX=$((CHOSEN_IDX + 1))
+        if [ "$CHOSEN_IDX" = "$IFACE_CHOICE" ]; then
+          ADV_IFACE="$iface_name"
+          break
+        fi
+      done
+      if [ -z "$ADV_IFACE" ]; then
+        warn "Invalid choice — using auto-filter."
+      else
+        success "mDNS will advertise on: $ADV_IFACE"
+      fi
+    fi
+  elif [ "$IFACE_COUNT" -eq 1 ]; then
+    # Only one interface — no need to ask.
+    info "Single interface detected — using auto-filter."
+  fi
+
 else
   info "Non-interactive mode detected — using defaults."
   PORT=""
   TOKEN=""
   SCAN_INTERVAL=""
+  ADV_IFACE=""
 fi
 
 PORT="${PORT:-9099}"
@@ -486,6 +560,9 @@ CONFEOF
 
 if [ -n "$TOKEN" ]; then
   echo "token: \"$TOKEN\"" >> "$INSTALL_CFG/config.yaml"
+fi
+if [ -n "$ADV_IFACE" ]; then
+  echo "advertise_interface: $ADV_IFACE" >> "$INSTALL_CFG/config.yaml"
 fi
 success "Config written."
 

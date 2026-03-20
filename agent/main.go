@@ -67,6 +67,9 @@ func main() {
 	mdnsLabel := "disabled"
 	if cfg.MDNSEnabled() {
 		mdnsLabel = "enabled"
+		if cfg.AdvertiseInterface != "" {
+			mdnsLabel += " (interface: " + cfg.AdvertiseInterface + ")"
+		}
 	}
 	log.Printf("SMART Sniffer Agent v%s", version)
 	log.Printf("smartctl version: %s", smartctlVer)
@@ -119,6 +122,15 @@ func main() {
 		if cfg.Token != "" {
 			authFlag = "1"
 		}
+
+		// Resolve which interfaces to advertise on.
+		ifaces, ifaceDesc := cfg.ResolveAdvertiseInterfaces()
+		log.Printf("mDNS: interfaces: %s", ifaceDesc)
+
+		// Determine preferred IP for TXT record so the HA integration
+		// doesn't have to guess which IP is the real LAN address.
+		preferredIP := PreferredIP(ifaces)
+
 		txt := []string{
 			"txtvers=1",
 			"version=" + version,
@@ -127,8 +139,13 @@ func main() {
 			"auth=" + authFlag,
 			"drives=" + strconv.Itoa(len(drives)),
 		}
+		if preferredIP != "" {
+			txt = append(txt, "ip="+preferredIP)
+			log.Printf("mDNS: preferred IP: %s", preferredIP)
+		}
+
 		instance := "smartha-" + hostname
-		mdnsServer, err = zeroconf.Register(instance, "_smartha._tcp", "local.", cfg.Port, txt, nil)
+		mdnsServer, err = zeroconf.Register(instance, "_smartha._tcp", "local.", cfg.Port, txt, ifaces)
 		if err != nil {
 			log.Printf("WARNING: mDNS registration failed: %v", err)
 		} else {

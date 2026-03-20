@@ -18,3 +18,15 @@ scan_interval: 60s
 # Home Assistant can auto-discover it.
 # Set to false to disable (or use --no-mdns flag).
 mdns: true
+
+# Restrict mDNS advertisement to a specific network interface.
+# When set, the agent only advertises on this interface and reports
+# its IP in the mDNS TXT record so Home Assistant connects to the
+# correct address.
+#
+# When not set (default), the agent auto-filters known virtual
+# interfaces (Docker, ZeroTier, Tailscale, WireGuard, etc.) and
+# advertises on all remaining physical interfaces.
+#
+# Examples: eth0, enp1s0, en0, bond0
+# advertise_interface: eth0

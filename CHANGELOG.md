@@ -2,6 +2,21 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.4.25 — 2026-03-20
+
+### Added
+- **Agent: mDNS interface filtering** — auto-skips Docker, ZeroTier, Tailscale, WireGuard, and other virtual interfaces by default; only advertises on real LAN interfaces
+- **Agent: `advertise_interface` config option** — restrict mDNS to a specific interface (e.g., `advertise_interface: eth0`)
+- **Agent: `ip=` mDNS TXT record** — agent reports its preferred LAN IP so the HA integration doesn't have to guess
+- **Agent: `--config` flag** — specify a custom config file path (`smartha-agent --config /path/to/config.yaml`)
+- **Agent: `--interface` flag** — CLI override for mDNS interface (`smartha-agent --interface eth0`)
+- **Installer: interface picker** — during install, presents detected interfaces with labels (Docker, ZeroTier, etc.) and lets the user choose which to advertise on
+- **Integration: reads agent `ip=` TXT field** — trusts the agent's preferred IP over local scoring when available; falls back gracefully for older agents
+
+### Fixed
+- Duplicate mDNS discoveries from Docker bridges, VPNs, and mDNS reflectors surfacing the same agent at multiple IPs
+- IPv6 addresses deprioritized in IP scoring (unreliable across VLANs in home networks)
+
 ## v0.4.24 — 2026-03-20
 
 ### Fixed
