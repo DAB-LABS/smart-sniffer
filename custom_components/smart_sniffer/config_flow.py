@@ -90,9 +90,13 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
     def _pick_best_ip(discovery_info: ZeroconfServiceInfo) -> str:
         """Choose the best IP from discovery info.
 
-        Prefers RFC 1918 private addresses (192.168.x, 10.x, 172.16-31.x)
-        over VPN/tunnel IPs (Tailscale 100.x, WireGuard, etc.).  Falls back
-        to whatever is available.
+        Prioritizes real LAN addresses over virtual/tunnel IPs:
+          1. 192.168.x.x, 10.x.x.x  (almost always physical LAN)
+          2. 172.16-31.x.x           (RFC 1918, but often Docker/container bridges)
+          3. 100.64-127.x.x          (CGNAT — Tailscale, WireGuard, etc.)
+          4. Anything else
+
+        Falls back to whatever is available.
         """
         # discovery_info may expose ip_address (single) and ip_addresses (list).
         candidates: list[str] = []
@@ -104,16 +108,26 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
         if not candidates:
             return str(discovery_info.ip_address)
 
-        # Prefer private (RFC 1918) addresses over anything else.
-        for ip_str in candidates:
+        def _score(ip_str: str) -> int:
+            """Lower score = more preferred."""
             try:
                 addr = ipaddress.ip_address(ip_str)
-                if addr.is_private and not ip_str.startswith("100."):
-                    return ip_str
             except ValueError:
-                continue
+                return 99
+            if not addr.is_private:
+                return 90
+            # 192.168.x.x and 10.x.x.x — almost always a real LAN interface.
+            if ip_str.startswith("192.168.") or ip_str.startswith("10."):
+                return 10
+            # 172.16-31.x.x — RFC 1918 but frequently Docker/container bridges.
+            if ip_str.startswith("172."):
+                return 50
+            # 100.64-127.x.x — CGNAT range (Tailscale, WireGuard, etc.)
+            if ip_str.startswith("100."):
+                return 70
+            return 80
 
-        # No private IP found — return the first candidate.
+        candidates.sort(key=_score)
         return candidates[0]
 
     async def async_step_zeroconf(

@@ -2,6 +2,15 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.4.24 — 2026-03-20
+
+### Fixed
+- Zeroconf discovery now correctly selects real LAN IPs (10.x, 192.168.x) over Docker bridge IPs (172.17.x) on container-based systems like ZimaOS/CasaOS
+
+### Added
+- Installer now probes for writable paths on immutable-rootfs platforms (ZimaOS, CasaOS); falls back to `/DATA/smartha-agent/` or `/opt/smartha-agent/`
+- New doc: `docs/platform-install-paths.md` — explains platform-specific install locations and how to add new ones
+
 ## v0.4.23 — 2026-03-19
 
 ### Fixed
