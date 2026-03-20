@@ -5,12 +5,10 @@
 **Proactive disk health monitoring for Home Assistant.**<br>
 *Sniff early. Sniff often.* 🕵️‍♂️
 
-<p align="center">
-  <a href="https://github.com/DAB-LABS/smart-sniffer/releases/latest"><img src="https://img.shields.io/github/v/release/DAB-LABS/smart-sniffer?style=flat-square" alt="Release"></a>
-  <img src="https://img.shields.io/badge/status-beta-orange?style=flat-square" alt="Beta">
-  <a href="https://github.com/DAB-LABS/smart-sniffer/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/DAB-LABS/smart-sniffer/release.yml?style=flat-square&label=build" alt="Build"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/DAB-LABS/smart-sniffer?style=flat-square" alt="License"></a>
-</p>
+[![Release](https://img.shields.io/github/v/release/DAB-LABS/smart-sniffer?style=flat-square)](https://github.com/DAB-LABS/smart-sniffer/releases/latest)
+![Beta](https://img.shields.io/badge/status-beta-orange?style=flat-square)
+[![Build](https://img.shields.io/github/actions/workflow/status/DAB-LABS/smart-sniffer/release.yml?style=flat-square&label=build)](https://github.com/DAB-LABS/smart-sniffer/actions/workflows/release.yml)
+[![License](https://img.shields.io/github/license/DAB-LABS/smart-sniffer?style=flat-square)](LICENSE)
 
 ---
 

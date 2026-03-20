@@ -1,5 +1,6 @@
 # Go
 agent/build/
+agent/agent
 agent/config.yaml
 
 # Python

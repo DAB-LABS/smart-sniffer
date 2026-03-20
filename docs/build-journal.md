@@ -270,11 +270,11 @@ Both installers support pinning a version via environment variable (`VERSION=0.1
 
 1. **`--config` flag not implemented in Go agent.** The Windows installer passes `--config "C:\...\config.yaml"` to the service, but `config.go` doesn't have a `--config` flag — it hardcodes the search paths (`config.yaml` in CWD, `/etc/smartha-agent/config.yaml`). The installer's service invocation needs to either set the working directory or the agent needs to gain a `--config` flag. This will fail on Windows as-is.
 
-2. **Committed build artifacts.** `agent/agent`, `agent/build/smartha-agent`, `agent/build/smartha-agent-darwin-arm64`, `agent/build/smartha-agent-linux-amd64`, and `integration/custom_components/smart_sniffer/__pycache__/` were committed before `.gitignore` was in place. Should be cleaned with `git rm -r --cached`.
+2. ~~**Committed build artifacts.**~~ Cleaned in v0.4.22. Removed `agent/agent`, `agent/build/`, and `__pycache__/` from tracking via `git rm -r --cached`.
 
-3. **Integration icons.** The HA integrations page shows "icon not available" because custom integration icons require a PR to `github.com/home-assistant/brands`. Placeholder PNGs exist in `brands-repo-pr/` but final designs are pending.
+3. ~~**Integration icons.**~~ Resolved in v0.4.22. Final icons cropped from header art are now in `custom_components/smart_sniffer/brand/`. The `home-assistant/brands` repo no longer accepts custom integration PRs — as of HA 2026.3, custom integrations ship their own icons via the `brand/` directory. The `brands-repo-pr/` directory has been removed.
 
-4. **Legacy install scripts.** `agent/install-linux.sh`, `agent/install-macos.sh`, and `agent/windows/install-service.ps1` are the original platform-specific scripts. They're superseded by the unified `install.sh` and `install.ps1` at the repo root. The legacy scripts should be removed or marked deprecated once the new ones are validated.
+4. ~~**Legacy install scripts.**~~ Removed in v0.4.22. The platform-specific scripts (`agent/install-linux.sh`, `agent/install-macos.sh`, `agent/windows/`) have been deleted — superseded by the unified `install.sh` and `install.ps1` at the repo root.
 
 5. ~~**`early-warning-attributes.md` references binary sensor for attention.**~~ Fixed in v0.4.22 — updated to enum sensor references with correct states and YAML examples.
 
