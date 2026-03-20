@@ -2,6 +2,11 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.4.23 — 2026-03-19
+
+### Fixed
+- Re-cropped brand icons with tighter framing on magnifying glass + spies (eliminates letterboxing in HA UI)
+
 ## v0.4.22 — 2026-03-19
 
 ### Changed
