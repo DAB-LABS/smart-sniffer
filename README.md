@@ -68,7 +68,9 @@ VERSION=0.1.0 curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer
 
 </details>
 
-The installer detects your OS and architecture, downloads the correct binary from [GitHub Releases](https://github.com/DAB-LABS/smart-sniffer/releases), verifies the SHA256 checksum, installs `smartmontools` if missing, prompts for configuration, and sets up a system service.
+The installer detects your OS and architecture, downloads the correct binary from [GitHub Releases](https://github.com/DAB-LABS/smart-sniffer/releases), verifies the SHA256 checksum, installs `smartmontools` if missing, prompts for configuration (port, token, mDNS interface), and sets up a system service.
+
+On machines with multiple network interfaces (Docker, ZeroTier, Tailscale, etc.), the installer presents an interface picker so mDNS discovery advertises on the right network. Pick your LAN interface — not "All interfaces" — if you run VPNs or containers, otherwise HA may discover the agent at an unreachable IP.
 
 <p align="center">
   <img src="images/agent_install_uninstall_screenshot.png" alt="Agent install on Linux" width="520">
@@ -238,13 +240,18 @@ Create `config.yaml` in the working directory or `/etc/smartha-agent/`:
 port: 9099
 token: "your-secret-token"    # optional — omit to disable auth
 scan_interval: 60s
+advertise_interface: eth0      # optional — restrict mDNS to this interface
 ```
 
-All options can also be set via CLI flags: `--port`, `--token`, `--scan-interval`.
+All options can also be set via CLI flags: `--port`, `--token`, `--scan-interval`, `--interface`, `--config`.
+
+**Network interface:** The `advertise_interface` setting restricts mDNS to a single interface. The installer sets this during setup if you pick a specific interface. When not set, the agent auto-filters known virtual interfaces (Docker, ZeroTier, Tailscale, WireGuard, etc.) and advertises on all remaining physical interfaces. To change the interface after install, edit `config.yaml` and restart the service — no reinstall needed.
 
 **Authentication:** When a `token` is set, every request to the agent must include an `Authorization: Bearer <token>` header — requests without it receive a `401 Unauthorized` response. When adding the agent in Home Assistant, enter the same token in the integration's config flow. If no token is set, the agent serves data openly without auth.
 
 **Auto-discovery:** The agent advertises itself on the local network via mDNS (Zeroconf) by default. HA automatically detects running agents and prompts you to set them up — no manual IP entry needed. Disable with `mdns: false` in config or `--no-mdns` flag. Note: mDNS is link-local, so agents on different VLANs won't be discovered without an mDNS reflector.
+
+**Multi-homed hosts:** Machines running Docker, VPNs (ZeroTier, Tailscale, WireGuard), or virtual bridges have multiple network interfaces. If the agent advertises on a VPN or container interface, HA may discover it at an unreachable IP and fail to connect. The installer's interface picker and the `advertise_interface` config option solve this — see [Platform Install Paths](docs/platform-install-paths.md) for details.
 
 **Service management:**
 
@@ -292,6 +299,8 @@ Binaries output to `agent/build/`.
 | [Early Warning Attributes](docs/early-warning-attributes.md) | Which SMART attributes predict failure and why |
 | [Attribute Name Variants](docs/smart-attribute-name-variants.md) | Manufacturer-specific `smartctl` name mapping research |
 | [Mock Agent](docs/mock-agent.md) | Testing tool — fake agent with controllable drives |
+| [Platform Install Paths](docs/platform-install-paths.md) | Install locations, immutable rootfs support, network interface filtering |
+| [Agent Version Repair](docs/agent-version-repair.md) | Design doc for agent version checking and HA repair notifications |
 | [Build Journal](docs/build-journal.md) | Design decisions, iteration history, known issues |
 
 ## Roadmap
