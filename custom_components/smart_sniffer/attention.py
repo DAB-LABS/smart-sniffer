@@ -18,6 +18,17 @@ Severity constants (used in attributes and notification formatting)
   SEVERITY_CRITICAL   Maps to STATE_YES.
   SEVERITY_WARNING    Maps to STATE_MAYBE.
   SEVERITY_NONE       Maps to STATE_NO.
+
+Vendor-specific attribute handling
+-----------------------------------
+Seagate and some other vendors pack compound data into the raw 48-bit value
+for certain ATA attributes.  The most common case is attribute 188
+(Command_Timeout) where the full raw value can appear as hundreds of
+billions when the actual timeout count is only in the lower bytes.
+
+References:
+  - Backblaze Hard Drive Stats methodology
+  - smartmontools wiki on vendor-specific raw values
 """
 
 from __future__ import annotations
@@ -66,6 +77,63 @@ _WARNING_ATA: dict[str, str] = {
     "Spin_Retry_Count":        "Spin Retry Count",
     "Command_Timeout":         "Command Timeout",
 }
+
+# ---------------------------------------------------------------------------
+# Vendor-specific raw value decoding
+# ---------------------------------------------------------------------------
+# Several drive vendors — most notably Seagate, but also OEM/rebadged drives
+# (e.g., OOS-prefixed models) — pack compound data into the 48-bit raw value
+# for certain ATA attributes.  Command_Timeout (attribute 188) is the most
+# common case: the full raw value can be hundreds of billions when the actual
+# timeout count is only in the lower 16 bits.
+#
+# Example: a raw value of 940,612,190,430 (0x00DB00DB00DE) on a Seagate
+# ST12000NM0558 breaks down as three 16-bit counters packed together.  The
+# meaningful error count is in the lowest 16 bits: 0x00DE = 222.
+#
+# Detection: rather than relying solely on vendor identification (which fails
+# for OEM/rebadged drives), we detect compound encoding by the value itself.
+# No drive should have more than 65,535 actual command timeouts and still be
+# responding to smartctl.  A raw value >0xFFFF for Command_Timeout is almost
+# certainly compound-encoded.
+#
+# References:
+#   - Backblaze Hard Drive Stats methodology (uses lower 16 bits)
+#   - smartmontools wiki on vendor-specific raw values
+
+# Seagate model prefixes and identifiers for vendor detection.
+_SEAGATE_PREFIXES: tuple[str, ...] = ("st", "seagate")
+
+
+def _is_seagate(model: str) -> bool:
+    """Return True if the drive model string indicates a Seagate drive."""
+    lower = model.lower()
+    return any(lower.startswith(p) for p in _SEAGATE_PREFIXES) or "seagate" in lower
+
+
+def _decode_command_timeout(raw_value: int) -> int:
+    """Extract the actual timeout count from a Command_Timeout raw value.
+
+    Seagate and OEM drives pack three 16-bit counters into the 48-bit raw
+    value.  The lowest 16 bits hold the meaningful error count.  Values
+    above 0xFFFF are always compound-encoded — a drive with 65K+ real
+    timeouts would be unresponsive.
+    """
+    if raw_value > 0xFFFF:
+        return raw_value & 0xFFFF
+    return raw_value
+
+
+def _decode_ata_raw(attr_name: str, raw_value: int) -> int:
+    """Decode the actual error count from a raw ATA attribute value.
+
+    For most attributes, the raw value IS the count.  For attributes with
+    known compound encoding (e.g., Command_Timeout), we extract the real
+    counter from the appropriate byte position.
+    """
+    if attr_name == "Command_Timeout":
+        return _decode_command_timeout(raw_value)
+    return raw_value
 
 
 def _has_usable_smart_data(smart_data: dict[str, Any]) -> bool:
@@ -192,16 +260,21 @@ def evaluate_attention(
         if not isinstance(raw_value, (int, float)) or raw_value <= 0:
             continue
 
+        # Decode compound-encoded attributes (e.g., Seagate Command_Timeout).
+        decoded = _decode_ata_raw(name, int(raw_value))
+
         label = _CRITICAL_ATA.get(name)
         if label and label not in seen_labels:
-            critical_reasons.append(f"{label}: {int(raw_value)} (expected 0)")
-            seen_labels.add(label)
+            if decoded > 0:
+                critical_reasons.append(f"{label}: {decoded} (expected 0)")
+                seen_labels.add(label)
             continue
 
         label = _WARNING_ATA.get(name)
         if label and label not in seen_labels:
-            warning_reasons.append(f"{label}: {int(raw_value)} (expected 0)")
-            seen_labels.add(label)
+            if decoded > 0:
+                warning_reasons.append(f"{label}: {decoded} (expected 0)")
+                seen_labels.add(label)
 
     return _assemble(critical_reasons, warning_reasons)
 

@@ -312,6 +312,18 @@ def _extract_attribute(drive_data: dict[str, Any], key: str) -> Any | None:
                             return int(m.group(1))
                     # Fallback: low 16 bits hold current temp.
                     return raw_value & 0xFFFF
+
+                # Command_Timeout (attribute 188): some vendors — notably
+                # Seagate and OEM drives — pack compound data into the
+                # 48-bit raw value.  The actual timeout count is in the
+                # lower 16 bits.  Values above 0xFFFF are always compound.
+                if (
+                    key == "command_timeout"
+                    and isinstance(raw_value, int)
+                    and raw_value > 0xFFFF
+                ):
+                    return raw_value & 0xFFFF
+
                 return raw_value
             return raw
 
