@@ -21,6 +21,7 @@ __pycache__/
 revisions/
 temp/
 brands/
+docs/internal/
 
 # OS
 .DS_Store
