@@ -266,6 +266,44 @@ Both installers support pinning a version via environment variable (`VERSION=0.1
 
 ---
 
+## Release Process
+
+HACS detects integration updates via **GitHub Release tags**, not commits on main. Bumping `manifest.json` alone does not trigger an update in HA.
+
+**To ship an integration update:**
+
+1. Bump `version` in `custom_components/smart_sniffer/manifest.json`
+2. Add a CHANGELOG entry
+3. Commit and push to main
+4. Create and push the tag:
+   ```bash
+   git tag v0.4.XX && git push origin v0.4.XX
+   ```
+5. The `release.yml` GitHub Action builds agent binaries, generates checksums, and creates the GitHub Release automatically
+
+The release body is currently auto-generated from the workflow template (Quick Install + Checksums + auto-diff). For future releases, we should customize the `body:` in `release.yml` or edit the release description on GitHub after creation to include human-readable changelogs — this content is displayed directly in the HA update screen when users click "Read release announcement."
+
+**Node.js 20 deprecation warning (June 2026):** GitHub Actions will force Node.js 24 starting June 2, 2026. Our workflow uses `actions/checkout@v4`, `actions/setup-go@v5`, and `softprops/action-gh-release@v2` which are all on Node.js 20. Check for updated versions before June or set `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` to opt in early.
+
+---
+
+## Brand Icon Locations
+
+As of HA 2026.3 ([Frenck's blog post, Feb 2026](https://developers.home-assistant.io/blog/2026/02/24/brands-proxy-api/)), custom integrations ship their own brand images locally. HA serves them through a proxy API (`/api/brands/integration/{domain}/{image}`), and local images take priority over the CDN.
+
+There are **two separate icon locations** that serve different purposes:
+
+| Location | Purpose | Required files |
+|----------|---------|----------------|
+| `custom_components/smart_sniffer/brand/` | HA 2026.3+ local brand proxy (integration settings, device pages) | `icon.png`, `logo.png` (+ `@2x` variants) |
+| `brand/` (repo root) | HACS update entity card, HACS dashboard | `icon.png`, `logo.png` (+ `@2x` variants) |
+
+**HA 2026.3 also supports dark mode variants:** `dark_icon.png`, `dark_icon@2x.png`, `dark_logo.png`, `dark_logo@2x.png`. These are placed alongside the existing files in the same `brand/` directories. Not yet implemented — on the to-do list.
+
+The old approach of PRing to `home-assistant/brands` is no longer needed for custom integrations. The legacy `/brands/` directory (a fork of that repo used during initial development) is excluded via `.gitignore`.
+
+---
+
 ## Known Issues & Tech Debt
 
 1. ~~**`--config` flag not implemented in Go agent.**~~ Resolved in v0.4.25. The agent now accepts `--config /path/to/config.yaml` to specify an explicit config file path. Auto-detection (CWD then `/etc/smartha-agent/`) still works as the default.
@@ -321,8 +359,12 @@ v0.3.0 (shipped):
 Future:
 
 - [ ] **HAOS App** — Docker-based HA App (formerly "add-on") packaging the Go agent + smartmontools for direct HAOS installs (no separate machine needed). Likely a separate repo (`smart-sniffer-addon`). Needs privileged device access for `smartctl`.
-- [ ] Design final integration icons and PR to `home-assistant/brands`
-- [ ] Add `--config` CLI flag to Go agent for explicit config file path
+- [x] ~~Design final integration icons and PR to `home-assistant/brands`~~ — No longer needed. HA 2026.3 supports local `brand/` directory. Icons shipped in integration.
+- [x] ~~Add `--config` CLI flag to Go agent for explicit config file path~~ — ✅ Resolved in v0.4.25.
+- [ ] **Dark mode brand icons** — HA 2026.3 supports `dark_icon.png` / `dark_logo.png` variants. Need to create inverted/dark-background versions of current crops.
+- [ ] **Agent version repair notifications** — HA repair card when agent version is too old. Design doc at `docs/agent-version-repair.md`.
+- [ ] **Improved release descriptions** — Customize GitHub Release body to include human-readable changelogs (shown in HA update screen).
+- [ ] **GitHub Actions Node.js 24 migration** — Update workflow actions before June 2, 2026 deadline.
 - [ ] MQTT agent mode for environments where direct HTTP isn't ideal
 - [ ] Custom Lovelace card for drive health at a glance
 - [ ] **Temperature-based attention triggers** — absolute threshold (e.g., > 55°C = MAYBE) and trend-over-time detection (sustained rise). Requires storing historical temperature readings in the coordinator.
@@ -339,3 +381,5 @@ These companion documents cover specific subsystems in depth. Prefer reading the
 - **[attention-severity-logic.md](attention-severity-logic.md)** — Complete attention state machine, severity rules, notification lifecycle, transition table
 - **[early-warning-attributes.md](early-warning-attributes.md)** — Which SMART attributes predict failure and why we monitor them
 - **[smart-attribute-name-variants.md](smart-attribute-name-variants.md)** — Manufacturer-specific attribute name research for the `ata_name_map`
+- **[platform-install-paths.md](platform-install-paths.md)** — Install locations, immutable rootfs support, network interface filtering
+- **[agent-version-repair.md](agent-version-repair.md)** — Design doc for HA repair notifications when agent is outdated
