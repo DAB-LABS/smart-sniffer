@@ -76,12 +76,6 @@ On machines with multiple network interfaces (Docker, ZeroTier, Tailscale, etc.)
   <img src="images/agent_install_uninstall_screenshot.png" alt="Agent install on Linux" width="520">
 </p>
 
-> **Raspberry Pi (armv7) — New in v0.4.27:** We now ship an ARMv7 binary for Raspberry Pi 2/3/4 (32-bit OS). This is freshly built and untested in the field — if you're running Home Assistant on a Pi, we'd love your feedback. [Open an issue](https://github.com/DAB-LABS/smart-sniffer/issues) and let us know how it goes.
-
-<p align="center">
-  <img src="images/ras-pi-testers-wanted.png" alt="Raspberry Pi Testers Wanted" width="480">
-</p>
-
 <details>
 <summary>Uninstall the agent</summary>
 
