@@ -20,7 +20,7 @@ build:
 
 # All supported cross-compilation targets.
 .PHONY: all
-all: linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64
+all: linux-amd64 linux-arm64 linux-arm darwin-amd64 darwin-arm64 windows-amd64
 
 .PHONY: linux-amd64
 linux-amd64:
@@ -29,6 +29,10 @@ linux-amd64:
 .PHONY: linux-arm64
 linux-arm64:
 	GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o $(OUTDIR)/$(BINARY)-linux-arm64 .
+
+.PHONY: linux-arm
+linux-arm:
+	GOOS=linux GOARCH=arm GOARM=7 go build $(LDFLAGS) -o $(OUTDIR)/$(BINARY)-linux-arm .
 
 .PHONY: darwin-amd64
 darwin-amd64:

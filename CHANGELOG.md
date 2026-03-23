@@ -2,6 +2,14 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.4.27 — 2026-03-23
+
+### Added
+- **Agent: armv7 (Raspberry Pi) binary** — release workflow and Makefile now build `smartha-agent-linux-arm` (ARMv7 hard-float, GOARM=7) alongside existing platforms. Enables native Raspberry Pi 2/3/4 installs and unblocks the HA add-on armv7 architecture build.
+
+### Changed
+- **`.gitignore`: local docs folder** — `docs/internal/` excluded from version control for project-private documentation
+
 ## v0.4.26 — 2026-03-23
 
 ### Fixed

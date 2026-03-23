@@ -1,14 +1,14 @@
 # Build and publish SMART Sniffer Agent binaries on tagged releases.
 #
 # Trigger: push a tag like v0.1.0
-#   git tag v0.1.0
-#   git push origin v0.1.0
+# git tag v0.1.0
+# git push origin v0.1.0
 #
 # The workflow:
-#   1. Checks out the code
-#   2. Cross-compiles for all supported platforms
-#   3. Generates SHA256 checksums
-#   4. Creates a GitHub Release with all artifacts attached
+# 1. Checks out the code
+# 2. Cross-compiles for all supported platforms
+# 3. Generates SHA256 checksums
+# 4. Creates a GitHub Release with all artifacts attached
 
 name: Release
 
@@ -75,6 +75,7 @@ jobs:
           files: |
             agent/build/smartha-agent-linux-amd64
             agent/build/smartha-agent-linux-arm64
+            agent/build/smartha-agent-linux-arm
             agent/build/smartha-agent-darwin-amd64
             agent/build/smartha-agent-darwin-arm64
             agent/build/smartha-agent-windows-amd64.exe
