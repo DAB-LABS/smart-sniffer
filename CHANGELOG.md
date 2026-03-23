@@ -2,6 +2,20 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.4.26 — 2026-03-23
+
+### Fixed
+- **Seagate/OEM Command Timeout false alerts** — Seagate and OEM drives (e.g., OOS-series) pack three 16-bit counters into the 48-bit raw value for SMART attribute 188. The integration was comparing the full compound value against zero, triggering false MAYBE alerts on every affected drive. Now decodes to the lower 16 bits when raw value exceeds 0xFFFF. Applies to all vendors — detection is value-based, not vendor-based.
+- **Command Timeout sensor display** — sensor entity was showing the raw compound value (e.g., 940 billion) instead of the decoded timeout count
+
+### Changed
+- **README: interface picker documentation** — install section, agent configuration, and auto-discovery paragraphs now document the mDNS interface picker, `advertise_interface` config, and multi-homed host guidance
+- **README: updated install screenshot** — now shows the interface picker flow
+- **README: documentation table** — added links to Platform Install Paths and Agent Version Repair docs
+
+### Added
+- **docs/agent-version-repair.md** — design doc for HA repair notifications when agent version is too old
+
 ## v0.4.25 — 2026-03-20
 
 ### Added
