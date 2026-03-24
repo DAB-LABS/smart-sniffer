@@ -240,14 +240,14 @@ Push a `v*` tag to trigger:
 
 1. Checks out the code
 2. Sets up Go from `agent/go.mod`
-3. Runs `make all VERSION=x.y.z` in `agent/` — produces 5 binaries (linux-amd64, linux-arm64, darwin-amd64, darwin-arm64, windows-amd64)
+3. Runs `make all VERSION=x.y.z` in `agent/` — produces 6 binaries (linux-amd64, linux-arm64, linux-arm, darwin-amd64, darwin-arm64, windows-amd64)
 4. Generates SHA256 checksums
 5. Creates a GitHub Release with all artifacts + one-liner install commands in the release notes
 
 ### Makefile targets
 
 - `make` — build for current platform
-- `make all` — cross-compile all 5 targets
+- `make all` — cross-compile all 6 targets
 - `make checksums` — SHA256 for all binaries in `build/`
 - `make release` — `all` + `checksums` (CI entrypoint)
 - `make clean` — remove build directory
@@ -281,7 +281,14 @@ HACS detects integration updates via **GitHub Release tags**, not commits on mai
    ```
 5. The `release.yml` GitHub Action builds agent binaries, generates checksums, and creates the GitHub Release automatically
 
-The release body is currently auto-generated from the workflow template (Quick Install + Checksums + auto-diff). For future releases, we should customize the `body:` in `release.yml` or edit the release description on GitHub after creation to include human-readable changelogs — this content is displayed directly in the HA update screen when users click "Read release announcement."
+**Release body template (v0.4.27+):** The `release.yml` body now includes three sections: **What's New** (links to CHANGELOG — replace the HTML comments in the template with version-specific bullet points before tagging for best results), **Update Your Agents** (the reinstall one-liner + guidance), and **Fresh Install** (for new users). This body is displayed directly in the HA update screen when users click "Read release announcement" — it's the primary way existing users learn they need to update their agents too.
+
+**Checklist for every release:**
+1. Write the CHANGELOG entry
+2. Optionally edit the `body:` HTML comments in `release.yml` to inline the highlights (or rely on the CHANGELOG link)
+3. Bump manifest.json version
+4. Commit, push, tag, push tag
+5. Verify the release page on GitHub — the body should make sense to a user seeing it in HA
 
 **Node.js 20 deprecation warning (June 2026):** GitHub Actions will force Node.js 24 starting June 2, 2026. Our workflow uses `actions/checkout@v4`, `actions/setup-go@v5`, and `softprops/action-gh-release@v2` which are all on Node.js 20. Check for updated versions before June or set `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` to opt in early.
 
@@ -363,7 +370,7 @@ Future:
 - [x] ~~Add `--config` CLI flag to Go agent for explicit config file path~~ — ✅ Resolved in v0.4.25.
 - [ ] **Dark mode brand icons** — HA 2026.3 supports `dark_icon.png` / `dark_logo.png` variants. Need to create inverted/dark-background versions of current crops.
 - [ ] **Agent version repair notifications** — HA repair card when agent version is too old. Design doc at `docs/agent-version-repair.md`.
-- [ ] **Improved release descriptions** — Customize GitHub Release body to include human-readable changelogs (shown in HA update screen).
+- [x] ~~**Improved release descriptions**~~ — ✅ Release body template now includes What's New, Update Your Agents, and Fresh Install sections (v0.4.27).
 - [ ] **GitHub Actions Node.js 24 migration** — Update workflow actions before June 2, 2026 deadline.
 - [ ] MQTT agent mode for environments where direct HTTP isn't ideal
 - [ ] Custom Lovelace card for drive health at a glance

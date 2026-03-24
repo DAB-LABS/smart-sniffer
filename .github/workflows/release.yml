@@ -55,7 +55,27 @@ jobs:
           body: |
             ## SMART Sniffer Agent v${{ steps.version.outputs.VERSION }}
 
-            ### Quick Install
+            <!-- 🔴 IMPORTANT: Replace this section with version-specific changes before tagging. -->
+            <!-- Example: -->
+            <!-- ### What's New -->
+            <!-- - **Raspberry Pi support** — armv7 binary now included for Pi 2/3/4 (32-bit OS) -->
+            <!-- - **Seagate fix** — resolved false Command Timeout alerts on Seagate/OEM drives -->
+
+            ### What's New
+            See the [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details on this release.
+
+            ---
+
+            ### ⚡ Update Your Agents
+            **Already have agents running?** Update them to match this release:
+            ```bash
+            curl -sSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | sudo bash
+            ```
+            Run this on each machine where the agent is installed. The installer will stop the running agent, replace the binary, and prompt for configuration.
+
+            ---
+
+            ### Fresh Install
 
             **Linux / macOS (one command):**
             ```bash
