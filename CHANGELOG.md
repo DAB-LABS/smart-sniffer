@@ -2,6 +2,17 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.4.28 — 2026-03-24
+
+### Added
+- **Agent: version in `/api/health`** — the health endpoint now returns `{"status":"ok","version":"0.4.28"}`, enabling the integration to detect outdated agents without relying solely on mDNS TXT records
+- **Integration: agent version check + HA repair notifications** — the coordinator checks the agent version every poll cycle. If the agent is older than `MIN_AGENT_VERSION`, a repair card appears in Settings → Repairs with the agent hostname, current vs required version, and a one-liner upgrade command. The repair auto-clears once the agent is updated — no restart or user action needed inside HA
+- **Integration: version warning at discovery** — when adding a new agent via zeroconf, the config flow shows a warning if the discovered agent is outdated, without blocking setup
+- **Installer: config preservation on upgrade** — re-running the installer now detects an existing `config.yaml`, displays current settings (with masked token), and asks to keep them. Default is yes — press Enter to upgrade in place with no re-entry of port, token, or interval
+- **Installer: interface picker on upgrade** — configs from pre-v0.4.25 without `advertise_interface` get a one-time interface prompt on multi-homed hosts, preventing mDNS from advertising on VPN/Docker interfaces
+- **Installer: `utun` virtual interface detection** — macOS VPN tunnels (ZeroTier, Tailscale) using `utunX` interfaces are now correctly identified as virtual and excluded from the default mDNS interface list
+- **Agent: `--mdns-name` flag / `mdns_name` config** — allows overriding the mDNS instance name (default: `smartha-<hostname>`). Fixes mDNS collisions when multiple HA instances run the SMART Sniffer add-on on the same network — container hostnames are typically identical, causing only one agent to be discoverable. The HA add-on passes `--mdns-name=smartha-<ha-hostname>` derived from the Supervisor API to ensure unique names per instance
+
 ## v0.4.27 — 2026-03-23
 
 ### Added

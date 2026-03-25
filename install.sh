@@ -36,6 +36,103 @@ warn()    { echo -e "${YELLOW}  ⚠ $*${NC}"; }
 fail()    { echo -e "${RED}  ✗ $*${NC}"; exit 1; }
 
 # ---------------------------------------------------------------------------
+# Network interface picker (reused by fresh install and upgrade paths)
+#
+# Detects interfaces with IPv4 addresses, tags virtual/VPN interfaces,
+# and prompts the user to pick one. Sets ADV_IFACE to the chosen interface
+# or "" for auto-filter.
+#
+# Arguments:
+#   $1 — default choice label shown in the prompt (e.g., "A" or "current")
+# ---------------------------------------------------------------------------
+VIRTUAL_PREFIXES="docker|br-|veth|zt|tailscale|ts|wg|virbr|vbox|vmnet|utun|lo"
+
+pick_interface() {
+  local default_label="${1:-A}"
+  IFACE_LIST=""
+  IFACE_COUNT=0
+  NON_VIRTUAL_COUNT=0
+
+  # Build numbered interface list.
+  for iface in $(ls /sys/class/net 2>/dev/null || ifconfig -l 2>/dev/null | tr ' ' '\n'); do
+    # Get first IPv4 address for this interface.
+    if command -v ip &>/dev/null; then
+      ip4=$(ip -4 addr show "$iface" 2>/dev/null | grep -oP 'inet \K[0-9.]+' | head -1)
+    else
+      ip4=$(ifconfig "$iface" 2>/dev/null | grep -oE 'inet [0-9.]+' | awk '{print $2}' | head -1)
+    fi
+    [ -z "$ip4" ] && continue  # skip interfaces with no IPv4
+
+    IFACE_COUNT=$((IFACE_COUNT + 1))
+    label=""
+    if echo "$iface" | grep -qiE "^($VIRTUAL_PREFIXES)"; then
+      case "$iface" in
+        docker*|br-*) label="Docker" ;;
+        veth*)        label="Docker container" ;;
+        zt*)          label="ZeroTier" ;;
+        tailscale*|ts*) label="Tailscale" ;;
+        wg*)          label="WireGuard" ;;
+        virbr*)       label="libvirt" ;;
+        vbox*)        label="VirtualBox" ;;
+        vmnet*)       label="VMware" ;;
+        utun*)        label="VPN tunnel" ;;
+        lo*)          label="loopback" ;;
+        *)            label="virtual" ;;
+      esac
+      echo -e "    ${IFACE_COUNT}) ${iface}$(printf '%*s' $((16 - ${#iface})) '')${ip4}  ${YELLOW}(${label})${NC}"
+    else
+      echo -e "    ${IFACE_COUNT}) ${iface}$(printf '%*s' $((16 - ${#iface})) '')${ip4}"
+      NON_VIRTUAL_COUNT=$((NON_VIRTUAL_COUNT + 1))
+    fi
+    IFACE_LIST="${IFACE_LIST}${iface} "
+  done
+
+  echo -e "    A) All interfaces (auto-filter virtual)"
+  echo ""
+
+  ADV_IFACE=""
+  if [ "$IFACE_COUNT" -gt 1 ]; then
+    read -rp "  Advertise on interface [$default_label]: " IFACE_CHOICE < "$TTY_IN"
+    if [ -n "$IFACE_CHOICE" ] && [ "$IFACE_CHOICE" != "A" ] && [ "$IFACE_CHOICE" != "a" ]; then
+      # Convert number to interface name.
+      local chosen_idx=0
+      for iface_name in $IFACE_LIST; do
+        chosen_idx=$((chosen_idx + 1))
+        if [ "$chosen_idx" = "$IFACE_CHOICE" ]; then
+          ADV_IFACE="$iface_name"
+          break
+        fi
+      done
+      if [ -z "$ADV_IFACE" ]; then
+        warn "Invalid choice — using auto-filter."
+      else
+        success "mDNS will advertise on: $ADV_IFACE"
+      fi
+    fi
+  elif [ "$IFACE_COUNT" -eq 1 ]; then
+    info "Single interface detected — using auto-filter."
+  fi
+}
+
+# Returns the count of non-virtual interfaces (call after pick_interface or
+# after running the same detection loop). Used to decide whether to prompt
+# during upgrades from pre-interface-picker configs.
+count_non_virtual_interfaces() {
+  NON_VIRTUAL_COUNT=0
+  for iface in $(ls /sys/class/net 2>/dev/null || ifconfig -l 2>/dev/null | tr ' ' '\n'); do
+    if command -v ip &>/dev/null; then
+      ip4=$(ip -4 addr show "$iface" 2>/dev/null | grep -oP 'inet \K[0-9.]+' | head -1)
+    else
+      ip4=$(ifconfig "$iface" 2>/dev/null | grep -oE 'inet [0-9.]+' | awk '{print $2}' | head -1)
+    fi
+    [ -z "$ip4" ] && continue
+    if ! echo "$iface" | grep -qiE "^($VIRTUAL_PREFIXES)"; then
+      NON_VIRTUAL_COUNT=$((NON_VIRTUAL_COUNT + 1))
+    fi
+  done
+}
+
+# ---------------------------------------------------------------------------
 # Install-path defaults (may be overridden by resolve_install_paths below)
 # ---------------------------------------------------------------------------
 INSTALL_BIN="/usr/local/bin/$BINARY_NAME"
@@ -432,7 +529,91 @@ else
   TTY_IN=""
 fi
 
-if [ -n "$TTY_IN" ]; then
+# ---------------------------------------------------------------------------
+# Check for existing configuration (upgrade detection)
+# ---------------------------------------------------------------------------
+EXISTING_CONFIG="$INSTALL_CFG/config.yaml"
+KEEP_CONFIG=false
+
+if [ -f "$EXISTING_CONFIG" ]; then
+  # Parse existing values from config.yaml
+  _EXISTING_PORT=$(grep -E '^port:' "$EXISTING_CONFIG" 2>/dev/null | awk '{print $2}' | tr -d '"' || true)
+  _EXISTING_TOKEN=$(grep -E '^token:' "$EXISTING_CONFIG" 2>/dev/null | awk '{print $2}' | tr -d '"' || true)
+  _EXISTING_INTERVAL=$(grep -E '^scan_interval:' "$EXISTING_CONFIG" 2>/dev/null | awk '{print $2}' | tr -d '"' || true)
+  _EXISTING_IFACE=$(grep -E '^advertise_interface:' "$EXISTING_CONFIG" 2>/dev/null | awk '{print $2}' | tr -d '"' || true)
+
+  # Only treat as valid if we got at least a port
+  if [ -n "$_EXISTING_PORT" ]; then
+    echo ""
+    echo -e "${GREEN}${BOLD}  Existing configuration found:${NC}"
+    echo "    Port:       $_EXISTING_PORT"
+    if [ -n "$_EXISTING_TOKEN" ]; then
+      # Mask the token for display
+      _TOKEN_LEN=${#_EXISTING_TOKEN}
+      if [ "$_TOKEN_LEN" -gt 4 ]; then
+        _TOKEN_DISPLAY="${_EXISTING_TOKEN:0:2}$(printf '%*s' $((_TOKEN_LEN - 4)) '' | tr ' ' '•')${_EXISTING_TOKEN:$((_TOKEN_LEN - 2))}"
+      else
+        _TOKEN_DISPLAY="••••"
+      fi
+      echo "    Token:      $_TOKEN_DISPLAY"
+    else
+      echo "    Token:      (none)"
+    fi
+    echo "    Interval:   ${_EXISTING_INTERVAL:-60s}"
+    if [ -n "$_EXISTING_IFACE" ]; then
+      echo "    Interface:  $_EXISTING_IFACE"
+    else
+      echo "    Interface:  auto-filter"
+    fi
+    echo ""
+
+    if [ -n "$TTY_IN" ]; then
+      read -rp "  Keep current settings? [Y/n]: " KEEP_CHOICE < "$TTY_IN"
+      case "$KEEP_CHOICE" in
+        [nN]|[nN][oO]) KEEP_CONFIG=false ;;
+        *)             KEEP_CONFIG=true ;;
+      esac
+    else
+      # Non-interactive upgrade: always keep existing config
+      info "Non-interactive mode — keeping existing configuration."
+      KEEP_CONFIG=true
+    fi
+
+    if [ "$KEEP_CONFIG" = "true" ]; then
+      PORT="$_EXISTING_PORT"
+      TOKEN="$_EXISTING_TOKEN"
+      SCAN_INTERVAL="${_EXISTING_INTERVAL:-60s}"
+      ADV_IFACE="$_EXISTING_IFACE"
+      success "Keeping existing configuration."
+
+      # --- Upgrade path: offer interface picker if config predates v0.4.25 ---
+      # Old configs won't have advertise_interface. On multi-homed hosts this
+      # can cause mDNS to advertise on a VPN or Docker IP. Prompt once.
+      if [ -z "$ADV_IFACE" ] && [ -n "$TTY_IN" ]; then
+        count_non_virtual_interfaces
+        if [ "$NON_VIRTUAL_COUNT" -gt 1 ]; then
+          echo ""
+          warn "Your config doesn't specify a network interface for mDNS."
+          echo "  Machines with multiple interfaces may advertise on the wrong IP."
+          echo ""
+
+          pick_interface "A"
+
+          if [ -n "$ADV_IFACE" ]; then
+            # Append to existing config (don't rewrite it)
+            echo "advertise_interface: $ADV_IFACE" >> "$EXISTING_CONFIG"
+            success "Interface saved to existing config."
+          fi
+        fi
+      fi
+    fi
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Configuration prompts (skipped if keeping existing config)
+# ---------------------------------------------------------------------------
+if [ "$KEEP_CONFIG" = "false" ] && [ -n "$TTY_IN" ]; then
   echo ""
   echo -e "${BOLD}  Configuration${NC}"
   echo "  (Press Enter to accept defaults)"
@@ -443,78 +624,14 @@ if [ -n "$TTY_IN" ]; then
   read -rp "  Scan interval [60s]: " SCAN_INTERVAL < "$TTY_IN"
 
   # --- Network interface picker for mDNS advertisement ---
-  # Detect interfaces with IPv4 addresses.  Tag known virtual/VPN interfaces
-  # so the user can make an informed choice without needing networking expertise.
   echo ""
   echo -e "${BOLD}  Network interface for mDNS discovery${NC}"
   echo "  (Home Assistant uses this to auto-discover the agent)"
   echo ""
 
-  VIRTUAL_PREFIXES="docker|br-|veth|zt|tailscale|ts|wg|virbr|vbox|vmnet|lo"
-  IFACE_LIST=""
-  IFACE_COUNT=0
+  pick_interface "A"
 
-  # Build numbered interface list.
-  for iface in $(ls /sys/class/net 2>/dev/null || ifconfig -l 2>/dev/null | tr ' ' '\n'); do
-    # Get first IPv4 address for this interface.
-    if command -v ip &>/dev/null; then
-      ip4=$(ip -4 addr show "$iface" 2>/dev/null | grep -oP 'inet \K[0-9.]+' | head -1)
-    else
-      ip4=$(ifconfig "$iface" 2>/dev/null | grep -oE 'inet [0-9.]+' | awk '{print $2}' | head -1)
-    fi
-    [ -z "$ip4" ] && continue  # skip interfaces with no IPv4
-
-    IFACE_COUNT=$((IFACE_COUNT + 1))
-    label=""
-    if echo "$iface" | grep -qiE "^($VIRTUAL_PREFIXES)"; then
-      # Identify the type of virtual interface.
-      case "$iface" in
-        docker*|br-*) label="Docker" ;;
-        veth*)        label="Docker container" ;;
-        zt*)          label="ZeroTier" ;;
-        tailscale*|ts*) label="Tailscale" ;;
-        wg*)          label="WireGuard" ;;
-        virbr*)       label="libvirt" ;;
-        vbox*)        label="VirtualBox" ;;
-        vmnet*)       label="VMware" ;;
-        lo*)          label="loopback" ;;
-        *)            label="virtual" ;;
-      esac
-      echo -e "    ${IFACE_COUNT}) ${iface}$(printf '%*s' $((16 - ${#iface})) '')${ip4}  ${YELLOW}(${label})${NC}"
-    else
-      echo -e "    ${IFACE_COUNT}) ${iface}$(printf '%*s' $((16 - ${#iface})) '')${ip4}"
-    fi
-    IFACE_LIST="${IFACE_LIST}${iface} "
-  done
-
-  echo -e "    A) All interfaces (auto-filter virtual)"
-  echo ""
-
-  ADV_IFACE=""
-  if [ "$IFACE_COUNT" -gt 1 ]; then
-    read -rp "  Advertise on interface [A]: " IFACE_CHOICE < "$TTY_IN"
-    if [ -n "$IFACE_CHOICE" ] && [ "$IFACE_CHOICE" != "A" ] && [ "$IFACE_CHOICE" != "a" ]; then
-      # Convert number to interface name.
-      CHOSEN_IDX=0
-      for iface_name in $IFACE_LIST; do
-        CHOSEN_IDX=$((CHOSEN_IDX + 1))
-        if [ "$CHOSEN_IDX" = "$IFACE_CHOICE" ]; then
-          ADV_IFACE="$iface_name"
-          break
-        fi
-      done
-      if [ -z "$ADV_IFACE" ]; then
-        warn "Invalid choice — using auto-filter."
-      else
-        success "mDNS will advertise on: $ADV_IFACE"
-      fi
-    fi
-  elif [ "$IFACE_COUNT" -eq 1 ]; then
-    # Only one interface — no need to ask.
-    info "Single interface detected — using auto-filter."
-  fi
-
-else
+elif [ "$KEEP_CONFIG" = "false" ]; then
   info "Non-interactive mode detected — using defaults."
   PORT=""
   TOKEN=""
@@ -548,23 +665,27 @@ chmod +x "$INSTALL_BIN"
 success "Binary installed."
 
 # ---------------------------------------------------------------------------
-# Write config
+# Write config (skip if keeping existing config)
 # ---------------------------------------------------------------------------
-info "Writing config to $INSTALL_CFG/config.yaml..."
-mkdir -p "$INSTALL_CFG"
+if [ "$KEEP_CONFIG" = "true" ]; then
+  info "Keeping existing config at $INSTALL_CFG/config.yaml"
+else
+  info "Writing config to $INSTALL_CFG/config.yaml..."
+  mkdir -p "$INSTALL_CFG"
 
-cat > "$INSTALL_CFG/config.yaml" <<CONFEOF
+  cat > "$INSTALL_CFG/config.yaml" <<CONFEOF
 port: $PORT
 scan_interval: $SCAN_INTERVAL
 CONFEOF
 
-if [ -n "$TOKEN" ]; then
-  echo "token: \"$TOKEN\"" >> "$INSTALL_CFG/config.yaml"
+  if [ -n "$TOKEN" ]; then
+    echo "token: \"$TOKEN\"" >> "$INSTALL_CFG/config.yaml"
+  fi
+  if [ -n "$ADV_IFACE" ]; then
+    echo "advertise_interface: $ADV_IFACE" >> "$INSTALL_CFG/config.yaml"
+  fi
+  success "Config written."
 fi
-if [ -n "$ADV_IFACE" ]; then
-  echo "advertise_interface: $ADV_IFACE" >> "$INSTALL_CFG/config.yaml"
-fi
-success "Config written."
 
 # ---------------------------------------------------------------------------
 # Platform-specific service installation

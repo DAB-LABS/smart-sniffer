@@ -19,7 +19,7 @@
       },
       "zeroconf_confirm": {
         "title": "SMART Sniffer Agent Discovered",
-        "description": "Found agent on **{hostname}** ({host}:{port}) with {drives} drive(s).",
+        "description": "Found agent on **{hostname}** ({host}:{port}) with {drives} drive(s).{agent_version_warning}",
         "data": {
           "token": "Bearer Token"
         },
@@ -57,6 +57,12 @@
     "error": {
       "cannot_connect": "Unable to connect with the new settings. Check the port and token.",
       "unknown": "An unexpected error occurred."
+    }
+  },
+  "issues": {
+    "agent_outdated": {
+      "title": "SMART Sniffer: Update agent on {hostname} (v{current_version} → v{min_version})",
+      "description": "The agent on **{hostname}** is running version **{current_version}**, but this integration requires at least **{min_version}**.\n\nTo update, SSH into the host and run:\n```\ncurl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo bash\n```\nThe installer will detect the existing installation and upgrade in place. This repair will clear automatically once the agent reports a compatible version."
     }
   }
 }

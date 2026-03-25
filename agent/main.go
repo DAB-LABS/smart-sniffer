@@ -131,6 +131,19 @@ func main() {
 		// doesn't have to guess which IP is the real LAN address.
 		preferredIP := PreferredIP(ifaces)
 
+		// Build the mDNS instance name. Use --mdns-name / mdns_name if
+		// provided (e.g. by the HA add-on to avoid container hostname
+		// collisions), otherwise default to smartha-<hostname>.
+		instance := "smartha-" + hostname
+		if cfg.MDNSName != "" {
+			instance = cfg.MDNSName
+			log.Printf("mDNS: using custom instance name: %s", instance)
+		}
+		// DNS labels are limited to 63 bytes — truncate to be safe.
+		if len(instance) > 63 {
+			instance = instance[:63]
+		}
+
 		txt := []string{
 			"txtvers=1",
 			"version=" + version,
@@ -144,7 +157,6 @@ func main() {
 			log.Printf("mDNS: preferred IP: %s", preferredIP)
 		}
 
-		instance := "smartha-" + hostname
 		mdnsServer, err = zeroconf.Register(instance, "_smartha._tcp", "local.", cfg.Port, txt, ifaces)
 		if err != nil {
 			log.Printf("WARNING: mDNS registration failed: %v", err)
@@ -304,7 +316,7 @@ func authMiddleware(token string, next http.Handler) http.Handler {
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status":"ok"}`))
+	fmt.Fprintf(w, `{"status":"ok","version":"%s"}`, version)
 }
 
 // ---------------------------------------------------------------------------

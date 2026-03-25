@@ -71,7 +71,7 @@ jobs:
             ```bash
             curl -sSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | sudo bash
             ```
-            Run this on each machine where the agent is installed. The installer will stop the running agent, replace the binary, and prompt for configuration.
+            Run this on each machine where the agent is installed. The installer detects your existing configuration and offers to keep it — just press Enter to upgrade in place.
 
             ---
 

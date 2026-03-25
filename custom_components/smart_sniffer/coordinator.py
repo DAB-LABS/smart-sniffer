@@ -25,6 +25,7 @@ Notification IDs are stable: smart_sniffer_attention_{drive_id}
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import timedelta
 from typing import Any
@@ -39,6 +40,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.issue_registry import (
+    IssueSeverity,
+    async_create_issue,
+    async_delete_issue,
+)
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .attention import (
@@ -49,7 +55,13 @@ from .attention import (
     STATE_YES,
     evaluate_attention,
 )
-from .const import CONF_TOKEN, DEFAULT_SCAN_INTERVAL, DOMAIN
+from .const import (
+    AGENT_RELEASES_URL,
+    CONF_TOKEN,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    MIN_AGENT_VERSION,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -58,6 +70,19 @@ _NOTIF_PREFIX = "smart_sniffer_attention_"
 
 def _notif_id(drive_id: str) -> str:
     return f"{_NOTIF_PREFIX}{drive_id}"
+
+
+def _version_tuple(v: str) -> tuple[int, ...]:
+    """Parse '0.4.28' → (0, 4, 28) for comparison."""
+    return tuple(int(x) for x in v.split("."))
+
+
+def _agent_is_outdated(agent_version: str, min_version: str) -> bool:
+    """Return True if agent_version < min_version."""
+    try:
+        return _version_tuple(agent_version) < _version_tuple(min_version)
+    except (ValueError, AttributeError):
+        return False  # don't raise repair on unparseable versions (e.g. "dev")
 
 
 def _build_notification(
@@ -102,6 +127,14 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.token: str = entry.data.get(CONF_TOKEN, "")
         interval = entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
 
+        # Hostname for display in repair notifications — use the title if
+        # it looks like "SMART Sniffer (hostname)", otherwise fall back to IP.
+        title = entry.title or ""
+        if title.startswith("SMART Sniffer (") and title.endswith(")"):
+            self._hostname: str = title[len("SMART Sniffer ("):-1]
+        else:
+            self._hostname = self.host
+
         super().__init__(
             hass,
             _LOGGER,
@@ -123,6 +156,28 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self.token:
             return {"Authorization": f"Bearer {self.token}"}
         return {}
+
+    def _check_agent_version(self, agent_version: str) -> None:
+        """Create or clear a HA repair issue based on agent version."""
+        issue_id = f"agent_outdated_{self.host}"
+
+        if not agent_version or _agent_is_outdated(agent_version, MIN_AGENT_VERSION):
+            async_create_issue(
+                self.hass,
+                domain=DOMAIN,
+                issue_id=issue_id,
+                is_fixable=False,
+                severity=IssueSeverity.WARNING,
+                translation_key="agent_outdated",
+                translation_placeholders={
+                    "hostname": self._hostname,
+                    "current_version": agent_version or "unknown",
+                    "min_version": MIN_AGENT_VERSION,
+                },
+                learn_more_url=AGENT_RELEASES_URL,
+            )
+        else:
+            async_delete_issue(self.hass, DOMAIN, issue_id)
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch drive list, then full details per drive.
@@ -152,6 +207,23 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 ) as resp:
                     resp.raise_for_status()
                     result[drive_id] = await resp.json()
+
+            # Check agent version via /api/health (tiny payload, negligible overhead).
+            try:
+                async with session.get(
+                    f"{self._base_url}/api/health",
+                    headers=self._headers,
+                    timeout=timeout,
+                ) as resp:
+                    resp.raise_for_status()
+                    health = await resp.json()
+                agent_version = health.get("version", "")
+            except (aiohttp.ClientError, asyncio.TimeoutError):
+                # Health check failed — don't block the poll, but treat as
+                # unknown version so the repair fires.
+                agent_version = ""
+
+            self._check_agent_version(agent_version)
 
         except aiohttp.ClientError as err:
             raise UpdateFailed(

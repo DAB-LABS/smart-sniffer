@@ -19,6 +19,7 @@ type Config struct {
 	ScanInterval       time.Duration `yaml:"scan_interval"`
 	MDNS               *bool         `yaml:"mdns"`                // pointer so we can detect "not set" vs "set to false"
 	AdvertiseInterface string        `yaml:"advertise_interface"` // restrict mDNS to this interface (e.g. "eth0")
+	MDNSName           string        `yaml:"mdns_name"`           // custom mDNS instance name (default: smartha-<hostname>)
 }
 
 // defaultConfig returns sane defaults.
@@ -57,6 +58,7 @@ func LoadConfig() (*Config, error) {
 	interval := flag.Duration("scan-interval", 0, "Drive rescan interval (e.g. 30s, 2m)")
 	noMDNS := flag.Bool("no-mdns", false, "Disable mDNS/Zeroconf service advertisement")
 	advIface := flag.String("interface", "", "Restrict mDNS advertisement to this network interface")
+	mdnsName := flag.String("mdns-name", "", "Custom mDNS instance name (default: smartha-<hostname>)")
 	flag.Parse()
 
 	// --- Attempt to load config.yaml ---
@@ -99,6 +101,9 @@ func LoadConfig() (*Config, error) {
 	}
 	if *advIface != "" {
 		cfg.AdvertiseInterface = *advIface
+	}
+	if *mdnsName != "" {
+		cfg.MDNSName = *mdnsName
 	}
 
 	// Sanity checks

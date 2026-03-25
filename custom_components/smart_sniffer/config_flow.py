@@ -30,9 +30,21 @@ from .const import (
     DEFAULT_PORT,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    MIN_AGENT_VERSION,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _agent_is_outdated(agent_version: str) -> bool:
+    """Return True if agent_version < MIN_AGENT_VERSION."""
+    try:
+        av = tuple(int(x) for x in agent_version.split("."))
+        mv = tuple(int(x) for x in MIN_AGENT_VERSION.split("."))
+        return av < mv
+    except (ValueError, AttributeError):
+        return False
+
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
@@ -205,6 +217,13 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
         self._discovery_drives = properties.get("drives", "?")
         self._discovery_auth = properties.get("auth", "0") == "1"
 
+        # Check if agent version from mDNS TXT is outdated.
+        agent_version = properties.get("version", "")
+        self._agent_outdated = bool(
+            agent_version and _agent_is_outdated(agent_version)
+        )
+        self._agent_version = agent_version
+
         # Set a nice title for the discovery notification.
         self.context["title_placeholders"] = {
             "hostname": self._discovery_hostname,
@@ -248,16 +267,26 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
         else:
             schema = vol.Schema({})
 
+        # Build description placeholders, including an optional version warning.
+        placeholders = {
+            "hostname": self._discovery_hostname,
+            "host": self._discovery_host,
+            "port": str(self._discovery_port),
+            "drives": str(self._discovery_drives),
+            "agent_version_warning": "",
+        }
+        if getattr(self, "_agent_outdated", False):
+            placeholders["agent_version_warning"] = (
+                f"\n\n⚠️ This agent is running **v{self._agent_version}** "
+                f"but the integration requires at least **v{MIN_AGENT_VERSION}**. "
+                "You can still add it, but please update the agent afterwards."
+            )
+
         return self.async_show_form(
             step_id="zeroconf_confirm",
             data_schema=schema,
             errors=errors,
-            description_placeholders={
-                "hostname": self._discovery_hostname,
-                "host": self._discovery_host,
-                "port": str(self._discovery_port),
-                "drives": str(self._discovery_drives),
-            },
+            description_placeholders=placeholders,
         )
 
     async def _test_connection(self, host: str, port: int, token: str) -> None:

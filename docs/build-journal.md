@@ -138,7 +138,7 @@ Originally used `hub`, which shows "Add hub" in the HA UI. But SMART Sniffer doe
 
 HA has built-in Zeroconf support — integrations declare a service type in `manifest.json` and HA listens for it automatically. No custom scanning, no SSDP, no MQTT discovery needed. The agent registers `_smartha._tcp.local.` with TXT records (version, hostname, OS, auth status, drive count) using the `grandcat/zeroconf` Go library. HA picks it up and routes to `async_step_zeroconf()` in the config flow.
 
-The instance name is `smartha-<hostname>`, which naturally deduplicates across machines. Each agent gets a unique mDNS identity, and the config flow uses `host:port` as the HA unique ID to prevent duplicate entries.
+The instance name is `smartha-<hostname>`, which naturally deduplicates across machines. Each agent gets a unique mDNS identity, and the config flow uses `host:port` as the HA unique ID to prevent duplicate entries. As of v0.4.28, the `--mdns-name` flag (or `mdns_name` in config.yaml) allows overriding the instance name — needed for the HA add-on where `os.Hostname()` returns a generic container hostname like `homeassistant` on every instance, causing mDNS collisions on multi-HA networks.
 
 One limitation: mDNS is link-local (multicast on the LAN segment). Agents on different VLANs won't be discovered without an mDNS reflector like Avahi or a router-level relay. The README documents this.
 
@@ -256,7 +256,7 @@ Push a `v*` tag to trigger:
 
 **`install.sh` (Linux + macOS)** — `curl -sSL ... | sudo bash`
 
-Detects OS and architecture, downloads the correct binary from GitHub Releases, verifies SHA256 checksum, installs smartmontools if missing, prompts for port/token/interval, presents a network interface picker for mDNS advertisement (labels Docker/ZeroTier/Tailscale/WireGuard interfaces), writes config, installs as systemd service (Linux) or launchd daemon (macOS), runs a health check. As of v0.4.24, probes for writable install paths on immutable-rootfs platforms (ZimaOS, CasaOS) — see `docs/platform-install-paths.md`.
+Detects OS and architecture, downloads the correct binary from GitHub Releases, verifies SHA256 checksum, installs smartmontools if missing, prompts for port/token/interval, presents a network interface picker for mDNS advertisement (labels Docker/ZeroTier/Tailscale/WireGuard/utun interfaces), writes config, installs as systemd service (Linux) or launchd daemon (macOS), runs a health check. As of v0.4.24, probes for writable install paths on immutable-rootfs platforms (ZimaOS, CasaOS) — see `docs/platform-install-paths.md`. As of v0.4.28, detects existing config on upgrade and offers to keep it (default yes) — no re-entry of settings needed. Old configs without `advertise_interface` get a one-time interface prompt on multi-homed hosts.
 
 **`install.ps1` (Windows)** — `irm ... | iex`
 
@@ -369,7 +369,7 @@ Future:
 - [x] ~~Design final integration icons and PR to `home-assistant/brands`~~ — No longer needed. HA 2026.3 supports local `brand/` directory. Icons shipped in integration.
 - [x] ~~Add `--config` CLI flag to Go agent for explicit config file path~~ — ✅ Resolved in v0.4.25.
 - [ ] **Dark mode brand icons** — HA 2026.3 supports `dark_icon.png` / `dark_logo.png` variants. Need to create inverted/dark-background versions of current crops.
-- [ ] **Agent version repair notifications** — HA repair card when agent version is too old. Design doc at `docs/agent-version-repair.md`.
+- [x] ~~**Agent version repair notifications**~~ — ✅ Implemented in v0.4.28. Coordinator checks `/api/health` version every poll, raises per-host HA repair card when outdated, auto-clears on upgrade. Config flow warns at zeroconf discovery. Design doc at `docs/agent-version-repair.md`.
 - [x] ~~**Improved release descriptions**~~ — ✅ Release body template now includes What's New, Update Your Agents, and Fresh Install sections (v0.4.27).
 - [ ] **GitHub Actions Node.js 24 migration** — Update workflow actions before June 2, 2026 deadline.
 - [ ] MQTT agent mode for environments where direct HTTP isn't ideal
