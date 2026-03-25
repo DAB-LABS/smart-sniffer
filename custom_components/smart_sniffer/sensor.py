@@ -324,6 +324,14 @@ def _extract_attribute(drive_data: dict[str, Any], key: str) -> Any | None:
                 ):
                     return raw_value & 0xFFFF
 
+                # Wear-leveling attributes: the normalized VALUE column
+                # (0–100) is the correct percentage.  RAW_VALUE is a
+                # vendor-specific counter (total writes, erase cycles,
+                # etc.) that can be in the thousands.
+                # See: https://github.com/DAB-LABS/smart-sniffer/issues/7
+                if key == "wear_leveling_count":
+                    return attr.get("value")
+
                 return raw_value
             return raw
 

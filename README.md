@@ -313,6 +313,9 @@ Binaries output to `agent/build/`.
 - [ ] Custom Lovelace card
 - [ ] Temperature-based attention triggers (absolute threshold + trend over time)
 - [ ] Configurable alert thresholds via options flow
+- [ ] Per-drive scan intervals
+- [ ] Standby-aware polling (`smartctl -n standby`)
+- [ ] YAML-based SMART attribute definitions (vendor field mapping, transforms, units)
 - [ ] SAS/SCSI drive support
 
 ## Testing

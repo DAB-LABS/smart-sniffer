@@ -48,21 +48,30 @@ jobs:
           sha256sum smartha-agent-* > checksums.txt
           cat checksums.txt
 
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          # Extract the section for the current version from CHANGELOG.md.
+          # Grabs everything between the first "## v*" heading and the next one.
+          NOTES=$(awk '
+            /^## v/ { if (found) exit; found=1; next }
+            found { print }
+          ' CHANGELOG.md)
+          # Write to a step output using a heredoc delimiter to preserve newlines.
+          {
+            echo "NOTES<<CHANGELOG_EOF"
+            echo "$NOTES"
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: SMART Sniffer Agent v${{ steps.version.outputs.VERSION }}
+          name: SMART Sniffer v${{ steps.version.outputs.VERSION }}
           body: |
-            ## SMART Sniffer Agent v${{ steps.version.outputs.VERSION }}
+            ${{ steps.changelog.outputs.NOTES }}
 
-            <!-- 🔴 IMPORTANT: Replace this section with version-specific changes before tagging. -->
-            <!-- Example: -->
-            <!-- ### What's New -->
-            <!-- - **Raspberry Pi support** — armv7 binary now included for Pi 2/3/4 (32-bit OS) -->
-            <!-- - **Seagate fix** — resolved false Command Timeout alerts on Seagate/OEM drives -->
-
-            ### What's New
-            See the [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details on this release.
+            📋 [Full Changelog](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)
 
             ---
 
@@ -71,7 +80,7 @@ jobs:
             ```bash
             curl -sSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | sudo bash
             ```
-            Run this on each machine where the agent is installed. The installer detects your existing configuration and offers to keep it — just press Enter to upgrade in place.
+            The installer detects your existing configuration and offers to keep it — just press Enter to upgrade in place.
 
             ---
 
