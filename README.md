@@ -245,6 +245,8 @@ advertise_interface: eth0      # optional — restrict mDNS to this interface
 
 All options can also be set via CLI flags: `--port`, `--token`, `--scan-interval`, `--interface`, `--config`.
 
+**Scan interval:** Uses Go duration syntax — `30s`, `5m`, `1h`, `24h` are all valid. Each poll reads SMART data via `smartctl`, which wakes any drive that is spun down or in standby. If you have drives that sleep between accesses, a longer interval like `12h` or `24h` keeps them from waking unnecessarily.
+
 **Network interface:** The `advertise_interface` setting restricts mDNS to a single interface. The installer sets this during setup if you pick a specific interface. When not set, the agent auto-filters known virtual interfaces (Docker, ZeroTier, Tailscale, WireGuard, etc.) and advertises on all remaining physical interfaces. To change the interface after install, edit `config.yaml` and restart the service — no reinstall needed.
 
 **Authentication:** When a `token` is set, every request to the agent must include an `Authorization: Bearer <token>` header — requests without it receive a `401 Unauthorized` response. When adding the agent in Home Assistant, enter the same token in the integration's config flow. If no token is set, the agent serves data openly without auth.
