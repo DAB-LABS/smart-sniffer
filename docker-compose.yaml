@@ -1,0 +1,18 @@
+services:
+  smart-agent:
+    build: .
+    container_name: smart-agent
+    privileged: true  # for smartmontools
+    environment:
+      - INTERVAL=60 # refresh interval seconds
+      - TOKEN= # access token default is empty
+      - PORT=9099 #default is 9099
+    devices:
+      # mount all disks
+      - "/dev/sda:/dev/sda"
+      - "/dev/sdb:/dev/sdb"
+      - "/dev/sdc:/dev/sdc"
+      - "/dev/sdd:/dev/sdd"
+    ports:
+      # from environment PORT
+      - 9099:9099
