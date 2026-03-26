@@ -2,12 +2,13 @@
 
 All notable changes to SMART Sniffer are documented here.
 
-## v0.4.29 — 2026-03-25
+## v0.4.30 — 2026-03-26
 
 ### Fixed
 - **Wear Leveling / Percentage Used showing raw write count instead of percentage** — ATA wear-related attributes (`Media_Wearout_Indicator`, `SSD_Life_Left`, `Percent_Lifetime_Remain`, etc.) were reading the `RAW_VALUE` column from smartctl, which contains a vendor-specific counter (e.g., 1569 total writes). Now reads the normalized `VALUE` column (0–100), which is the actual percentage remaining. Fixes drives incorrectly showing values like "1,568%" instead of "100%". ([#7](https://github.com/DAB-LABS/smart-sniffer/issues/7))
 
 ### Changed
+- **Release workflow: auto-extract changelog** — GitHub Release body now pulls the current version's notes from CHANGELOG.md automatically, so HA update notifications show descriptive release info instead of a generic placeholder
 - **README: scan interval documentation** — agent configuration section now documents Go duration syntax (`30s`, `5m`, `1h`, `24h`) and notes that each poll wakes spun-down drives
 - **README: roadmap additions** — per-drive scan intervals, standby-aware polling, and YAML-based attribute definitions added to roadmap
 
