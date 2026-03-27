@@ -324,6 +324,26 @@ def _extract_attribute(drive_data: dict[str, Any], key: str) -> Any | None:
                 ):
                     return raw_value & 0xFFFF
 
+                # Power_On_Hours (attribute 9): some vendors pack
+                # additional counters (days, minutes, milliseconds)
+                # into the upper bytes of the 48-bit raw value.
+                # The actual hours are in the lower 32 bits.
+                # Parse raw.string first (e.g., "73593 (159 43 0)"),
+                # fall back to masking if needed.
+                # See: https://github.com/DAB-LABS/smart-sniffer/issues/10
+                if (
+                    key == "power_on_hours"
+                    and isinstance(raw_value, int)
+                    and raw_value > 1_000_000
+                ):
+                    raw_string = raw.get("string", "")
+                    if raw_string:
+                        import re
+                        m = re.match(r"(\d+)", str(raw_string))
+                        if m:
+                            return int(m.group(1))
+                    return raw_value & 0xFFFFFFFF
+
                 # Wear-leveling attributes: the normalized VALUE column
                 # (0–100) is the correct percentage.  RAW_VALUE is a
                 # vendor-specific counter (total writes, erase cycles,

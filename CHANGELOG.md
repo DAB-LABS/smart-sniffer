@@ -2,6 +2,11 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.4.31 — 2026-03-27
+
+### Fixed
+- **Power-On Hours showing astronomically wrong values on some SATA drives** — certain vendors (e.g., Seagate, HGST) pack additional counters (days, minutes) into the upper bytes of the 48-bit raw value for SMART attribute 9 (Power_On_Hours). The integration was displaying the full compound value (e.g., 165 trillion hours) instead of the actual hours stored in the lower 32 bits. Now parses the human-readable string first, falls back to masking. Same class of bug as the Command Timeout fix in v0.4.26 and the Wear Leveling fix in v0.4.30. ([#10](https://github.com/DAB-LABS/smart-sniffer/issues/10))
+
 ## v0.4.30 — 2026-03-26
 
 ### Fixed
