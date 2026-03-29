@@ -304,6 +304,7 @@ Binaries output to `agent/build/`.
 | [Platform Install Paths](docs/platform-install-paths.md) | Install locations, immutable rootfs support, network interface filtering |
 | [Agent Version Repair](docs/agent-version-repair.md) | Design doc for agent version checking and HA repair notifications |
 | [Build Journal](docs/build-journal.md) | Design decisions, iteration history, known issues |
+| [Examples](examples/) | Community-contributed automations — copy, paste, adapt |
 
 ## Roadmap
 
@@ -327,16 +328,6 @@ python3 tools/mock-agent.py --port 9100 --preload sata_hdd,nvme,usb_blocked
 ```
 
 Point the HA integration at `localhost:9100` and you're testing.
-
-## Examples
-
-Community-contributed automations for SMART Sniffer — ready to copy into your setup.
-
-| Example | Description | By |
-|---|---|---|
-| [SSD Alert → Telegram](examples/automations/ssd-alert-telegram.yaml) | Get a Telegram message when drive health changes | [tom_l](https://community.home-assistant.io/u/tom_l) |
-
-See the [examples/](examples/) folder for more, including how to adapt these for your own notification service. Have one to share? Open a PR or post it in the [community thread](https://community.home-assistant.io/t/s-m-a-r-t-smartctl-in-haos/869345).
 
 ## Contributing
 

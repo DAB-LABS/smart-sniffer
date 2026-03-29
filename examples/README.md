@@ -8,10 +8,7 @@ Have one to share? Open a PR or post it in the [community thread](https://commun
 
 ## Automations
 
-<details open>
-<summary><img src="https://img.shields.io/badge/SSD_Alert-0d1117?style=flat-square" alt="SSD Alert"><img src="https://img.shields.io/badge/→-orange?style=flat-square" alt="→"><img src="https://img.shields.io/badge/Telegram-2962FF?style=flat-square" alt="Telegram"> &nbsp;Sends a Telegram message when drive health changes from "NO"</summary>
-
-&nbsp;
+### Alert via Telegram when drive health changes
 
 Fires when `sensor.haos_ssd_attention_needed` leaves the "NO" state and sends the attention reasons via Telegram. Swap `telegram_bot.send_message` for your notification service.
 
@@ -36,5 +33,3 @@ Fires when `sensor.haos_ssd_attention_needed` leaves the "NO" state and sends th
 ```
 
 📄 [ssd-alert-telegram.yaml](automations/ssd-alert-telegram.yaml) · by [tom_l](https://community.home-assistant.io/u/tom_l)
-
-</details>
