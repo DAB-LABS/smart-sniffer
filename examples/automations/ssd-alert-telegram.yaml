@@ -1,0 +1,32 @@
+# SSD Alert → Telegram Notification
+#
+# Sends a Telegram message when your drive's Attention Needed sensor
+# changes from "NO" to any warning state (MAYBE, YES, or UNSUPPORTED).
+# The message includes the specific attention reasons so you know
+# exactly what changed.
+#
+# Adapt this for your own notification service by swapping
+# telegram_bot.send_message with notify.mobile_app_yourphone,
+# notify.pushover, etc.
+#
+# Contributed by tom_l
+# https://community.home-assistant.io/u/tom_l
+# https://community.home-assistant.io/t/s-m-a-r-t-smartctl-in-haos/869345/40
+
+- id: ssd_alert_telegram
+  alias: "SSD Alert"
+  mode: single
+  max_exceeded: silent
+  triggers:
+    - trigger: state
+      entity_id: sensor.haos_ssd_attention_needed
+      not_to:
+        - "NO"
+  actions:
+    - action: telegram_bot.send_message
+      data:
+        chat_id: !secret telegram_alert_chat_group_id
+        title: "⚠️<b>SSD Alert</b>"
+        message: >
+          The System SSD has encountered a problem:
+          {{ states('sensor.haos_ssd_attention_reasons') }}

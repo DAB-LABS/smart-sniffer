@@ -328,6 +328,16 @@ python3 tools/mock-agent.py --port 9100 --preload sata_hdd,nvme,usb_blocked
 
 Point the HA integration at `localhost:9100` and you're testing.
 
+## Examples
+
+Community-contributed automations for SMART Sniffer — ready to copy into your setup.
+
+| Example | Description | By |
+|---|---|---|
+| [SSD Alert → Telegram](examples/automations/ssd-alert-telegram.yaml) | Get a Telegram message when drive health changes | [tom_l](https://community.home-assistant.io/u/tom_l) |
+
+See the [examples/](examples/) folder for more, including how to adapt these for your own notification service. Have one to share? Open a PR or post it in the [community thread](https://community.home-assistant.io/t/s-m-a-r-t-smartctl-in-haos/869345).
+
 ## Contributing
 
 Found a bug? Have a drive that isn't mapping correctly? See [CONTRIBUTING.md](CONTRIBUTING.md) for how to help.
