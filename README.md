@@ -36,6 +36,133 @@ SMART Sniffer follows the trail, sniffing out the [early warning signs](https://
 
 <br>
 
+## How It Works
+
+<p align="center">
+  <img src="images/smartsniffer-architecture.png" alt="Architecture diagram" width="100%">
+</p>
+
+Each machine runs a lightweight `smartha-agent` binary that wraps `smartctl` and serves SMART data over HTTP. The HA integration polls each agent and creates devices, sensors, and health alerts for every drive it finds.
+
+<details>
+<summary><strong>Entities per drive</strong></summary>
+
+<br>
+
+Each drive gets its own HA device. Entities are created dynamically — if a drive doesn't report an attribute, the sensor is simply not created.
+
+**Sensors:**
+
+| Entity | Description |
+|--------|-------------|
+| Attention Needed | Proactive health alert — `NO` / `MAYBE` / `YES` / `UNSUPPORTED` |
+| Health | SMART pass/fail — OK, Problem, or Unknown |
+| Temperature | Current drive temp (°C) |
+| Power-On Hours | Total hours powered on |
+| SMART Status | Raw SMART verdict (PASSED / FAILED) |
+
+**Diagnostic sensors** (conditional):
+
+| Entity | Description |
+|--------|-------------|
+| Reallocated Sector Count | Bad sectors remapped to spares (ATA) |
+| Reported Uncorrectable Errors | Unrecoverable read/write errors (ATA) |
+| Wear Leveling / Percentage Used | SSD endurance indicator |
+| Power Cycle Count | Total power on/off cycles |
+| Reallocated Event Count | Individual reallocation events (ATA) |
+| Spin Retry Count | Motor spin-up retries — HDD only |
+| Command Timeout | Internal command timeouts |
+| Available Spare | NVMe reserve block pool (%) |
+| Available Spare Threshold | Manufacturer-set minimum spare (%) |
+| Current Pending Sector Count | Sectors waiting for reallocation (ATA) |
+
+</details>
+
+<details>
+<summary><strong>Attention Needed — how it classifies drives</strong></summary>
+
+<br>
+
+The Attention Needed sensor evaluates individual SMART attributes every poll cycle:
+
+| State | Meaning | Action |
+|-------|---------|--------|
+| **NO** | All monitored indicators clear | None required |
+| **MAYBE** | Early degradation signals detected | Monitor closely, plan replacement |
+| **YES** | Data integrity at risk | **Back up immediately** |
+| **UNSUPPORTED** | No usable SMART data | Common with USB enclosures |
+
+**Critical triggers (→ YES):** Reallocated sectors, pending sectors, uncorrectable errors, NVMe critical_warning, NVMe media_errors, spare depletion below threshold.
+
+**Warning triggers (→ MAYBE):** Reallocated events, spin retry count, command timeouts, NVMe spare < 20%, NVMe percentage_used ≥ 90%.
+
+When a drive's state changes, a persistent notification fires in HA automatically. Notifications escalate on worsening conditions and dismiss when resolved. See [attention-severity-logic.md](docs/attention-severity-logic.md) for the full specification.
+
+</details>
+
+<details>
+<summary><strong>Agent configuration</strong></summary>
+
+<br>
+
+Create `config.yaml` in the working directory or `/etc/smartha-agent/`:
+
+```yaml
+port: 9099
+token: "your-secret-token"    # optional — omit to disable auth
+scan_interval: 60s
+advertise_interface: eth0      # optional — restrict mDNS to this interface
+```
+
+All options can also be set via CLI flags: `--port`, `--token`, `--scan-interval`, `--interface`, `--config`.
+
+**Scan interval:** Uses Go duration syntax — `30s`, `5m`, `1h`, `24h` are all valid. Each poll reads SMART data via `smartctl`, which wakes any drive that is spun down or in standby. If you have drives that sleep between accesses, a longer interval like `12h` or `24h` keeps them from waking unnecessarily.
+
+**Network interface:** The `advertise_interface` setting restricts mDNS to a single interface. The installer sets this during setup if you pick a specific interface. When not set, the agent auto-filters known virtual interfaces (Docker, ZeroTier, Tailscale, WireGuard, etc.) and advertises on all remaining physical interfaces. To change the interface after install, edit `config.yaml` and restart the service — no reinstall needed.
+
+**Authentication:** When a `token` is set, every request to the agent must include an `Authorization: Bearer <token>` header — requests without it receive a `401 Unauthorized` response. When adding the agent in Home Assistant, enter the same token in the integration's config flow. If no token is set, the agent serves data openly without auth.
+
+**Auto-discovery:** The agent advertises itself on the local network via mDNS (Zeroconf) by default. HA automatically detects running agents and prompts you to set them up — no manual IP entry needed. Disable with `mdns: false` in config or `--no-mdns` flag. Note: mDNS is link-local, so agents on different VLANs won't be discovered without an mDNS reflector.
+
+**Multi-homed hosts:** Machines running Docker, VPNs (ZeroTier, Tailscale, WireGuard), or virtual bridges have multiple network interfaces. If the agent advertises on a VPN or container interface, HA may discover it at an unreachable IP and fail to connect. The installer's interface picker and the `advertise_interface` config option solve this — see [Platform Install Paths](docs/platform-install-paths.md) for details.
+
+**Service management:**
+
+| Platform | Status | Logs | Restart |
+|----------|--------|------|---------|
+| Linux | `systemctl status smartha-agent` | `journalctl -u smartha-agent -f` | `systemctl restart smartha-agent` |
+| macOS | `launchctl list \| grep smartha` | `tail -f /var/log/smartha-agent.log` | `sudo launchctl kickstart -k system/com.dablabs.smartha-agent` |
+| Windows | `Get-Service SmartHA-Agent` | Event Viewer | `Restart-Service SmartHA-Agent` |
+
+</details>
+
+<details>
+<summary><strong>Building from source</strong></summary>
+
+<br>
+
+Requires Go 1.22+.
+
+```bash
+cd agent
+make              # build for current platform
+make all          # cross-compile all targets
+make release      # build all + generate SHA256 checksums
+make clean        # remove build artifacts
+```
+
+Binaries output to `agent/build/`.
+
+| Platform | Architecture | Binary | Status |
+|----------|-------------|--------|--------|
+| Linux | amd64, arm64 | `smartha-agent-linux-amd64`, `-arm64` | Tested |
+| macOS | amd64 (Intel), arm64 (Apple Silicon) | `smartha-agent-darwin-amd64`, `-arm64` | Tested |
+| Windows | amd64 | `smartha-agent-windows-amd64.exe` | Not yet tested |
+
+</details>
+
+<br>
+
 ## Quick Start
 
 **Requires:** `smartmontools` on each monitored machine — the installer handles this automatically (Homebrew on macOS, apt/dnf/yum on Linux).
@@ -158,135 +285,6 @@ External drives connected via USB enclosures typically block SMART passthrough. 
 <img src="images/unsupported-screenshot.png" width="280">
 
 This is the most common "why isn't my drive showing data?" scenario. It's a hardware limitation of the USB bridge chip, not a bug.
-
-</details>
-
-<br>
-
-## How It Works
-
-<p align="center">
-  <img src="images/architecture.svg" alt="Architecture diagram" width="100%">
-</p>
-
-Each machine runs a lightweight `smartha-agent` binary that wraps `smartctl` and serves SMART data over HTTP. The HA integration polls each agent and creates devices, sensors, and health alerts for every drive it finds.
-
-<br>
-
-<details>
-<summary><strong>Entities per drive</strong></summary>
-
-<br>
-
-Each drive gets its own HA device. Entities are created dynamically — if a drive doesn't report an attribute, the sensor is simply not created.
-
-**Sensors:**
-
-| Entity | Description |
-|--------|-------------|
-| Attention Needed | Proactive health alert — `NO` / `MAYBE` / `YES` / `UNSUPPORTED` |
-| Health | SMART pass/fail — OK, Problem, or Unknown |
-| Temperature | Current drive temp (°C) |
-| Power-On Hours | Total hours powered on |
-| SMART Status | Raw SMART verdict (PASSED / FAILED) |
-
-**Diagnostic sensors** (conditional):
-
-| Entity | Description |
-|--------|-------------|
-| Reallocated Sector Count | Bad sectors remapped to spares (ATA) |
-| Reported Uncorrectable Errors | Unrecoverable read/write errors (ATA) |
-| Wear Leveling / Percentage Used | SSD endurance indicator |
-| Power Cycle Count | Total power on/off cycles |
-| Reallocated Event Count | Individual reallocation events (ATA) |
-| Spin Retry Count | Motor spin-up retries — HDD only |
-| Command Timeout | Internal command timeouts |
-| Available Spare | NVMe reserve block pool (%) |
-| Available Spare Threshold | Manufacturer-set minimum spare (%) |
-| Current Pending Sector Count | Sectors waiting for reallocation (ATA) |
-
-</details>
-
-<details>
-<summary><strong>Attention Needed — how it classifies drives</strong></summary>
-
-<br>
-
-The Attention Needed sensor evaluates individual SMART attributes every poll cycle:
-
-| State | Meaning | Action |
-|-------|---------|--------|
-| **NO** | All monitored indicators clear | None required |
-| **MAYBE** | Early degradation signals detected | Monitor closely, plan replacement |
-| **YES** | Data integrity at risk | **Back up immediately** |
-| **UNSUPPORTED** | No usable SMART data | Common with USB enclosures |
-
-**Critical triggers (→ YES):** Reallocated sectors, pending sectors, uncorrectable errors, NVMe critical_warning, NVMe media_errors, spare depletion below threshold.
-
-**Warning triggers (→ MAYBE):** Reallocated events, spin retry count, command timeouts, NVMe spare < 20%, NVMe percentage_used ≥ 90%.
-
-When a drive's state changes, a persistent notification fires in HA automatically. Notifications escalate on worsening conditions and dismiss when resolved. See [attention-severity-logic.md](docs/attention-severity-logic.md) for the full specification.
-
-</details>
-
-<details>
-<summary><strong>Agent configuration</strong></summary>
-
-<br>
-
-Create `config.yaml` in the working directory or `/etc/smartha-agent/`:
-
-```yaml
-port: 9099
-token: "your-secret-token"    # optional — omit to disable auth
-scan_interval: 60s
-advertise_interface: eth0      # optional — restrict mDNS to this interface
-```
-
-All options can also be set via CLI flags: `--port`, `--token`, `--scan-interval`, `--interface`, `--config`.
-
-**Scan interval:** Uses Go duration syntax — `30s`, `5m`, `1h`, `24h` are all valid. Each poll reads SMART data via `smartctl`, which wakes any drive that is spun down or in standby. If you have drives that sleep between accesses, a longer interval like `12h` or `24h` keeps them from waking unnecessarily.
-
-**Network interface:** The `advertise_interface` setting restricts mDNS to a single interface. The installer sets this during setup if you pick a specific interface. When not set, the agent auto-filters known virtual interfaces (Docker, ZeroTier, Tailscale, WireGuard, etc.) and advertises on all remaining physical interfaces. To change the interface after install, edit `config.yaml` and restart the service — no reinstall needed.
-
-**Authentication:** When a `token` is set, every request to the agent must include an `Authorization: Bearer <token>` header — requests without it receive a `401 Unauthorized` response. When adding the agent in Home Assistant, enter the same token in the integration's config flow. If no token is set, the agent serves data openly without auth.
-
-**Auto-discovery:** The agent advertises itself on the local network via mDNS (Zeroconf) by default. HA automatically detects running agents and prompts you to set them up — no manual IP entry needed. Disable with `mdns: false` in config or `--no-mdns` flag. Note: mDNS is link-local, so agents on different VLANs won't be discovered without an mDNS reflector.
-
-**Multi-homed hosts:** Machines running Docker, VPNs (ZeroTier, Tailscale, WireGuard), or virtual bridges have multiple network interfaces. If the agent advertises on a VPN or container interface, HA may discover it at an unreachable IP and fail to connect. The installer's interface picker and the `advertise_interface` config option solve this — see [Platform Install Paths](docs/platform-install-paths.md) for details.
-
-**Service management:**
-
-| Platform | Status | Logs | Restart |
-|----------|--------|------|---------|
-| Linux | `systemctl status smartha-agent` | `journalctl -u smartha-agent -f` | `systemctl restart smartha-agent` |
-| macOS | `launchctl list \| grep smartha` | `tail -f /var/log/smartha-agent.log` | `sudo launchctl kickstart -k system/com.dablabs.smartha-agent` |
-| Windows | `Get-Service SmartHA-Agent` | Event Viewer | `Restart-Service SmartHA-Agent` |
-
-</details>
-
-<details>
-<summary><strong>Building from source</strong></summary>
-
-<br>
-
-Requires Go 1.22+.
-
-```bash
-cd agent
-make              # build for current platform
-make all          # cross-compile all targets
-make release      # build all + generate SHA256 checksums
-make clean        # remove build artifacts
-```
-
-Binaries output to `agent/build/`.
-
-| Platform | Architecture | Binary | Status |
-|----------|-------------|--------|--------|
-| Linux | amd64, arm64 | `smartha-agent-linux-amd64`, `-arm64` | Tested |
-| macOS | amd64 (Intel), arm64 (Apple Silicon) | `smartha-agent-darwin-amd64`, `-arm64` | Tested |
-| Windows | amd64 | `smartha-agent-windows-amd64.exe` | Not yet tested |
 
 </details>
 
