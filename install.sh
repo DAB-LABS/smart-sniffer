@@ -318,9 +318,6 @@ SVCEOF
   echo -e "${GREEN}${BOLD}║   SMART Sniffer Agent installed successfully  ║${NC}"
   echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════╝${NC}"
   echo ""
-  echo "  Endpoint : http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost'):$PORT/api/health"
-  echo "  Config   : $INSTALL_CFG/config.yaml"
-  echo ""
   echo "  Commands:"
   echo "    Status:    systemctl status $SERVICE_NAME"
   echo "    Logs:      journalctl -u $SERVICE_NAME -f"
@@ -384,10 +381,6 @@ PLISTEOF
   echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════╗${NC}"
   echo -e "${GREEN}${BOLD}║   SMART Sniffer Agent installed successfully  ║${NC}"
   echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════╝${NC}"
-  echo ""
-  echo "  Endpoint : http://localhost:$PORT/api/health"
-  echo "  Config   : $INSTALL_CFG/config.yaml"
-  echo "  Logs     : /var/log/smartha-agent.log"
   echo ""
   echo "  Commands:"
   echo "    Stop:      sudo launchctl unload $PLIST_DEST"
@@ -541,6 +534,7 @@ if [ -f "$EXISTING_CONFIG" ]; then
   _EXISTING_TOKEN=$(grep -E '^token:' "$EXISTING_CONFIG" 2>/dev/null | awk '{print $2}' | tr -d '"' || true)
   _EXISTING_INTERVAL=$(grep -E '^scan_interval:' "$EXISTING_CONFIG" 2>/dev/null | awk '{print $2}' | tr -d '"' || true)
   _EXISTING_IFACE=$(grep -E '^advertise_interface:' "$EXISTING_CONFIG" 2>/dev/null | awk '{print $2}' | tr -d '"' || true)
+  _EXISTING_FS=$(grep -E '^\s+- path:' "$EXISTING_CONFIG" 2>/dev/null | sed 's/.*path:\s*//' | tr -d '"' || true)
 
   # Only treat as valid if we got at least a port
   if [ -n "$_EXISTING_PORT" ]; then
@@ -565,6 +559,12 @@ if [ -f "$EXISTING_CONFIG" ]; then
     else
       echo "    Interface:  auto-filter"
     fi
+    if [ -n "$_EXISTING_FS" ]; then
+      _FS_LIST=$(echo "$_EXISTING_FS" | paste -sd ', ' -)
+      echo "    Disk usage: $_FS_LIST"
+    else
+      echo "    Disk usage: (not configured)"
+    fi
     echo ""
 
     if [ -n "$TTY_IN" ]; then
@@ -584,6 +584,11 @@ if [ -f "$EXISTING_CONFIG" ]; then
       TOKEN="$_EXISTING_TOKEN"
       SCAN_INTERVAL="${_EXISTING_INTERVAL:-60s}"
       ADV_IFACE="$_EXISTING_IFACE"
+      # Carry forward filesystem config for the Agent Summary display.
+      if [ -n "$_EXISTING_FS" ]; then
+        FS_YAML="existing"   # non-empty sentinel — config already has the block
+        FS_DISPLAY=$(echo "$_EXISTING_FS" | paste -sd ', ' -)
+      fi
       success "Keeping existing configuration."
 
       # --- Upgrade path: offer interface picker if config predates v0.4.25 ---
@@ -719,4 +724,23 @@ for i in 1 2 3 4 5; do
     fi
   fi
 done
+
+# ---------------------------------------------------------------------------
+# Agent Summary
+# ---------------------------------------------------------------------------
+echo ""
+echo -e "${GREEN}${BOLD}Agent Summary${NC}"
+# Determine the agent's advertised IP
+if [ -n "$ADV_IFACE" ]; then
+  _AGENT_IP=$(ip -4 addr show "$ADV_IFACE" 2>/dev/null | grep -oP 'inet \K[0-9.]+' | head -1 || echo 'localhost')
+else
+  _AGENT_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost')
+fi
+echo -e "  ${GREEN}✓${NC} Endpoints:      http://${_AGENT_IP}:${PORT}"
+echo "                    /api/health"
+echo "                    /api/drives"
+echo "                    /api/drives/{id}"
+if [ -n "$FS_YAML" ] && [ -n "$FS_DISPLAY" ]; then
+  echo "                    /api/filesystems"
+fi
 echo ""

@@ -28,6 +28,8 @@ SMART Sniffer follows the trail, sniffing out the [early warning signs](https://
 
 **Zero-config notifications** — Persistent notifications fire automatically when drive health changes. No automations or blueprints to set up. Alerts escalate, de-escalate, and auto-dismiss.
 
+**Disk usage monitoring** — Opt-in filesystem tracking during install. Monitor storage utilization on any mountpoint — the agent reports total, used, available bytes and percentage via a dedicated API endpoint.
+
 **Multi-machine monitoring** — Install a lightweight Go agent on each machine. Each drive appears as its own HA device with full sensor entities and diagnostics.
 
 **Auto-discovery** — Agents advertise themselves on the local network via mDNS/Zeroconf. Home Assistant discovers them automatically — no manual IP entry needed.
@@ -112,6 +114,11 @@ port: 9099
 token: "your-secret-token"    # optional — omit to disable auth
 scan_interval: 60s
 advertise_interface: eth0      # optional — restrict mDNS to this interface
+filesystems:                   # optional — set by installer's disk usage picker
+  - path: /
+    uuid: a1b2c3d4-5678-90ab-cdef-1234567890ab
+    device: /dev/sda1
+    fstype: ext4
 ```
 
 All options can also be set via CLI flags: `--port`, `--token`, `--scan-interval`, `--interface`, `--config`.
@@ -122,9 +129,20 @@ All options can also be set via CLI flags: `--port`, `--token`, `--scan-interval
 
 **Authentication:** When a `token` is set, every request to the agent must include an `Authorization: Bearer <token>` header — requests without it receive a `401 Unauthorized` response. When adding the agent in Home Assistant, enter the same token in the integration's config flow. If no token is set, the agent serves data openly without auth.
 
+**Disk usage monitoring:** The installer's Disk Usage Monitoring picker lets you select which mountpoints to track. Each configured mountpoint is polled on the same interval as SMART data and served via `/api/filesystems`. Mountpoints are identified by UUID (via `blkid`) for stable entity identity across reboots. If no filesystems are configured, the endpoint simply isn't registered and callers receive a 404. To add or change monitored mountpoints after install, re-run the installer or edit `config.yaml` directly and restart the service.
+
 **Auto-discovery:** The agent advertises itself on the local network via mDNS (Zeroconf) by default. HA automatically detects running agents and prompts you to set them up — no manual IP entry needed. Disable with `mdns: false` in config or `--no-mdns` flag. Note: mDNS is link-local, so agents on different VLANs won't be discovered without an mDNS reflector.
 
 **Multi-homed hosts:** Machines running Docker, VPNs (ZeroTier, Tailscale, WireGuard), or virtual bridges have multiple network interfaces. If the agent advertises on a VPN or container interface, HA may discover it at an unreachable IP and fail to connect. The installer's interface picker and the `advertise_interface` config option solve this — see [Platform Install Paths](docs/platform-install-paths.md) for details.
+
+**API endpoints:**
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/health` | Agent status, version, available endpoints, drive/filesystem counts |
+| `GET /api/drives` | Summary list of all discovered drives |
+| `GET /api/drives/{id}` | Full SMART data for a single drive |
+| `GET /api/filesystems` | Disk usage for all configured mountpoints (only registered when filesystems are configured) |
 
 **Service management:**
 
@@ -195,7 +213,7 @@ VERSION=0.1.0 curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer
 
 </details>
 
-The installer detects your OS and architecture, downloads the correct binary from [GitHub Releases](https://github.com/DAB-LABS/smart-sniffer/releases), verifies the SHA256 checksum, installs `smartmontools` if missing, prompts for configuration (port, token, mDNS interface), and sets up a system service.
+The installer detects your OS and architecture, downloads the correct binary from [GitHub Releases](https://github.com/DAB-LABS/smart-sniffer/releases), verifies the SHA256 checksum, installs `smartmontools` if missing, prompts for configuration (port, token, scan interval, disk usage monitoring, mDNS interface), and sets up a system service.
 
 On machines with multiple network interfaces (Docker, ZeroTier, Tailscale, etc.), the installer presents an interface picker so mDNS discovery advertises on the right network. Pick your LAN interface — not "All interfaces" — if you run VPNs or containers, otherwise HA may discover the agent at an unreachable IP.
 
@@ -308,6 +326,8 @@ This is the most common "why isn't my drive showing data?" scenario. It's a hard
 
 - [x] HAOS App — [SMART Sniffer App](https://github.com/DAB-LABS/smart-sniffer-app) for Home Assistant OS
 - [x] Integration icons for HA integrations page
+- [x] Disk usage monitoring (agent-side) — `/api/filesystems` endpoint with installer picker
+- [ ] Disk usage monitoring (integration-side) — filesystem sensor entities in HA
 - [ ] MQTT agent mode
 - [ ] Custom Lovelace card
 - [ ] Temperature-based attention triggers (absolute threshold + trend over time)

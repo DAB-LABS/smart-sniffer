@@ -82,11 +82,23 @@ func main() {
 	cache := NewDriveCache(cfg.ScanInterval)
 	cache.Refresh() // initial population
 
+	// --- Filesystem cache (if configured) ---
+	var fsCache *FilesystemCache
+	if len(cfg.Filesystems) > 0 {
+		fsCache = NewFilesystemCache(cfg.Filesystems)
+		fsCache.Refresh() // initial population
+		cache.fsCache = fsCache
+		log.Printf("Filesystem monitoring: %d mount(s)", len(cfg.Filesystems))
+	}
+
 	// --- HTTP server ---
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/health", handleHealth)
+	mux.HandleFunc("/api/health", handleHealth(cache))
 	mux.HandleFunc("/api/drives", cache.HandleDrives)
 	mux.HandleFunc("/api/drives/", cache.HandleDrive) // trailing slash catches /api/drives/{id}
+	if fsCache != nil {
+		mux.HandleFunc("/api/filesystems", fsCache.HandleFilesystems)
+	}
 
 	var handler http.Handler = mux
 	if cfg.Token != "" {
@@ -314,9 +326,41 @@ func authMiddleware(token string, next http.Handler) http.Handler {
 // Handlers
 // ---------------------------------------------------------------------------
 
-func handleHealth(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"status":"ok","version":"%s"}`, version)
+// healthResponse is the JSON payload for GET /api/health.
+type healthResponse struct {
+	Status      string   `json:"status"`
+	Version     string   `json:"version"`
+	Endpoints   []string `json:"endpoints"`
+	Drives      int      `json:"drives"`
+	Filesystems int      `json:"filesystems"`
+}
+
+// handleHealth serves GET /api/health — includes available endpoints and counts.
+func handleHealth(cache *DriveCache) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		endpoints := []string{"/api/health", "/api/drives", "/api/drives/{id}"}
+
+		var fsCount int
+		if cache.fsCache != nil {
+			endpoints = append(endpoints, "/api/filesystems")
+			fsCount = len(cache.fsCache.configs)
+		}
+
+		cache.mu.RLock()
+		driveCount := len(cache.drives)
+		cache.mu.RUnlock()
+
+		resp := healthResponse{
+			Status:      "ok",
+			Version:     version,
+			Endpoints:   endpoints,
+			Drives:      driveCount,
+			Filesystems: fsCount,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -329,6 +373,7 @@ type DriveCache struct {
 	interval     time.Duration
 	drives       map[string]DriveInfo // keyed by slug id
 	driveOrder   []string             // preserve discovery order
+	fsCache      *FilesystemCache     // refreshed alongside drive data (nil = disabled)
 }
 
 // DriveInfo is the per-drive cached payload.
@@ -394,6 +439,11 @@ func (dc *DriveCache) Refresh() {
 	dc.mu.Unlock()
 
 	log.Printf("cache refreshed: %d drive(s)", len(newDrives))
+
+	// Refresh filesystem data on the same cycle.
+	if dc.fsCache != nil {
+		dc.fsCache.Refresh()
+	}
 }
 
 // fetchDriveInfo calls smartctl -a --json on a single device and parses the

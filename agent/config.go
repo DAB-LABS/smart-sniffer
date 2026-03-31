@@ -11,15 +11,25 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// FilesystemConfig describes a single mountpoint to monitor for disk usage.
+// Populated by the installer's Disk Usage picker and written to config.yaml.
+type FilesystemConfig struct {
+	Path   string `yaml:"path"`
+	UUID   string `yaml:"uuid"`
+	FSType string `yaml:"fstype"`
+	Device string `yaml:"device"`
+}
+
 // Config holds all agent configuration. Values are resolved with this
 // precedence: CLI flags > config file > defaults.
 type Config struct {
-	Port               int           `yaml:"port"`
-	Token              string        `yaml:"token"`
-	ScanInterval       time.Duration `yaml:"scan_interval"`
-	MDNS               *bool         `yaml:"mdns"`                // pointer so we can detect "not set" vs "set to false"
-	AdvertiseInterface string        `yaml:"advertise_interface"` // restrict mDNS to this interface (e.g. "eth0")
-	MDNSName           string        `yaml:"mdns_name"`           // custom mDNS instance name (default: smartha-<hostname>)
+	Port               int                `yaml:"port"`
+	Token              string             `yaml:"token"`
+	ScanInterval       time.Duration      `yaml:"scan_interval"`
+	MDNS               *bool              `yaml:"mdns"`                // pointer so we can detect "not set" vs "set to false"
+	AdvertiseInterface string             `yaml:"advertise_interface"` // restrict mDNS to this interface (e.g. "eth0")
+	MDNSName           string             `yaml:"mdns_name"`           // custom mDNS instance name (default: smartha-<hostname>)
+	Filesystems        []FilesystemConfig `yaml:"filesystems"`         // empty = disk usage monitoring disabled
 }
 
 // defaultConfig returns sane defaults.

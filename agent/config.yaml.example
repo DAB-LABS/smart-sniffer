@@ -30,3 +30,18 @@ mdns: true
 #
 # Examples: eth0, enp1s0, en0, bond0
 # advertise_interface: eth0
+
+# Filesystem monitoring (optional).
+# Set during install via the Disk Usage Monitoring picker.
+# Each entry monitors one mountpoint. The UUID ensures stable entity
+# identity in Home Assistant across reboots and device-path changes.
+#
+# filesystems:
+#   - path: /
+#     uuid: a1b2c3d4-5678-90ab-cdef-1234567890ab
+#     device: /dev/sda1
+#     fstype: ext4
+#   - path: /mnt/data
+#     uuid: e5f6a7b8-9012-cdef-3456-7890abcdef12
+#     device: rpool/data
+#     fstype: zfs
