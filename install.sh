@@ -36,82 +36,229 @@ warn()    { echo -e "${YELLOW}  ⚠ $*${NC}"; }
 fail()    { echo -e "${RED}  ✗ $*${NC}"; exit 1; }
 
 # ---------------------------------------------------------------------------
-# Network interface picker (reused by fresh install and upgrade paths)
-#
-# Detects interfaces with IPv4 addresses, tags virtual/VPN interfaces,
-# and prompts the user to pick one. Sets ADV_IFACE to the chosen interface
-# or "" for auto-filter.
-#
-# Arguments:
-#   $1 — default choice label shown in the prompt (e.g., "A" or "current")
+# Disk usage picker — detects real block-device mounts, shows numbered list,
+# user enters comma-separated numbers, "all", or "none".
+# Sets FS_YAML with the config.yaml entries and FS_DISPLAY with mount list.
+# ---------------------------------------------------------------------------
+FS_YAML=""
+FS_DISPLAY=""
+
+pick_filesystems() {
+  FS_YAML=""
+  FS_DISPLAY=""
+
+  # Parallel arrays for detected filesystems.
+  local -a fs_mps=()
+  local -a fs_devs=()
+  local -a fs_types=()
+  local -a fs_uuids=()
+  local -a fs_labels=()
+
+  # Detect real block-device mounts.
+  local mounts
+  if [ -f /proc/mounts ]; then
+    mounts=$(cat /proc/mounts)
+  else
+    mounts=$(mount)
+  fi
+
+  while IFS= read -r line; do
+    local dev mp fstype
+    dev=$(echo "$line" | awk '{print $1}')
+    mp=$(echo "$line" | awk '{print $2}')
+    fstype=$(echo "$line" | awk '{print $3}')
+
+    # Filter to real block devices and common filesystems.
+    case "$dev" in
+      /dev/sd*|/dev/nvme*|/dev/md*|/dev/mapper/*|/dev/vd*|/dev/xvd*|/dev/hd*|/dev/disk*) ;;
+      *) case "$fstype" in zfs) ;; *) continue ;; esac ;;
+    esac
+
+    # Skip virtual/special filesystems.
+    case "$fstype" in
+      tmpfs|overlay|squashfs|proc|sysfs|devtmpfs|devpts|cgroup*|autofs|fusectl|securityfs|debugfs|configfs|pstore|binfmt_misc)
+        continue ;;
+    esac
+
+    # Skip snap and docker mounts.
+    case "$mp" in /snap/*|/var/lib/docker/*) continue ;; esac
+
+    # Get usage info from df.
+    local df_line total pct hr_total
+    df_line=$(df -B1 "$mp" 2>/dev/null | tail -1)
+    total=$(echo "$df_line" | awk '{print $2}')
+    pct=$(echo "$df_line" | awk '{print $5}' | tr -d '%')
+
+    if [ "$total" -gt 1099511627776 ] 2>/dev/null; then
+      hr_total="$(echo "$total" | awk '{printf "%.1fT", $1/1099511627776}')";
+    elif [ "$total" -gt 1073741824 ] 2>/dev/null; then
+      hr_total="$(echo "$total" | awk '{printf "%.0fG", $1/1073741824}')";
+    elif [ "$total" -gt 1048576 ] 2>/dev/null; then
+      hr_total="$(echo "$total" | awk '{printf "%.0fM", $1/1048576}')";
+    else
+      hr_total="${total}B"
+    fi
+
+    # Get UUID.
+    local uuid=""
+    if command -v blkid &>/dev/null && [ -b "$dev" ]; then
+      uuid=$(blkid -s UUID -o value "$dev" 2>/dev/null || true)
+    fi
+    if [ -z "$uuid" ] && command -v diskutil &>/dev/null; then
+      uuid=$(diskutil info "$dev" 2>/dev/null | grep "Volume UUID" | awk '{print $NF}' || true)
+    fi
+
+    fs_mps+=("$mp")
+    fs_devs+=("$dev")
+    fs_types+=("$fstype")
+    fs_uuids+=("$uuid")
+    fs_labels+=("$(printf '%-16s %-6s %6s  (%s%% used)' "$mp" "$fstype" "$hr_total" "$pct")")
+
+  done <<< "$mounts"
+
+  local count=${#fs_mps[@]}
+  if [ "$count" -eq 0 ]; then
+    info "No block-device filesystems detected — skipping disk usage monitoring."
+    return
+  fi
+
+  echo ""
+  echo -e "  ${BOLD}Disk Usage Monitoring${NC}"
+  echo "  Select mountpoints to report to Home Assistant."
+  echo ""
+  for ((i=0; i<count; i++)); do
+    echo "    $((i + 1))) ${fs_labels[$i]}"
+  done
+  echo ""
+
+  local range_hint="1"
+  [ "$count" -gt 1 ] && range_hint="1,2..$count"
+  read -rp "  Monitor ($range_hint / all / none) [all]: " FS_CHOICE < "$TTY_IN"
+  FS_CHOICE="${FS_CHOICE:-all}"
+
+  # Parse selection.
+  local -a selected_indices=()
+  case "$FS_CHOICE" in
+    all|ALL|a|A)
+      for ((i=0; i<count; i++)); do selected_indices+=("$i"); done
+      ;;
+    none|NONE|n|N)
+      info "Disk usage monitoring disabled."
+      return
+      ;;
+    *)
+      # Comma-separated numbers.
+      IFS=',' read -ra nums <<< "$FS_CHOICE"
+      for num in "${nums[@]}"; do
+        num=$(echo "$num" | tr -d ' ')
+        if [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "$count" ]; then
+          selected_indices+=("$((num - 1))")
+        else
+          warn "Skipping invalid choice: $num"
+        fi
+      done
+      ;;
+  esac
+
+  if [ ${#selected_indices[@]} -eq 0 ]; then
+    info "No valid mountpoints selected — disk usage monitoring disabled."
+    return
+  fi
+
+  # Build YAML and display string.
+  FS_YAML="filesystems:"
+  local -a display_mps=()
+  for idx in "${selected_indices[@]}"; do
+    FS_YAML="${FS_YAML}
+  - path: \"${fs_mps[$idx]}\"
+    uuid: \"${fs_uuids[$idx]}\"
+    device: \"${fs_devs[$idx]}\"
+    fstype: \"${fs_types[$idx]}\""
+    display_mps+=("${fs_mps[$idx]}")
+  done
+
+  FS_DISPLAY=$(IFS=', '; echo "${display_mps[*]}")
+  success "Monitoring ${#selected_indices[@]} mountpoint(s): $FS_DISPLAY"
+}
+
+# ---------------------------------------------------------------------------
+# Network interface picker — shows numbered list, user enters a number
+# or "all". Sets ADV_IFACE to the chosen interface or "" for auto-filter.
 # ---------------------------------------------------------------------------
 VIRTUAL_PREFIXES="docker|br-|veth|zt|tailscale|ts|wg|virbr|vbox|vmnet|utun|lo"
 
 pick_interface() {
-  local default_label="${1:-A}"
-  IFACE_LIST=""
+  local -a iface_names=()
+  local -a iface_labels=()
   IFACE_COUNT=0
   NON_VIRTUAL_COUNT=0
 
-  # Build numbered interface list.
   for iface in $(ls /sys/class/net 2>/dev/null || ifconfig -l 2>/dev/null | tr ' ' '\n'); do
-    # Get first IPv4 address for this interface.
+    local ip4=""
     if command -v ip &>/dev/null; then
       ip4=$(ip -4 addr show "$iface" 2>/dev/null | grep -oP 'inet \K[0-9.]+' | head -1)
     else
       ip4=$(ifconfig "$iface" 2>/dev/null | grep -oE 'inet [0-9.]+' | awk '{print $2}' | head -1)
     fi
-    [ -z "$ip4" ] && continue  # skip interfaces with no IPv4
+    [ -z "$ip4" ] && continue
 
     IFACE_COUNT=$((IFACE_COUNT + 1))
-    label=""
+    local tag_label=""
     if echo "$iface" | grep -qiE "^($VIRTUAL_PREFIXES)"; then
       case "$iface" in
-        docker*|br-*) label="Docker" ;;
-        veth*)        label="Docker container" ;;
-        zt*)          label="ZeroTier" ;;
-        tailscale*|ts*) label="Tailscale" ;;
-        wg*)          label="WireGuard" ;;
-        virbr*)       label="libvirt" ;;
-        vbox*)        label="VirtualBox" ;;
-        vmnet*)       label="VMware" ;;
-        utun*)        label="VPN tunnel" ;;
-        lo*)          label="loopback" ;;
-        *)            label="virtual" ;;
+        docker*|br-*) tag_label="${YELLOW}(Docker)${NC}" ;;
+        veth*)        tag_label="${YELLOW}(Docker container)${NC}" ;;
+        zt*)          tag_label="${YELLOW}(ZeroTier)${NC}" ;;
+        tailscale*|ts*) tag_label="${YELLOW}(Tailscale)${NC}" ;;
+        wg*)          tag_label="${YELLOW}(WireGuard)${NC}" ;;
+        virbr*)       tag_label="${YELLOW}(libvirt)${NC}" ;;
+        vbox*)        tag_label="${YELLOW}(VirtualBox)${NC}" ;;
+        vmnet*)       tag_label="${YELLOW}(VMware)${NC}" ;;
+        utun*)        tag_label="${YELLOW}(VPN tunnel)${NC}" ;;
+        lo*)          tag_label="${YELLOW}(loopback)${NC}" ;;
+        *)            tag_label="${YELLOW}(virtual)${NC}" ;;
       esac
-      echo -e "    ${IFACE_COUNT}) ${iface}$(printf '%*s' $((16 - ${#iface})) '')${ip4}  ${YELLOW}(${label})${NC}"
     else
-      echo -e "    ${IFACE_COUNT}) ${iface}$(printf '%*s' $((16 - ${#iface})) '')${ip4}"
       NON_VIRTUAL_COUNT=$((NON_VIRTUAL_COUNT + 1))
     fi
-    IFACE_LIST="${IFACE_LIST}${iface} "
+
+    iface_names+=("$iface")
+    iface_labels+=("$(printf '%-16s %s  %s' "$iface" "$ip4" "$tag_label")")
   done
 
-  echo -e "    A) All interfaces (auto-filter virtual)"
+  ADV_IFACE=""
+  if [ "$IFACE_COUNT" -le 1 ]; then
+    info "Single interface detected — using auto-filter."
+    return
+  fi
+
+  echo ""
+  echo -e "  ${BOLD}Network Interface (mDNS)${NC}"
+  echo "  Home Assistant uses this to auto-discover the agent."
+  echo ""
+  for ((i=0; i<${#iface_names[@]}; i++)); do
+    echo -e "    $((i + 1))) ${iface_labels[$i]}"
+  done
   echo ""
 
-  ADV_IFACE=""
-  if [ "$IFACE_COUNT" -gt 1 ]; then
-    read -rp "  Advertise on interface [$default_label]: " IFACE_CHOICE < "$TTY_IN"
-    if [ -n "$IFACE_CHOICE" ] && [ "$IFACE_CHOICE" != "A" ] && [ "$IFACE_CHOICE" != "a" ]; then
-      # Convert number to interface name.
-      local chosen_idx=0
-      for iface_name in $IFACE_LIST; do
-        chosen_idx=$((chosen_idx + 1))
-        if [ "$chosen_idx" = "$IFACE_CHOICE" ]; then
-          ADV_IFACE="$iface_name"
-          break
-        fi
-      done
-      if [ -z "$ADV_IFACE" ]; then
-        warn "Invalid choice — using auto-filter."
-      else
+  read -rp "  Advertise on (1-${#iface_names[@]} / all) [all]: " IFACE_CHOICE < "$TTY_IN"
+  IFACE_CHOICE="${IFACE_CHOICE:-all}"
+
+  case "$IFACE_CHOICE" in
+    all|ALL|a|A|"")
+      info "mDNS: auto-filter mode (all physical interfaces)."
+      ADV_IFACE=""
+      ;;
+    *)
+      if [[ "$IFACE_CHOICE" =~ ^[0-9]+$ ]] && [ "$IFACE_CHOICE" -ge 1 ] && [ "$IFACE_CHOICE" -le "${#iface_names[@]}" ]; then
+        ADV_IFACE="${iface_names[$((IFACE_CHOICE - 1))]}"
         success "mDNS will advertise on: $ADV_IFACE"
+      else
+        warn "Invalid choice — using auto-filter."
+        ADV_IFACE=""
       fi
-    fi
-  elif [ "$IFACE_COUNT" -eq 1 ]; then
-    info "Single interface detected — using auto-filter."
-  fi
+      ;;
+  esac
 }
 
 # Returns the count of non-virtual interfaces (call after pick_interface or
@@ -318,6 +465,8 @@ SVCEOF
   echo -e "${GREEN}${BOLD}║   SMART Sniffer Agent installed successfully  ║${NC}"
   echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════╝${NC}"
   echo ""
+  echo "  Config   : $INSTALL_CFG/config.yaml"
+  echo ""
   echo "  Commands:"
   echo "    Status:    systemctl status $SERVICE_NAME"
   echo "    Logs:      journalctl -u $SERVICE_NAME -f"
@@ -381,6 +530,9 @@ PLISTEOF
   echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════╗${NC}"
   echo -e "${GREEN}${BOLD}║   SMART Sniffer Agent installed successfully  ║${NC}"
   echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════╝${NC}"
+  echo ""
+  echo "  Config   : $INSTALL_CFG/config.yaml"
+  echo "  Logs     : /var/log/smartha-agent.log"
   echo ""
   echo "  Commands:"
   echo "    Stop:      sudo launchctl unload $PLIST_DEST"
@@ -611,6 +763,19 @@ if [ -f "$EXISTING_CONFIG" ]; then
           fi
         fi
       fi
+
+      # --- Upgrade path: offer filesystem picker if config has no filesystems ---
+      if ! grep -q '^filesystems:' "$EXISTING_CONFIG" 2>/dev/null && [ -n "$TTY_IN" ]; then
+        echo ""
+        info "Disk usage monitoring is now available."
+        echo ""
+        pick_filesystems
+        if [ -n "$FS_YAML" ]; then
+          echo "" >> "$EXISTING_CONFIG"
+          echo "$FS_YAML" >> "$EXISTING_CONFIG"
+          success "Filesystem monitoring added to existing config."
+        fi
+      fi
     fi
   fi
 fi
@@ -626,15 +791,15 @@ if [ "$KEEP_CONFIG" = "false" ] && [ -n "$TTY_IN" ]; then
 
   read -rp "  Port [9099]: " PORT < "$TTY_IN"
   read -rp "  Bearer token for API auth (leave blank to disable): " TOKEN < "$TTY_IN"
-  read -rp "  Scan interval [60s]: " SCAN_INTERVAL < "$TTY_IN"
+  read -rp "  Scan interval (e.g. 60s, 30m, 24h) [60s]: " SCAN_INTERVAL < "$TTY_IN"
 
-  # --- Network interface picker for mDNS advertisement ---
+  # --- Disk usage picker ---
   echo ""
-  echo -e "${BOLD}  Network interface for mDNS discovery${NC}"
-  echo "  (Home Assistant uses this to auto-discover the agent)"
-  echo ""
+  pick_filesystems
 
-  pick_interface "A"
+  # --- Network interface picker ---
+  echo ""
+  pick_interface
 
 elif [ "$KEEP_CONFIG" = "false" ]; then
   info "Non-interactive mode detected — using defaults."
@@ -642,6 +807,8 @@ elif [ "$KEEP_CONFIG" = "false" ]; then
   TOKEN=""
   SCAN_INTERVAL=""
   ADV_IFACE=""
+  FS_YAML=""
+  FS_DISPLAY=""
 fi
 
 PORT="${PORT:-9099}"
@@ -689,6 +856,10 @@ CONFEOF
   if [ -n "$ADV_IFACE" ]; then
     echo "advertise_interface: $ADV_IFACE" >> "$INSTALL_CFG/config.yaml"
   fi
+  if [ -n "$FS_YAML" ]; then
+    echo "" >> "$INSTALL_CFG/config.yaml"
+    echo "$FS_YAML" >> "$INSTALL_CFG/config.yaml"
+  fi
   success "Config written."
 fi
 
@@ -705,6 +876,7 @@ fi
 # Health check
 # ---------------------------------------------------------------------------
 info "Waiting for agent to start..."
+HEALTH_OK=false
 HEALTH_CURL="curl -sf http://localhost:$PORT/api/health"
 if [ -n "$TOKEN" ]; then
   HEALTH_CURL="curl -sf -H \"Authorization: Bearer $TOKEN\" http://localhost:$PORT/api/health"
@@ -712,6 +884,7 @@ fi
 for i in 1 2 3 4 5; do
   sleep 2
   if eval "$HEALTH_CURL" &>/dev/null; then
+    HEALTH_OK=true
     success "Health check passed — agent is running!"
     break
   fi
@@ -726,16 +899,24 @@ for i in 1 2 3 4 5; do
 done
 
 # ---------------------------------------------------------------------------
-# Agent Summary
+# Post-install summary
 # ---------------------------------------------------------------------------
 echo ""
-echo -e "${GREEN}${BOLD}Agent Summary${NC}"
-# Determine the agent's advertised IP
-if [ -n "$ADV_IFACE" ]; then
-  _AGENT_IP=$(ip -4 addr show "$ADV_IFACE" 2>/dev/null | grep -oP 'inet \K[0-9.]+' | head -1 || echo 'localhost')
+echo -e "${BOLD}  ── Agent Summary ──────────────────────────────${NC}"
+echo ""
+
+# Detect IP for display.
+_AGENT_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+[ -z "$_AGENT_IP" ] && _AGENT_IP=$(ifconfig 2>/dev/null | grep -oE 'inet [0-9.]+' | grep -v '127.0.0.1' | head -1 | awk '{print $2}')
+[ -z "$_AGENT_IP" ] && _AGENT_IP="localhost"
+
+if [ "$HEALTH_OK" = "true" ]; then
+  echo -e "  ${GREEN}✓${NC} Status:         ${GREEN}running${NC}"
 else
-  _AGENT_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost')
+  echo -e "  ${RED}✗${NC} Status:         ${RED}not responding${NC}"
 fi
+echo -e "  ${GREEN}✓${NC} Port:           ${PORT}"
+echo -e "  ${GREEN}✓${NC} IP:             ${_AGENT_IP}"
 echo -e "  ${GREEN}✓${NC} Endpoints:      http://${_AGENT_IP}:${PORT}"
 echo "                    /api/health"
 echo "                    /api/drives"
@@ -743,4 +924,50 @@ echo "                    /api/drives/{id}"
 if [ -n "$FS_YAML" ] && [ -n "$FS_DISPLAY" ]; then
   echo "                    /api/filesystems"
 fi
+if [ -n "$TOKEN" ]; then
+  echo -e "  ${GREEN}✓${NC} Auth:           enabled"
+else
+  echo -e "  ${YELLOW}○${NC} Auth:           disabled"
+fi
+echo -e "  ${GREEN}✓${NC} Scan interval:  ${SCAN_INTERVAL}"
+# mDNS — show the actual instance name the agent will advertise.
+_MDNS_HOSTNAME=$(hostname 2>/dev/null)
+_MDNS_HOSTNAME="${_MDNS_HOSTNAME%%.*}"  # strip domain suffix
+_MDNS_INSTANCE="smartha-${_MDNS_HOSTNAME}"
+if [ -n "$ADV_IFACE" ]; then
+  echo -e "  ${GREEN}✓${NC} mDNS:           ${_MDNS_INSTANCE}._smartha._tcp.local. (${ADV_IFACE})"
+else
+  echo -e "  ${GREEN}✓${NC} mDNS:           ${_MDNS_INSTANCE}._smartha._tcp.local. (all physical)"
+fi
+
+# SMART drives — query the running agent if possible.
+_DRIVE_CURL="curl -sf http://localhost:$PORT/api/drives"
+if [ -n "$TOKEN" ]; then
+  _DRIVE_CURL="curl -sf -H \"Authorization: Bearer $TOKEN\" http://localhost:$PORT/api/drives"
+fi
+_DRIVE_JSON=$(eval "$_DRIVE_CURL" 2>/dev/null || true)
+if [ -n "$_DRIVE_JSON" ]; then
+  _DRIVE_COUNT=$(echo "$_DRIVE_JSON" | grep -o '"id"' | wc -l)
+  _DRIVE_NAMES=$(echo "$_DRIVE_JSON" | grep -oP '"model"\s*:\s*"\K[^"]+' | paste -sd ', ' -)
+  if [ "$_DRIVE_COUNT" -gt 0 ]; then
+    echo -e "  ${GREEN}✓${NC} SMART drives:   ${_DRIVE_COUNT} detected"
+    if [ -n "$_DRIVE_NAMES" ]; then
+      echo "                    ${_DRIVE_NAMES}"
+    fi
+  else
+    echo -e "  ${YELLOW}○${NC} SMART drives:   none detected"
+  fi
+else
+  echo -e "  ${YELLOW}○${NC} SMART drives:   (could not query)"
+fi
+
+# Disk usage monitoring.
+if [ -n "$FS_YAML" ] && [ -n "$FS_DISPLAY" ]; then
+  echo -e "  ${GREEN}✓${NC} Disk usage:     ${FS_DISPLAY}"
+else
+  echo -e "  ${YELLOW}○${NC} Disk usage:     disabled"
+fi
+
+echo -e "  ${GREEN}✓${NC} Config:         ${INSTALL_CFG}/config.yaml"
 echo ""
+
