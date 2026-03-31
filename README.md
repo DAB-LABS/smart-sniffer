@@ -306,8 +306,8 @@ This is the most common "why isn't my drive showing data?" scenario. It's a hard
 
 ## Roadmap
 
-- [ ] HAOS App — run the agent directly on Home Assistant OS
-- [ ] Integration icons for HA integrations page
+- [x] HAOS App — [SMART Sniffer App](https://github.com/DAB-LABS/smart-sniffer-app) for Home Assistant OS
+- [x] Integration icons for HA integrations page
 - [ ] MQTT agent mode
 - [ ] Custom Lovelace card
 - [ ] Temperature-based attention triggers (absolute threshold + trend over time)
