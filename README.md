@@ -53,6 +53,14 @@ Each machine runs a lightweight `smartha-agent` binary that wraps `smartctl` and
 
 Each drive gets its own HA device. Entities are created dynamically — if a drive doesn't report an attribute, the sensor is simply not created.
 
+**Disk Usage** (per agent host, requires agent v0.5.0+ with filesystems configured):
+
+| Entity | Description |
+|--------|-------------|
+| Disk Usage — Root (/) | Percentage used for the monitored mountpoint |
+
+Attributes: `mountpoint`, `device`, `fstype`, `total_gb`, `used_gb`, `available_gb`. One sensor per mountpoint configured during agent install. Grouped under a "Disk Usage ({hostname})" device alongside the drive devices.
+
 **Sensors:**
 
 | Entity | Description |
@@ -327,7 +335,7 @@ This is the most common "why isn't my drive showing data?" scenario. It's a hard
 - [x] HAOS App — [SMART Sniffer App](https://github.com/DAB-LABS/smart-sniffer-app) for Home Assistant OS
 - [x] Integration icons for HA integrations page
 - [x] Disk usage monitoring (agent-side) — `/api/filesystems` endpoint with installer picker
-- [ ] Disk usage monitoring (integration-side) — filesystem sensor entities in HA
+- [x] Disk usage monitoring (integration-side) — filesystem sensor entities in HA
 - [ ] MQTT agent mode
 - [ ] Custom Lovelace card
 - [ ] Temperature-based attention triggers (absolute threshold + trend over time)
