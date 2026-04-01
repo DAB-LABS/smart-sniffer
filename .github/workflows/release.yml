@@ -34,6 +34,15 @@ jobs:
           go-version-file: agent/go.mod
           cache-dependency-path: agent/go.sum
 
+      - name: Vet Go
+        working-directory: agent
+        run: go vet ./...
+
+      - name: Lint Python
+        run: |
+          pip install ruff
+          ruff check custom_components/
+
       - name: Extract version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
