@@ -69,6 +69,8 @@ async def async_get_config_entry_diagnostics(
     # Build per-drive diagnostics.
     drives_diag: dict[str, Any] = {}
     for drive_id, drive_data in coordinator.data.items():
+        if drive_id.startswith("_"):
+            continue  # skip internal keys like _filesystems
         # Attention evaluation for this drive.
         state, severity, reasons = evaluate_attention(drive_data)
 
@@ -107,7 +109,7 @@ async def async_get_config_entry_diagnostics(
             if coordinator.update_interval
             else None,
             "last_update_success": coordinator.last_update_success,
-            "drive_count": len(coordinator.data),
+            "drive_count": sum(1 for k in coordinator.data if not k.startswith("_")),
         },
         "drives": drives_diag,
     }

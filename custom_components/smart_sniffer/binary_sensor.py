@@ -100,6 +100,8 @@ async def async_setup_entry(
 
     entities: list[SmartSnifferHealthSensor] = []
     for drive_id, drive_data in coordinator.data.items():
+        if drive_id.startswith("_"):
+            continue  # skip internal keys like _filesystems
         entities.append(SmartSnifferHealthSensor(coordinator, drive_id, drive_data))
 
     async_add_entities(entities, update_before_add=False)

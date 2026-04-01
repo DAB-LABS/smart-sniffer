@@ -182,8 +182,12 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch drive list, then full details per drive.
 
-        Returns a dict keyed by drive ID. After fetching, evaluates
-        attention states and fires/dismisses notifications as needed.
+        Returns a dict keyed by drive ID, plus a ``_filesystems`` key
+        containing a list of filesystem info dicts (empty list when the
+        agent is older or has no filesystems configured).
+
+        After fetching, evaluates attention states and fires/dismisses
+        notifications as needed.
         """
         session = async_get_clientsession(self.hass)
         timeout = aiohttp.ClientTimeout(total=30)
@@ -209,6 +213,7 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     result[drive_id] = await resp.json()
 
             # Check agent version via /api/health (tiny payload, negligible overhead).
+            fs_count = 0
             try:
                 async with session.get(
                     f"{self._base_url}/api/health",
@@ -218,12 +223,33 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     resp.raise_for_status()
                     health = await resp.json()
                 agent_version = health.get("version", "")
+                fs_count = health.get("filesystems", 0)
             except (aiohttp.ClientError, asyncio.TimeoutError):
                 # Health check failed — don't block the poll, but treat as
                 # unknown version so the repair fires.
                 agent_version = ""
 
             self._check_agent_version(agent_version)
+
+            # Fetch filesystem usage data when the agent supports it.
+            # Older agents (pre-0.5.0) won't advertise filesystems in
+            # /api/health and won't expose the endpoint — skip gracefully.
+            filesystems: list[dict[str, Any]] = []
+            if fs_count > 0:
+                try:
+                    async with session.get(
+                        f"{self._base_url}/api/filesystems",
+                        headers=self._headers,
+                        timeout=timeout,
+                    ) as resp:
+                        resp.raise_for_status()
+                        filesystems = await resp.json()
+                except (aiohttp.ClientError, asyncio.TimeoutError):
+                    _LOGGER.debug(
+                        "SMART Sniffer: /api/filesystems fetch failed, skipping"
+                    )
+
+            result["_filesystems"] = filesystems
 
         except aiohttp.ClientError as err:
             raise UpdateFailed(
@@ -237,9 +263,11 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self, new_data: dict[str, Any]
     ) -> None:
         """Compare attention state to previous, fire/dismiss notifications."""
-        current_drive_ids = set(new_data.keys())
+        current_drive_ids = {k for k in new_data if not k.startswith("_")}
 
         for drive_id, drive_data in new_data.items():
+            if drive_id.startswith("_"):
+                continue  # skip internal keys like _filesystems
             state, severity, reasons = evaluate_attention(drive_data)
             prev = self._prev_state.get(drive_id)
 

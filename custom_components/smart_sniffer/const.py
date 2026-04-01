@@ -17,3 +17,7 @@ DEFAULT_SCAN_INTERVAL = 60  # seconds
 # a HA repair notification when the running agent is older.
 MIN_AGENT_VERSION = "0.4.28"
 AGENT_RELEASES_URL = "https://github.com/DAB-LABS/smart-sniffer/releases"
+
+# Key used in coordinator data dict to store filesystem info.
+# Underscore prefix avoids collision with drive ID keys.
+FILESYSTEMS_KEY = "_filesystems"

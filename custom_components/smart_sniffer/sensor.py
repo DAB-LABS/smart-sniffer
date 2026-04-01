@@ -36,7 +36,7 @@ from .attention import (
     STATE_YES,
     evaluate_attention,
 )
-from .const import DOMAIN
+from .const import DOMAIN, FILESYSTEMS_KEY
 from .coordinator import SmartSnifferCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -372,6 +372,8 @@ async def async_setup_entry(
 
     entities: list[SensorEntity] = []
     for drive_id, drive_data in coordinator.data.items():
+        if drive_id.startswith("_"):
+            continue  # skip internal keys like _filesystems
         protocol = drive_data.get("protocol", "").upper()
         smart_data = drive_data.get("smart_data", {})
         has_ata_attrs = bool(smart_data.get("ata_smart_attributes"))
@@ -417,6 +419,12 @@ async def async_setup_entry(
         # --- Attention Reasons sensor (one per drive, always created) ---
         entities.append(
             SmartSnifferAttentionReasonsSensor(coordinator, drive_id, drive_data)
+        )
+
+    # --- Filesystem usage sensors (one per monitored mountpoint) ---
+    for fs_info in coordinator.data.get(FILESYSTEMS_KEY, []):
+        entities.append(
+            SmartSnifferFilesystemSensor(coordinator, fs_info)
         )
 
     async_add_entities(entities, update_before_add=False)
@@ -683,6 +691,98 @@ class SmartSnifferAttentionReasonsSensor(
         if state == STATE_MAYBE:
             return "mdi:alert-circle-outline"
         return "mdi:text-box-search-outline"
+
+
+# ---------------------------------------------------------------------------
+# Filesystem usage sensor (one per monitored mountpoint)
+# ---------------------------------------------------------------------------
+
+def _bytes_to_gb(b: int | float) -> float:
+    """Convert bytes to GB, rounded to 1 decimal."""
+    return round(b / (1024 ** 3), 1)
+
+
+def _friendly_mountpoint(mountpoint: str) -> str:
+    """Human-readable label for a mountpoint path."""
+    if mountpoint == "/":
+        return "Root (/)"
+    return mountpoint
+
+
+class SmartSnifferFilesystemSensor(
+    CoordinatorEntity[SmartSnifferCoordinator], SensorEntity
+):
+    """Disk usage percentage sensor for a monitored filesystem.
+
+    One sensor per mountpoint configured on the agent host. Attributes
+    expose total/used/available in GB plus filesystem metadata.
+    """
+
+    _attr_has_entity_name = True
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:harddisk"
+
+    def __init__(
+        self,
+        coordinator: SmartSnifferCoordinator,
+        fs_info: dict[str, Any],
+    ) -> None:
+        super().__init__(coordinator)
+        self._fs_id: str = fs_info["id"]
+        mountpoint = fs_info.get("mountpoint", "unknown")
+        self._attr_name = f"Disk Usage — {_friendly_mountpoint(mountpoint)}"
+
+        # Unique ID: entry + filesystem id guarantees uniqueness across hosts.
+        self._attr_unique_id = (
+            f"{coordinator.config_entry.entry_id}_{self._fs_id}_usage"
+        )
+
+        # Group under a device named after the host, so filesystem sensors
+        # sit alongside the drive devices on the integration page.
+        hostname = coordinator._hostname
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, f"{coordinator.config_entry.entry_id}_filesystems")},
+            "name": f"Disk Usage ({hostname})",
+            "manufacturer": "SMART Sniffer",
+            "model": "Filesystem Monitor",
+        }
+
+    def _get_fs_data(self) -> dict[str, Any] | None:
+        """Find this filesystem in the coordinator data."""
+        for fs in self.coordinator.data.get(FILESYSTEMS_KEY, []):
+            if fs.get("id") == self._fs_id:
+                return fs
+        return None
+
+    @property
+    def available(self) -> bool:
+        """Mark entity unavailable when the mount disappears."""
+        fs = self._get_fs_data()
+        if fs is None:
+            return False
+        return fs.get("status") == "ok"
+
+    @property
+    def native_value(self) -> float | None:
+        fs = self._get_fs_data()
+        if fs is None or fs.get("status") != "ok":
+            return None
+        return fs.get("use_percent")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        fs = self._get_fs_data()
+        if fs is None:
+            return {}
+        return {
+            "mountpoint": fs.get("mountpoint"),
+            "device": fs.get("device"),
+            "fstype": fs.get("fstype"),
+            "total_gb": _bytes_to_gb(fs.get("total_bytes", 0)),
+            "used_gb": _bytes_to_gb(fs.get("used_bytes", 0)),
+            "available_gb": _bytes_to_gb(fs.get("available_bytes", 0)),
+        }
 
 
 # ---------------------------------------------------------------------------

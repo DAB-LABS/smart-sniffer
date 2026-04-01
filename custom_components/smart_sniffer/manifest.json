@@ -9,6 +9,6 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/DAB-LABS/smart-sniffer/issues",
   "requirements": [],
-  "version": "0.4.31",
+  "version": "0.5.0",
   "zeroconf": [{"type": "_smartha._tcp.local."}]
 }

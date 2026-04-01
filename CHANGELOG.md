@@ -2,6 +2,18 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.5.0 — 2026-03-31
+
+### Added
+- **Disk Usage monitoring** — agents running v0.5.0+ with filesystem monitoring configured now report disk usage data. The integration creates a **Disk Usage** device per host with a percentage sensor for each monitored mountpoint (e.g., "Disk Usage — Root (/)"). Attributes include total, used, and available space in GB, plus mountpoint, device, and filesystem type. Use automations to alert when a disk fills up (e.g., trigger at 90%).
+- **Agent: `/api/filesystems` endpoint** — serves real-time disk usage for mountpoints selected during install. Refreshes on the same interval as SMART data.
+- **Agent: filesystem picker in installer** — the install script now asks which mountpoints to monitor for disk usage. Writes selections to `config.yaml`. Skipping this step disables disk usage monitoring (the endpoint is not registered).
+
+### Upgrade Notes
+- **Integration**: update via HACS as usual. Fully backward compatible — older agents (pre-0.5.0) continue to work with no changes and no new entities.
+- **Agent**: to enable disk usage monitoring, update your agents to v0.5.0 by re-running the installer. The installer will ask which disks to monitor. Existing agents that don't upgrade will continue to work — they just won't show disk usage.
+- **New entities appear after reload**: after upgrading an agent to v0.5.0, go to the SMART Sniffer integration page, click the three-dot menu on the agent, and select **Reload**. The new Disk Usage device and sensors will appear.
+
 ## v0.4.31 — 2026-03-27
 
 ### Fixed
