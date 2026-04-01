@@ -223,6 +223,8 @@ VERSION=0.1.0 curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer
 
 The installer detects your OS and architecture, downloads the correct binary from [GitHub Releases](https://github.com/DAB-LABS/smart-sniffer/releases), verifies the SHA256 checksum, installs `smartmontools` if missing, prompts for configuration (port, token, scan interval, disk usage monitoring, mDNS interface), and sets up a system service.
 
+Disk usage monitoring is opt-in. During a fresh install or upgrade to v0.5.0+, the installer asks which mountpoints to monitor. Select the mountpoints you care about. The agent will report usage percentage, total/used/available bytes for each.
+
 On machines with multiple network interfaces (Docker, ZeroTier, Tailscale, etc.), the installer presents an interface picker so mDNS discovery advertises on the right network. Pick your LAN interface — not "All interfaces" — if you run VPNs or containers, otherwise HA may discover the agent at an unreachable IP.
 
 <p align="center">
