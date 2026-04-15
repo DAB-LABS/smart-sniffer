@@ -77,6 +77,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: SMART Sniffer v${{ steps.version.outputs.VERSION }}
+          # Auto-flag any tag with -rc, -beta, or -alpha as a pre-release
+          # so GitHub's "latest release" endpoint skips it. install.sh and
+          # install.ps1 both call that endpoint for version discovery; if
+          # an rc were marked latest, every user running the install one-
+          # liner without pinning VERSION would be pulled onto an rc.
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
           body: |
             ${{ steps.changelog.outputs.NOTES }}
 
