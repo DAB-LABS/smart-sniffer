@@ -9,7 +9,11 @@
 #   make linux-amd64  — build a specific target
 
 BINARY   := smartha-agent
-VERSION  := 0.1.0
+# VERSION is derived from git by default so self-builders get an accurate
+# version string embedded in their binary. CI overrides this explicitly on
+# the command line (e.g. `make release VERSION=0.5.1`). Fallback to "dev"
+# when git is unavailable or the tree is not a git checkout.
+VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS  := -ldflags "-s -w -X main.version=$(VERSION)"
 OUTDIR   := build
 
