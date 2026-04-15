@@ -8,15 +8,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
-	"os/signal"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/grandcat/zeroconf"
@@ -27,36 +26,44 @@ import (
 var version = "0.1.0"
 
 // ---------------------------------------------------------------------------
-// Entry point
+// RunAgent — shared entry point for all platforms
 // ---------------------------------------------------------------------------
-
-func main() {
+//
+// RunAgent loads config, runs preflight checks, starts the HTTP server and
+// mDNS advertisement, and blocks until ctx is canceled. Platform-specific
+// main() wrappers in main_unix.go and main_windows.go are responsible for
+// building the ctx (signal-driven on Unix, SCM-driven on Windows) and
+// calling RunAgent.
+//
+// If ready is non-nil, it is closed at the moment the HTTP listener has
+// successfully bound its port. Callers that need to know when the agent is
+// accepting connections (e.g. Windows Service handler reporting svc.Running
+// to the SCM) should pass a channel; callers that don't can pass nil.
+//
+// See docs/internal/plans/plan-v0.5.1-consolidated-changes.md §Change 3.
+func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 	// Direct log output to stdout so launchd/systemd captures it via
 	// StandardOutPath. Preflight errors still go to stderr via fmt.Fprintf.
 	log.SetOutput(os.Stdout)
 
 	cfg, err := LoadConfig()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: failed to load configuration: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to load configuration: %w", err)
 	}
 
 	// --- Preflight checks (order matters) ---
 	if err := preflightSmartctlExists(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return err
 	}
 
 	smartctlVer, err := preflightSmartctlVersion()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return err
 	}
 
 	drives, err := preflightScanDrives()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return err
 	}
 
 	// --- Startup banner ---
@@ -110,13 +117,22 @@ func main() {
 		Handler: handler,
 	}
 
-	// Graceful shutdown on SIGINT / SIGTERM.
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+	// --- Bind the listener explicitly so we can signal ready at the exact
+	// moment the kernel has accepted our bind. srv.Serve(ln) then blocks
+	// in a goroutine. This eliminates both failure modes of sleep-based
+	// ready signaling: over-reporting on fast boots (Running before bind)
+	// and under-reporting on slow boots (SCM thinks we hung).
+	ln, err := net.Listen("tcp", srv.Addr)
+	if err != nil {
+		return fmt.Errorf("failed to bind listener on %s: %w", srv.Addr, err)
+	}
+	if ready != nil {
+		close(ready)
+	}
 
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("HTTP server error: %v", err)
+		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+			log.Printf("HTTP server error: %v", err)
 		}
 	}()
 
@@ -181,6 +197,8 @@ func main() {
 	log.Println("Shutting down…")
 
 	// Deregister mDNS before stopping HTTP.
+	// Note: this 5s shutdown path is intentionally preserved in this commit
+	// and will be replaced by a bounded shutdown budget in Change 9.
 	if mdnsServer != nil {
 		mdnsServer.Shutdown()
 		log.Println("mDNS: deregistered")
@@ -191,6 +209,8 @@ func main() {
 	if err := srv.Shutdown(shutCtx); err != nil {
 		log.Printf("HTTP shutdown error: %v", err)
 	}
+
+	return nil
 }
 
 // detectOS returns the runtime OS as a short string for mDNS TXT records.
