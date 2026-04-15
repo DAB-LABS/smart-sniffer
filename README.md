@@ -183,7 +183,7 @@ Binaries output to `agent/build/`.
 |----------|-------------|--------|--------|
 | Linux | amd64, arm64 | `smartha-agent-linux-amd64`, `-arm64` | Tested |
 | macOS | amd64 (Intel), arm64 (Apple Silicon) | `smartha-agent-darwin-amd64`, `-arm64` | Tested |
-| Windows | amd64 | `smartha-agent-windows-amd64.exe` | Not yet tested |
+| Windows | amd64 | `smartha-agent-windows-amd64.exe` | Tested (v0.5.1+) |
 
 </details>
 
@@ -208,7 +208,7 @@ curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.
 irm https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.ps1 | iex
 ```
 
-> **Note:** The Windows agent builds but has not been validated yet. [Let us know how it goes.](https://github.com/DAB-LABS/smart-sniffer/issues)
+> **Note:** Requires v0.5.1 or later. Earlier Windows builds had a service startup bug tracked as [#13](https://github.com/DAB-LABS/smart-sniffer/issues/13). Service events appear in Event Viewer under Windows Logs → Application with source `SmartHA-Agent`.
 
 </details>
 

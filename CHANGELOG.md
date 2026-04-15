@@ -2,6 +2,27 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.5.1 — 2026-04-15
+
+### Fixed
+- **Windows: agent service fails to start with Error 1053 ([#13](https://github.com/DAB-LABS/smart-sniffer/issues/13))** — the Go binary was being registered as a Windows service but did not implement the Service Control Manager handshake, so SCM killed it after 30 seconds with the generic "service did not respond to the start or control request in a timely fashion" error. The agent now detects when it has been launched by the SCM, reports StartPending immediately, and reports Running the moment its HTTP listener binds. On boxes with many disks where the smartctl preflight scan takes longer than SCM's start window, a 20-second watchdog reports Running anyway so the scan can complete in the background without a 1053 timeout.
+- **Linux: agent fails to start on older distros with "GLIBC_2.32 not found" ([#14](https://github.com/DAB-LABS/smart-sniffer/issues/14))** — Linux release binaries were dynamically linked against whichever glibc the GitHub Actions runner had installed (typically 2.34 or 2.32), making them incompatible with Debian 9, RHEL 7, and other long-term-support distros shipping older glibc. Linux builds are now statically linked via `CGO_ENABLED=0`, removing the glibc version dependency entirely. Also makes the binary work unmodified on musl-based distros like Alpine.
+
+### Added
+- **Windows: service startup and shutdown events in Event Log** — the agent now writes to the Windows Event Log under source `SmartHA-Agent` (installer registers the source automatically). Service start, stop, and failure events appear in Event Viewer → Windows Logs → Application with dedicated event IDs (1 started, 2 stopped, 100 startup failure, 101 runtime failure, 102 shutdown error). Operators debugging service issues no longer have to guess at causes from the Services panel alone.
+- **Windows installer: config preservation on upgrade** — re-running `install.ps1` now detects an existing `config.yaml`, displays current settings, and asks to keep them (default yes). Matches the Unix installer behavior that had been shipped since v0.4.28 but missed on Windows. Upgraders no longer silently lose their bearer token, custom port, or scan interval when reinstalling for a version bump.
+- **Windows installer: diagnostics on start failure** — if `Start-Service` fails during install, the installer now dumps the current service status and the last 10 Event Log entries from our source in-line before exiting, so the user has the context to diagnose without opening Event Viewer.
+
+### Changed
+- **Agent: bounded graceful shutdown budget** — shutdown phases (mDNS deregister, HTTP drain, coordinator close) now run under a single 8-second budget instead of an unconditional 5-second sleep. If a phase hangs, the installer logs which one stalled and how far along each phase got. Tuned to fire before Home Assistant Supervisor's 10-second stop timeout and well within Windows SCM's 20-second service-stop window, so the agent chooses what to drop rather than the OS killing it mid-cleanup.
+- **Build: Makefile VERSION derived from git** — `make` now stamps binaries with `git describe --tags --always --dirty` by default so self-builders get an accurate version string in their binary. CI continues to set an explicit VERSION on the command line for releases.
+
+### Upgrade Notes
+- **Windows users on Error 1053:** this release is the fix. Re-run the installer; it will detect your existing config and preserve it, replace the binary, and re-register the service with the new SCM handler. No manual uninstall needed.
+- **Debian 9 / RHEL 7 / Alpine users on "GLIBC not found":** this release is the fix. Re-run the installer — the new binary is statically linked and no longer depends on the host's glibc version.
+- **Home Assistant integration:** no changes required. This is an agent-only release.
+- **macOS and modern Linux distros:** nothing changes for you behaviorally; the agent gets the build-time and shutdown-budget improvements but nothing user-visible.
+
 ## v0.5.0 — 2026-03-31
 
 ### Added
