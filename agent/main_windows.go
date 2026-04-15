@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/windows/svc"
+	"golang.org/x/sys/windows/svc/debug"
 )
 
 // readyWatchdog is the maximum time we wait for RunAgent to close its
@@ -44,6 +45,44 @@ const readyWatchdog = 20 * time.Second
 // CheckPoint before this elapses. We set it equal to the watchdog plus a
 // small margin so the SCM's own timer and ours agree.
 const startPendingHint = 25 * time.Second
+
+// elog is the package-level Event Log handle. Assigned by Execute at
+// the top of the SCM path so all failure paths can log consistently.
+// Nil on the console path; callers must check before use (or use the
+// logf helper below which tolerates a nil elog).
+var elog debug.Log
+
+// logLevel selects which Event Log category a message lands under. The
+// numeric values are local — they map to debug.Log.Info / Warning /
+// Error when elog is non-nil, and to stderr otherwise.
+type logLevel int
+
+const (
+	logInfo logLevel = iota
+	logWarn
+	logError
+)
+
+// logf writes to the Event Log if elog is set and falls back to stderr
+// otherwise. Keeps the error-surfacing code readable without every
+// call site having to branch on elog == nil. We take the level as an
+// enum rather than a method value so the helper is safe to call before
+// elog has been assigned (method values on a nil interface panic).
+func logf(level logLevel, id uint32, format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	if elog == nil {
+		fmt.Fprintln(os.Stderr, msg)
+		return
+	}
+	switch level {
+	case logError:
+		_ = elog.Error(id, msg)
+	case logWarn:
+		_ = elog.Warning(id, msg)
+	default:
+		_ = elog.Info(id, msg)
+	}
+}
 
 // service implements svc.Handler. It is stateless aside from the ctx
 // cancel function that the control loop uses to signal RunAgent to exit.
@@ -91,10 +130,20 @@ func main() {
 func (s *service) Execute(args []string, r <-chan svc.ChangeRequest, changes chan<- svc.Status) (ssec bool, errno uint32) {
 	const accepted = svc.AcceptStop | svc.AcceptShutdown
 
+	// Open the Event Log as early as possible so any failure below
+	// surfaces in Event Viewer instead of the void. openEventLog
+	// tolerates a missing source by falling back to stderr.
+	elog = openEventLog(ServiceName)
+	defer func() {
+		if elog != nil {
+			_ = elog.Close()
+		}
+	}()
+
 	// Step 1: acknowledge the start request immediately.
 	changes <- svc.Status{
-		State:     svc.StartPending,
-		WaitHint:  uint32(startPendingHint / time.Millisecond),
+		State:      svc.StartPending,
+		WaitHint:   uint32(startPendingHint / time.Millisecond),
 		CheckPoint: 1,
 	}
 
@@ -125,11 +174,12 @@ func (s *service) Execute(args []string, r <-chan svc.ChangeRequest, changes cha
 		// preflight error). Report Stopped with a non-zero exit code
 		// so the SCM and Event Log see the failure.
 		changes <- svc.Status{State: svc.Stopped}
-		fmt.Fprintf(os.Stderr, "ERROR: agent failed during startup: %v\n", err)
+		logf(logError, evtStartupFailure, "agent failed during startup: %v", err)
 		return false, 1
 	}
 
 	changes <- svc.Status{State: svc.Running, Accepts: accepted}
+	logf(logInfo, evtStarted, "%s started; accepting connections", ServiceName)
 
 	// Step 4: control loop — service keeps running until SCM asks us to
 	// stop or RunAgent returns on its own (which would indicate an
@@ -155,9 +205,10 @@ func (s *service) Execute(args []string, r <-chan svc.ChangeRequest, changes cha
 				err := <-runErr
 				changes <- svc.Status{State: svc.Stopped}
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "ERROR: agent shutdown: %v\n", err)
+					logf(logError, evtShutdownError, "agent shutdown: %v", err)
 					return false, 1
 				}
+				logf(logInfo, evtStopped, "%s stopped", ServiceName)
 				return false, 0
 			default:
 				// Unknown control code — ignore per SCM convention.
@@ -168,9 +219,10 @@ func (s *service) Execute(args []string, r <-chan svc.ChangeRequest, changes cha
 			// Stopped and surface the error.
 			changes <- svc.Status{State: svc.Stopped}
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "ERROR: agent exited unexpectedly: %v\n", err)
+				logf(logError, evtRuntimeFailure, "agent exited unexpectedly: %v", err)
 				return false, 1
 			}
+			logf(logInfo, evtStopped, "%s stopped", ServiceName)
 			return false, 0
 		}
 	}
