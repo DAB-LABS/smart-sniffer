@@ -196,18 +196,66 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 	<-ctx.Done()
 	log.Println("Shutting down…")
 
-	// Deregister mDNS before stopping HTTP.
-	// Note: this 5s shutdown path is intentionally preserved in this commit
-	// and will be replaced by a bounded shutdown budget in Change 9.
-	if mdnsServer != nil {
-		mdnsServer.Shutdown()
-		log.Println("mDNS: deregistered")
-	}
+	// --- Bounded graceful shutdown (Change 9) -----------------------------
+	//
+	// shutdownBudget caps the total time the agent spends in shutdown. This
+	// is the standard production pattern for services running under a
+	// supervisor (HA Supervisor, systemd, Kubernetes, Windows SCM): the
+	// supervisor has its own hard-kill timer and we want our own budget to
+	// fire slightly before it, so that WE choose what to drop rather than
+	// the OS SIGKILLing us mid-cleanup.
+	//
+	// Tuned to HA Supervisor's default 10s add-on stop_timeout (2s margin).
+	// Also well within Windows SCM's default 20s service stop timeout.
+	// If the add-on config.yaml ever sets a custom stop_timeout, revisit
+	// this constant. See docs/internal/plans/plan-v0.5.1-consolidated-changes.md
+	// §Change 9 for rationale.
+	const shutdownBudget = 8 * time.Second
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), shutdownBudget)
+	defer cancelShutdown()
 
-	shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(shutCtx); err != nil {
-		log.Printf("HTTP shutdown error: %v", err)
+	shutdownStart := time.Now()
+	phase := struct {
+		mdnsDone        bool
+		httpDrainDone   bool
+		coordinatorDone bool
+		current         string
+	}{current: "mdns"}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+
+		// Phase 1: mDNS goodbye packet so clients stop discovering us.
+		phase.current = "mdns"
+		if mdnsServer != nil {
+			mdnsServer.Shutdown()
+			log.Println("mDNS: deregistered")
+		}
+		phase.mdnsDone = true
+
+		// Phase 2: HTTP graceful drain, bounded by the shared shutdownCtx.
+		phase.current = "http_drain"
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Printf("HTTP shutdown error: %v", err)
+		}
+		phase.httpDrainDone = true
+
+		// Phase 3: coordinator close (currently a no-op; placeholder for
+		// future cache flush, filesystem sync, etc. without requiring
+		// another shutdown-path refactor).
+		phase.current = "coordinator"
+		phase.coordinatorDone = true
+	}()
+
+	select {
+	case <-done:
+		log.Printf("shutdown complete elapsed=%s", time.Since(shutdownStart))
+	case <-shutdownCtx.Done():
+		log.Printf("WARN shutdown budget exceeded phase=%s elapsed=%s "+
+			"mdns_done=%t drain_done=%t coordinator_done=%t",
+			phase.current, time.Since(shutdownStart),
+			phase.mdnsDone, phase.httpDrainDone, phase.coordinatorDone)
 	}
 
 	return nil
