@@ -13,6 +13,13 @@ VERSION  := 0.1.0
 LDFLAGS  := -ldflags "-s -w -X main.version=$(VERSION)"
 OUTDIR   := build
 
+# Linux builds are statically linked (CGO_ENABLED=0) to avoid glibc version
+# dependencies on older distros (Debian 9, RHEL 7) and to support musl-based
+# distros (Alpine). The agent does no stdlib name resolution or net.Dial
+# calls, so the pure-Go resolver fallback has no functional impact. See
+# docs/internal/plans/plan-v0.5.1-consolidated-changes.md §Change 1.
+LINUX_ENV := CGO_ENABLED=0
+
 # Default: build for the host platform.
 .PHONY: build
 build:
@@ -24,15 +31,15 @@ all: linux-amd64 linux-arm64 linux-arm darwin-amd64 darwin-arm64 windows-amd64
 
 .PHONY: linux-amd64
 linux-amd64:
-	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o $(OUTDIR)/$(BINARY)-linux-amd64 .
+	$(LINUX_ENV) GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o $(OUTDIR)/$(BINARY)-linux-amd64 .
 
 .PHONY: linux-arm64
 linux-arm64:
-	GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o $(OUTDIR)/$(BINARY)-linux-arm64 .
+	$(LINUX_ENV) GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o $(OUTDIR)/$(BINARY)-linux-arm64 .
 
 .PHONY: linux-arm
 linux-arm:
-	GOOS=linux GOARCH=arm GOARM=7 go build $(LDFLAGS) -o $(OUTDIR)/$(BINARY)-linux-arm .
+	$(LINUX_ENV) GOOS=linux GOARCH=arm GOARM=7 go build $(LDFLAGS) -o $(OUTDIR)/$(BINARY)-linux-arm .
 
 .PHONY: darwin-amd64
 darwin-amd64:
