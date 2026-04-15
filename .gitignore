@@ -24,6 +24,9 @@ temp/
 brands/
 docs/internal/
 
+# Claude
+.claude/
+
 # OS
 .DS_Store
 Thumbs.db
