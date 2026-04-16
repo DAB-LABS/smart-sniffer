@@ -73,6 +73,75 @@ function Read-YamlScalar {
     return $value
 }
 
+# Ensure-SmartmontoolsInPath adds the smartmontools bin directory to
+# the system PATH if it exists on disk but is not already in PATH.
+# This is critical because the agent runs as a Windows service under
+# the SYSTEM account, which has a separate PATH from the current user.
+# Without this, winget/choco installs smartmontools but the service
+# cannot find smartctl.
+#
+# Deduplicates: if the directory appears multiple times (from repeated
+# installs), it is collapsed to a single entry.
+#
+# After modifying the registry, broadcasts WM_SETTINGCHANGE so the
+# SCM and all running processes pick up the new PATH immediately
+# without requiring a reboot.
+function Ensure-SmartmontoolsInPath {
+    $SmartDirs = @(
+        "$env:ProgramFiles\smartmontools\bin",
+        "${env:ProgramFiles(x86)}\smartmontools\bin"
+    )
+    $SmartDir = $SmartDirs | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $SmartDir) { return }
+
+    $MachinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $Entries = $MachinePath -split ';' | Where-Object { $_.Trim() -ne '' }
+
+    # Check if already present (case-insensitive, ignore trailing backslash).
+    $Normalized = $SmartDir.TrimEnd('\').ToLower()
+    $AlreadyPresent = $Entries | Where-Object { $_.TrimEnd('\').ToLower() -eq $Normalized }
+
+    if ($AlreadyPresent.Count -eq 1) {
+        # Exactly one entry — nothing to do.
+        return
+    }
+
+    # Either missing or duplicated. Remove all existing entries for this
+    # directory, then append exactly one.
+    $Cleaned = $Entries | Where-Object { $_.TrimEnd('\').ToLower() -ne $Normalized }
+    $NewPath = ($Cleaned + $SmartDir) -join ';'
+    [Environment]::SetEnvironmentVariable("Path", $NewPath, "Machine")
+
+    if ($AlreadyPresent.Count -gt 1) {
+        Write-Step "Deduplicated smartmontools PATH entries ($($AlreadyPresent.Count) -> 1)."
+    } else {
+        Write-Step "Added $SmartDir to system PATH."
+    }
+
+    # Broadcast WM_SETTINGCHANGE so the SCM picks up the new PATH
+    # without requiring a reboot. This is what proper installers
+    # (MSI, WiX, NSIS) do after modifying environment variables.
+    try {
+        Add-Type -Namespace Win32 -Name NativeMethods -MemberDefinition @"
+            [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+            public static extern IntPtr SendMessageTimeout(
+                IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam,
+                uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);
+"@ -ErrorAction SilentlyContinue
+        $HWND_BROADCAST = [IntPtr]0xFFFF
+        $WM_SETTINGCHANGE = 0x1A
+        $SMTO_ABORTIFHUNG = 0x0002
+        $result = [UIntPtr]::Zero
+        [Win32.NativeMethods]::SendMessageTimeout(
+            $HWND_BROADCAST, $WM_SETTINGCHANGE,
+            [UIntPtr]::Zero, "Environment",
+            $SMTO_ABORTIFHUNG, 5000, [ref]$result) | Out-Null
+        Write-Ok "Environment change broadcast sent."
+    } catch {
+        Write-Warn "Could not broadcast environment change. A reboot may be needed for the service to find smartctl."
+    }
+}
+
 # ---------------------------------------------------------------------------
 # Banner
 # ---------------------------------------------------------------------------
@@ -153,6 +222,9 @@ try {
         }
     }
 
+    # Capture the hash of the downloaded binary for post-copy verification.
+    $SourceHash = (Get-FileHash -Path $BinaryTmp -Algorithm SHA256).Hash
+
     # ---------------------------------------------------------------------------
     # Check for smartmontools
     # ---------------------------------------------------------------------------
@@ -193,6 +265,20 @@ try {
     } else {
         Write-Ok "smartctl found: $($SmartCtl.Source)"
     }
+
+    # ---------------------------------------------------------------------------
+    # Ensure smartmontools is in the system PATH
+    # ---------------------------------------------------------------------------
+    #
+    # winget and choco install smartmontools to Program Files but do not
+    # always add the bin directory to the machine PATH. The agent runs
+    # under the SYSTEM account whose PATH is separate from the current
+    # user's; if the directory is missing, the service fails at startup
+    # with "smartctl not found in PATH" (event ID 100). Fix this for
+    # both fresh installs (where smartmontools was just installed above)
+    # and upgrades (where smartmontools was installed previously but PATH
+    # was never set).
+    Ensure-SmartmontoolsInPath
 
     # ---------------------------------------------------------------------------
     # Upgrade detection — mirror install.sh's config-preservation UX
@@ -268,15 +354,45 @@ try {
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 
     # Stop existing service if running so the binary file lock releases.
+    # Also stop services in a failed state — they may still hold a
+    # handle on the .exe. We use sc.exe stop which handles both cases
+    # gracefully (returns 1062 "not started" on an already-stopped
+    # service, which we ignore).
     $ExistingSvc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-    if ($ExistingSvc -and $ExistingSvc.Status -eq 'Running') {
-        Write-Warn "Stopping existing service..."
-        Stop-Service -Name $ServiceName -Force
-        Start-Sleep -Seconds 2
+    if ($ExistingSvc) {
+        if ($ExistingSvc.Status -eq 'Running') {
+            Write-Warn "Stopping existing service..."
+            Stop-Service -Name $ServiceName -Force
+        } else {
+            # Force-stop via sc.exe to release any lingering handles
+            # from a service in a failed/stopping state.
+            sc.exe stop $ServiceName 2>$null | Out-Null
+        }
+        # Give the SCM time to fully release the binary file handle.
+        Start-Sleep -Seconds 3
     }
 
-    Copy-Item -Path $BinaryTmp -Destination $BinaryPath -Force
-    Write-Ok "Binary installed."
+    # Copy with retry. On Windows the SCM can briefly hold a file
+    # handle on the binary after the service process has exited. If
+    # the first copy produces a locked-file error or silently fails
+    # to overwrite, we retry after a short wait.
+    $CopyVerified = $false
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        Copy-Item -Path $BinaryTmp -Destination $BinaryPath -Force -ErrorAction SilentlyContinue
+        if (Test-Path $BinaryPath) {
+            $DestHash = (Get-FileHash -Path $BinaryPath -Algorithm SHA256).Hash
+            if ($DestHash -eq $SourceHash) {
+                $CopyVerified = $true
+                break
+            }
+        }
+        Write-Warn "Binary copy attempt $attempt - file hash mismatch, retrying..."
+        Start-Sleep -Seconds 3
+    }
+    if (-not $CopyVerified) {
+        Write-Fail "Could not overwrite the existing binary after 3 attempts. The old service may still hold a file lock. Reboot and re-run the installer."
+    }
+    Write-Ok "Binary installed and verified."
 
     # ---------------------------------------------------------------------------
     # Write config (skipped when keeping existing)
