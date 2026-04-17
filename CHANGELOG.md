@@ -2,6 +2,11 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.5.2.1 -- 2026-04-16
+
+### Fixed
+- **macOS/BSD: installer prints grep errors during agent summary** -- three uses of `grep -P` (Perl regex) in install.sh are not supported on macOS or BSD systems, which ship BSD grep. Replaced with portable `grep -oE` and `sed` equivalents. The drive name display in the post-install summary was the visible failure; two others in the interface picker were latent (only reachable on Linux with busybox grep).
+
 ## v0.5.2 -- 2026-04-16
 
 ### Fixed

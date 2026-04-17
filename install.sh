@@ -226,7 +226,7 @@ pick_interface() {
   for iface in $(ls /sys/class/net 2>/dev/null || ifconfig -l 2>/dev/null | tr ' ' '\n'); do
     local ip4=""
     if command -v ip &>/dev/null; then
-      ip4=$(ip -4 addr show "$iface" 2>/dev/null | grep -oP 'inet \K[0-9.]+' | head -1)
+      ip4=$(ip -4 addr show "$iface" 2>/dev/null | grep -oE 'inet [0-9.]+' | awk '{print $2}' | head -1)
     else
       ip4=$(ifconfig "$iface" 2>/dev/null | grep -oE 'inet [0-9.]+' | awk '{print $2}' | head -1)
     fi
@@ -298,7 +298,7 @@ count_non_virtual_interfaces() {
   NON_VIRTUAL_COUNT=0
   for iface in $(ls /sys/class/net 2>/dev/null || ifconfig -l 2>/dev/null | tr ' ' '\n'); do
     if command -v ip &>/dev/null; then
-      ip4=$(ip -4 addr show "$iface" 2>/dev/null | grep -oP 'inet \K[0-9.]+' | head -1)
+      ip4=$(ip -4 addr show "$iface" 2>/dev/null | grep -oE 'inet [0-9.]+' | awk '{print $2}' | head -1)
     else
       ip4=$(ifconfig "$iface" 2>/dev/null | grep -oE 'inet [0-9.]+' | awk '{print $2}' | head -1)
     fi
@@ -978,7 +978,7 @@ fi
 _DRIVE_JSON=$(eval "$_DRIVE_CURL" 2>/dev/null || true)
 if [ -n "$_DRIVE_JSON" ]; then
   _DRIVE_COUNT=$(echo "$_DRIVE_JSON" | grep -o '"id"' | wc -l)
-  _DRIVE_NAMES=$(echo "$_DRIVE_JSON" | grep -oP '"model"\s*:\s*"\K[^"]+' | paste -sd ', ' -)
+  _DRIVE_NAMES=$(echo "$_DRIVE_JSON" | sed -n 's/.*"model" *: *"\([^"]*\)".*/\1/p' | paste -sd ', ' -)
   if [ "$_DRIVE_COUNT" -gt 0 ]; then
     echo -e "  ${GREEN}✓${NC} SMART drives:   ${_DRIVE_COUNT} detected"
     if [ -n "$_DRIVE_NAMES" ]; then
