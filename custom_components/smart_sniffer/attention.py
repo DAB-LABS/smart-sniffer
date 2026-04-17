@@ -78,6 +78,13 @@ _WARNING_ATA: dict[str, str] = {
     "Command_Timeout":         "Command Timeout",
 }
 
+# Command_Timeout uses a threshold instead of zero-tolerance.  Low counts
+# (1-100) are common on healthy drives from USB sleep/wake cycles, SATA
+# power management (ALPM), and NCQ reordering.  Backblaze data shows 84%
+# of drives accumulate non-zero Command_Timeout over their lifetime.
+# Counts above this threshold suggest real controller or interconnect issues.
+_COMMAND_TIMEOUT_WARN_THRESHOLD = 100
+
 # ---------------------------------------------------------------------------
 # Vendor-specific raw value decoding
 # ---------------------------------------------------------------------------
@@ -272,7 +279,13 @@ def evaluate_attention(
 
         label = _WARNING_ATA.get(name)
         if label and label not in seen_labels:
-            if decoded > 0:
+            if name == "Command_Timeout":
+                if decoded > _COMMAND_TIMEOUT_WARN_THRESHOLD:
+                    warning_reasons.append(
+                        f"{label}: {decoded} (threshold {_COMMAND_TIMEOUT_WARN_THRESHOLD})"
+                    )
+                    seen_labels.add(label)
+            elif decoded > 0:
                 warning_reasons.append(f"{label}: {decoded} (expected 0)")
                 seen_labels.add(label)
 

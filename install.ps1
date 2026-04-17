@@ -1,7 +1,7 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    SMART Sniffer Agent — Windows Installer
+    SMART Sniffer Agent -- Windows Installer
 
 .DESCRIPTION
     Downloads and installs the SMART Sniffer Agent as a Windows service.
@@ -58,7 +58,7 @@ function Test-Interactive {
 # grep+awk rather than introducing a YAML parser dependency. Works
 # for port, token, scan_interval, advertise_interface, mdns_name;
 # does NOT work for the nested filesystems: block (that requires
-# multi-line parsing and is out of scope for Change 5 — see
+# multi-line parsing and is out of scope for Change 5 -- see
 # docs/internal/trackers/windows-installer-parity-backlog.md).
 function Read-YamlScalar {
     param(
@@ -71,6 +71,276 @@ function Read-YamlScalar {
     $value = ($line -split ':', 2)[1].Trim().Trim('"').Trim("'")
     if ($value -eq '') { return $null }
     return $value
+}
+
+# ---------------------------------------------------------------------------
+# Pick-Interface -- enumerate network adapters, present numbered list,
+# return the selected FriendlyName or "" for auto-filter.
+# Matches install.sh pick_interface() UX.
+# ---------------------------------------------------------------------------
+function Pick-Interface {
+    # Enumerate all adapters with IPv4 addresses.
+    $AllAdapters = @()
+    try {
+        $AllAdapters = @(Get-NetAdapter -ErrorAction SilentlyContinue |
+            Where-Object { $_.Status -eq 'Up' })
+    } catch {
+        return ""
+    }
+
+    # Virtual adapter patterns (matched against InterfaceDescription).
+    $VirtualPatterns = @(
+        '*Hyper-V*', '*vEthernet*',
+        '*TAP-Windows*', '*TAP*',
+        '*Tailscale*',
+        '*WireGuard*',
+        '*WSL*',
+        '*Loopback*'
+    )
+
+    # Build adapter list with IPs and virtual classification.
+    $AdapterList = @()
+    foreach ($Adapter in $AllAdapters) {
+        $IPv4 = @(Get-NetIPAddress -InterfaceIndex $Adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+            Where-Object { $_.IPAddress -ne '127.0.0.1' })
+        if ($IPv4.Count -eq 0) { continue }
+
+        $IP = $IPv4[0].IPAddress
+        $IsVirtual = $false
+        $VirtualTag = ""
+        foreach ($Pattern in $VirtualPatterns) {
+            if ($Adapter.InterfaceDescription -like $Pattern -or $Adapter.Name -like $Pattern) {
+                $IsVirtual = $true
+                # Determine tag label.
+                if ($Pattern -match 'Hyper-V|vEthernet') { $VirtualTag = "(Hyper-V)" }
+                elseif ($Pattern -match 'TAP')            { $VirtualTag = "(TAP/VPN)" }
+                elseif ($Pattern -match 'Tailscale')      { $VirtualTag = "(Tailscale)" }
+                elseif ($Pattern -match 'WireGuard')      { $VirtualTag = "(WireGuard)" }
+                elseif ($Pattern -match 'WSL')            { $VirtualTag = "(WSL)" }
+                elseif ($Pattern -match 'Loopback')       { $VirtualTag = "(Loopback)" }
+                else                                      { $VirtualTag = "(virtual)" }
+                break
+            }
+        }
+
+        $AdapterList += [PSCustomObject]@{
+            Name       = $Adapter.Name
+            IP         = $IP
+            IsVirtual  = $IsVirtual
+            VirtualTag = $VirtualTag
+        }
+    }
+
+    if ($AdapterList.Count -eq 0) {
+        Write-Step "No network adapters with IPv4 addresses detected."
+        return ""
+    }
+
+    # Count non-virtual adapters with IPs.
+    $NonVirtualCount = @($AdapterList | Where-Object { -not $_.IsVirtual }).Count
+
+    # Auto-select if only one non-virtual adapter.
+    if ($NonVirtualCount -le 1) {
+        $SingleAdapter = $AdapterList | Where-Object { -not $_.IsVirtual } | Select-Object -First 1
+        if ($SingleAdapter) {
+            Write-Ok "Network interface: $($SingleAdapter.Name) ($($SingleAdapter.IP))"
+        } else {
+            Write-Ok "Network interface: auto"
+        }
+        return ""
+    }
+
+    # Non-interactive: skip picker.
+    if (-not (Test-Interactive)) {
+        return ""
+    }
+
+    # Present the picker.
+    Write-Host ""
+    Write-Host "  Network Interface (mDNS)" -ForegroundColor White
+    Write-Host "  Home Assistant uses this to auto-discover the agent."
+    Write-Host ""
+
+    for ($i = 0; $i -lt $AdapterList.Count; $i++) {
+        $Entry = $AdapterList[$i]
+        $Label = "    $($i + 1)) $($Entry.Name)"
+        $Label = $Label.PadRight(30) + $Entry.IP
+        if ($Entry.IsVirtual) {
+            Write-Host "$Label  " -NoNewline
+            Write-Host $Entry.VirtualTag -ForegroundColor Yellow
+        } else {
+            Write-Host $Label
+        }
+    }
+
+    Write-Host ""
+    $Range = "1-$($AdapterList.Count)"
+    $Choice = Read-Host "  Advertise on ($Range / all) [all]"
+    if (-not $Choice) { $Choice = "all" }
+
+    switch -Regex ($Choice.Trim().ToLower()) {
+        '^(all|a)$' {
+            Write-Step "mDNS: auto-filter mode (all physical interfaces)."
+            return ""
+        }
+        '^\d+$' {
+            $Num = [int]$Choice
+            if ($Num -ge 1 -and $Num -le $AdapterList.Count) {
+                $Selected = $AdapterList[$Num - 1].Name
+                Write-Ok "mDNS will advertise on: $Selected"
+                return $Selected
+            } else {
+                Write-Warn "Invalid choice -- using auto-filter."
+                return ""
+            }
+        }
+        default {
+            Write-Warn "Invalid choice -- using auto-filter."
+            return ""
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Pick-Filesystem -- enumerate fixed disk volumes, present numbered list,
+# return YAML block string or "" if none selected.
+# Matches install.sh pick_filesystems() UX.
+# ---------------------------------------------------------------------------
+function Pick-Filesystem {
+    $Volumes = @()
+    try {
+        $Volumes = @(Get-Volume | Where-Object {
+            $_.DriveLetter -and
+            $_.FileSystemType -ne 'Unknown' -and
+            $_.DriveType -eq 'Fixed'
+        } | Sort-Object DriveLetter)
+    } catch {
+        Write-Step "Could not enumerate disk volumes."
+        return ""
+    }
+
+    if ($Volumes.Count -eq 0) {
+        Write-Step "No fixed disk volumes detected -- skipping disk usage monitoring."
+        return ""
+    }
+
+    # Non-interactive: skip picker.
+    if (-not (Test-Interactive)) {
+        return ""
+    }
+
+    # Build display list.
+    $VolumeList = @()
+    foreach ($Vol in $Volumes) {
+        $Letter = "$($Vol.DriveLetter):\"
+        $FSType = $Vol.FileSystemType
+        $TotalBytes = $Vol.Size
+        $FreeBytes  = $Vol.SizeRemaining
+
+        # Human-readable size.
+        if ($TotalBytes -gt 1099511627776) {
+            $HRSize = "{0:F1}T" -f ($TotalBytes / 1099511627776)
+        } elseif ($TotalBytes -gt 1073741824) {
+            $HRSize = "{0:F0}G" -f ($TotalBytes / 1073741824)
+        } elseif ($TotalBytes -gt 1048576) {
+            $HRSize = "{0:F0}M" -f ($TotalBytes / 1048576)
+        } else {
+            $HRSize = "${TotalBytes}B"
+        }
+
+        # Percent used.
+        $PctUsed = 0
+        if ($TotalBytes -gt 0) {
+            $PctUsed = [math]::Round(($TotalBytes - $FreeBytes) / $TotalBytes * 100)
+        }
+
+        # Extract UUID (GUID) from UniqueId.
+        $UUID = ""
+        if ($Vol.UniqueId -match '\{(.+?)\}') {
+            $UUID = $Matches[1]
+        }
+
+        $VolumeList += [PSCustomObject]@{
+            Letter  = $Letter
+            FSType  = $FSType
+            HRSize  = $HRSize
+            PctUsed = $PctUsed
+            UUID    = $UUID
+            Path    = $Letter
+        }
+    }
+
+    # Present the picker.
+    Write-Host ""
+    Write-Host "  Disk Usage Monitoring" -ForegroundColor White
+    Write-Host "  Select drives to report to Home Assistant."
+    Write-Host ""
+
+    for ($i = 0; $i -lt $VolumeList.Count; $i++) {
+        $Entry = $VolumeList[$i]
+        $Label = "    $($i + 1)) $($Entry.Letter)".PadRight(14)
+        $Label += "$($Entry.FSType)".PadRight(10)
+        $Label += "$($Entry.HRSize)".PadRight(8)
+        $Label += "($($Entry.PctUsed)% used)"
+        Write-Host $Label
+    }
+
+    Write-Host ""
+    $RangeHint = "1"
+    if ($VolumeList.Count -gt 1) { $RangeHint = "1,$( 2 )..$($VolumeList.Count)" }
+    $Choice = Read-Host "  Monitor ($RangeHint / all / none) [all]"
+    if (-not $Choice) { $Choice = "all" }
+
+    $SelectedIndices = @()
+    switch -Regex ($Choice.Trim().ToLower()) {
+        '^(all|a)$' {
+            $SelectedIndices = 0..($VolumeList.Count - 1)
+            break
+        }
+        '^(none|n)$' {
+            Write-Step "Disk usage monitoring disabled."
+            return ""
+        }
+        default {
+            # Comma-separated numbers.
+            $Nums = $Choice -split ',' | ForEach-Object { $_.Trim() }
+            foreach ($Num in $Nums) {
+                if ($Num -match '^\d+$') {
+                    $N = [int]$Num
+                    if ($N -ge 1 -and $N -le $VolumeList.Count) {
+                        $SelectedIndices += ($N - 1)
+                    } else {
+                        Write-Warn "Skipping invalid choice: $Num"
+                    }
+                } else {
+                    Write-Warn "Skipping invalid choice: $Num"
+                }
+            }
+        }
+    }
+
+    if ($SelectedIndices.Count -eq 0) {
+        Write-Step "No valid drives selected -- disk usage monitoring disabled."
+        return ""
+    }
+
+    # Build YAML block.
+    $YAML = "filesystems:"
+    $DisplayPaths = @()
+    foreach ($Idx in $SelectedIndices) {
+        $Entry = $VolumeList[$Idx]
+        # Escape backslash for YAML: C:\ becomes C:\\
+        $YAMLPath = $Entry.Path -replace '\\', '\\'
+        $YAML += "`n  - path: `"$YAMLPath`""
+        $YAML += "`n    uuid: `"$($Entry.UUID)`""
+        $YAML += "`n    device: `"`""
+        $YAML += "`n    fstype: `"$($Entry.FSType)`""
+        $DisplayPaths += $Entry.Path
+    }
+
+    $DisplayStr = $DisplayPaths -join ', '
+    Write-Ok "Monitoring $($SelectedIndices.Count) drive(s): $DisplayStr"
+    return $YAML
 }
 
 # Ensure-SmartmontoolsInPath adds the smartmontools bin directory to
@@ -102,7 +372,7 @@ function Ensure-SmartmontoolsInPath {
     $AlreadyPresent = $Entries | Where-Object { $_.TrimEnd('\').ToLower() -eq $Normalized }
 
     if ($AlreadyPresent.Count -eq 1) {
-        # Exactly one entry — nothing to do.
+        # Exactly one entry -- nothing to do.
         return
     }
 
@@ -251,7 +521,7 @@ try {
             if (Get-Command winget -ErrorAction SilentlyContinue) {
                 $Install = Read-Host "  Install via winget now? [Y/n]"
                 if ($Install -ne 'n' -and $Install -ne 'N') {
-                    winget install smartmontools --accept-package-agreements --accept-source-agreements
+                    winget install smartmontools --accept-package-agreements --accept-source-agreements --disable-interactivity --source winget
                 }
             } elseif (Get-Command choco -ErrorAction SilentlyContinue) {
                 $Install = Read-Host "  Install via Chocolatey now? [Y/n]"
@@ -281,7 +551,7 @@ try {
     Ensure-SmartmontoolsInPath
 
     # ---------------------------------------------------------------------------
-    # Upgrade detection — mirror install.sh's config-preservation UX
+    # Upgrade detection -- mirror install.sh's config-preservation UX
     # ---------------------------------------------------------------------------
     #
     # If a config.yaml already exists, parse the known scalar fields
@@ -331,6 +601,62 @@ try {
         $Port         = $ExistingPort
         $Token        = $ExistingToken
         $ScanInterval = $ExistingInterval
+
+        # --- Upgrade path: offer interface picker if field is missing ---
+        if (-not $ExistingIface -and (Test-Interactive)) {
+            # Count non-virtual adapters to decide whether to prompt.
+            $UpgradeAdapters = @()
+            try {
+                $UpgradeAdapters = @(Get-NetAdapter -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Status -eq 'Up' })
+            } catch { }
+
+            $VirtualPatterns = @(
+                '*Hyper-V*', '*vEthernet*', '*TAP-Windows*', '*TAP*',
+                '*Tailscale*', '*WireGuard*', '*WSL*', '*Loopback*'
+            )
+            $UpgradeNonVirtual = 0
+            foreach ($Adp in $UpgradeAdapters) {
+                $HasIP = @(Get-NetIPAddress -InterfaceIndex $Adp.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                    Where-Object { $_.IPAddress -ne '127.0.0.1' })
+                if ($HasIP.Count -eq 0) { continue }
+                $IsVirt = $false
+                foreach ($P in $VirtualPatterns) {
+                    if ($Adp.InterfaceDescription -like $P -or $Adp.Name -like $P) {
+                        $IsVirt = $true; break
+                    }
+                }
+                if (-not $IsVirt) { $UpgradeNonVirtual++ }
+            }
+
+            if ($UpgradeNonVirtual -gt 1) {
+                Write-Host ""
+                Write-Warn "Your config doesn't specify a network interface for mDNS."
+                Write-Host "  Machines with multiple interfaces may advertise on the wrong IP."
+
+                $MigIface = Pick-Interface
+                if ($MigIface) {
+                    Add-Content -Path $ConfigFile -Value "advertise_interface: $MigIface" -Encoding UTF8
+                    Write-Ok "Interface saved to existing config."
+                }
+            }
+        }
+
+        # --- Upgrade path: offer filesystem picker if field is missing ---
+        $HasFilesystems = $false
+        if (Test-Path $ConfigFile) {
+            $HasFilesystems = (Get-Content -Path $ConfigFile | Where-Object { $_ -match '^filesystems:' }).Count -gt 0
+        }
+        if (-not $HasFilesystems -and (Test-Interactive)) {
+            Write-Host ""
+            Write-Step "Disk usage monitoring is now available."
+            $MigFS = Pick-Filesystem
+            if ($MigFS) {
+                Add-Content -Path $ConfigFile -Value "" -Encoding UTF8
+                Add-Content -Path $ConfigFile -Value $MigFS -Encoding UTF8
+                Write-Ok "Filesystem monitoring added to existing config."
+            }
+        }
     } else {
         Write-Host ""
         Write-Host "  Configuration" -ForegroundColor White
@@ -344,6 +670,12 @@ try {
 
         $ScanInterval = Read-Host "  Scan interval [60s]"
         if (-not $ScanInterval) { $ScanInterval = "60s" }
+
+        # --- Fresh install: interface picker ---
+        $PickedIface = Pick-Interface
+
+        # --- Fresh install: filesystem picker ---
+        $PickedFS = Pick-Filesystem
     }
 
     # ---------------------------------------------------------------------------
@@ -354,7 +686,7 @@ try {
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 
     # Stop existing service if running so the binary file lock releases.
-    # Also stop services in a failed state — they may still hold a
+    # Also stop services in a failed state -- they may still hold a
     # handle on the .exe. We use sc.exe stop which handles both cases
     # gracefully (returns 1062 "not started" on an already-stopped
     # service, which we ignore).
@@ -404,6 +736,12 @@ try {
         $ConfigContent = "port: $Port`nscan_interval: $ScanInterval"
         if ($Token) {
             $ConfigContent += "`ntoken: `"$Token`""
+        }
+        if ($PickedIface) {
+            $ConfigContent += "`nadvertise_interface: $PickedIface"
+        }
+        if ($PickedFS) {
+            $ConfigContent += "`n$PickedFS"
         }
         Set-Content -Path $ConfigFile -Value $ConfigContent -Encoding UTF8
         Write-Ok "Config written."
@@ -489,7 +827,7 @@ try {
                 | Format-Table TimeCreated, Id, LevelDisplayName, Message -AutoSize -Wrap `
                 | Out-String | Write-Host
         } catch {
-            Write-Host "    (no events yet — source may have just been registered)" -ForegroundColor Yellow
+            Write-Host "    (no events yet -- source may have just been registered)" -ForegroundColor Yellow
         }
         Write-Fail "Start-Service failed. See diagnostics above."
     }

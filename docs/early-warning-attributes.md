@@ -33,7 +33,7 @@ All of these should read **0** on a healthy drive. Any non-zero value triggers t
 | **Current Pending Sector Count** | 197 | > 0 | High | Sectors the drive wants to reallocate but hasn't yet — they are currently unreadable. Non-zero is urgent. Note: not all SSDs report this attribute (e.g., Samsung 870 EVO does not); the entity is only created when the drive supports it. |
 | **Offline Uncorrectable / Reported Uncorrectable Errors** | 198 / 187 | > 0 | ~7.5× higher failure rate | Sectors that failed during offline scan or ECC correction. Non-zero means data loss has likely occurred. |
 | **Spin Retry Count** | 10 | > 0 | Moderate | HDD only. Drive is struggling to spin up the platter motor. Non-zero means mechanical wear is starting. Entity only created for drives that report this attribute. |
-| **Command Timeout** | 188 | > 0 | Moderate | Drive internally timed out on a command. Non-zero suggests controller or interconnect issues. Added in this release. |
+| **Command Timeout** | 188 | > 100 | Moderate | Drive internally timed out on a command. Low counts (1~100) are common from USB sleep/wake cycles, SATA power management (ALPM), and NCQ reordering ~ not failure indicators. Counts above 100 suggest controller or interconnect degradation. Seagate/OEM drives pack three 16-bit counters into the 48-bit raw value; the integration decodes to the lower 16 bits automatically (v0.4.26+). Backblaze lists attribute 188 as one of five failure-correlated attributes, but 84% of drives show non-zero values at some point ~ the correlation is with elevated counts, not merely non-zero. |
 
 ### NVMe Drives
 

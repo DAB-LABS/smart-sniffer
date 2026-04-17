@@ -64,9 +64,18 @@ pick_filesystems() {
 
   while IFS= read -r line; do
     local dev mp fstype
-    dev=$(echo "$line" | awk '{print $1}')
-    mp=$(echo "$line" | awk '{print $2}')
-    fstype=$(echo "$line" | awk '{print $3}')
+
+    # macOS mount output: /dev/disk3s1s1 on / (apfs, sealed, local, ...)
+    # Linux /proc/mounts: /dev/sda1 / ext4 rw,relatime 0 0
+    if [[ "$OSTYPE" == darwin* ]]; then
+      dev=$(echo "$line" | awk '{print $1}')
+      mp=$(echo "$line" | sed 's/.* on \(.*\) (.*/\1/' | sed 's/ *$//')
+      fstype=$(echo "$line" | sed 's/.*(\([^,)]*\).*/\1/' | sed 's/ *$//')
+    else
+      dev=$(echo "$line" | awk '{print $1}')
+      mp=$(echo "$line" | awk '{print $2}')
+      fstype=$(echo "$line" | awk '{print $3}')
+    fi
 
     # Filter to real block devices and common filesystems.
     case "$dev" in
@@ -80,14 +89,35 @@ pick_filesystems() {
         continue ;;
     esac
 
+    # Skip macOS system/virtual volumes and pseudo-filesystems.
+    if [[ "$OSTYPE" == darwin* ]]; then
+      case "$mp" in
+        /System/Volumes/Preboot|/System/Volumes/Recovery|/System/Volumes/VM)
+          continue ;;
+        /System/Volumes/xarts|/System/Volumes/iSCPreboot|/System/Volumes/Hardware)
+          continue ;;
+      esac
+      case "$fstype" in devfs|autofs|synthfs) continue ;; esac
+    fi
+
     # Skip snap and docker mounts.
     case "$mp" in /snap/*|/var/lib/docker/*) continue ;; esac
 
     # Get usage info from df.
+    # macOS df doesn't support -B1 (GNU coreutils). Use -k for 1K blocks
+    # on macOS and -B1 for byte-accurate values on Linux.
     local df_line total pct hr_total
-    df_line=$(df -B1 "$mp" 2>/dev/null | tail -1)
-    total=$(echo "$df_line" | awk '{print $2}')
-    pct=$(echo "$df_line" | awk '{print $5}' | tr -d '%')
+    if [[ "$OSTYPE" == darwin* ]]; then
+      df_line=$(df -k "$mp" 2>/dev/null | tail -1)
+      total=$(echo "$df_line" | awk '{print $2}')
+      # df -k returns 1K blocks; convert to bytes.
+      total=$((total * 1024))
+      pct=$(echo "$df_line" | awk '{print $5}' | tr -d '%')
+    else
+      df_line=$(df -B1 "$mp" 2>/dev/null | tail -1)
+      total=$(echo "$df_line" | awk '{print $2}')
+      pct=$(echo "$df_line" | awk '{print $5}' | tr -d '%')
+    fi
 
     if [ "$total" -gt 1099511627776 ] 2>/dev/null; then
       hr_total="$(echo "$total" | awk '{printf "%.1fT", $1/1099511627776}')";

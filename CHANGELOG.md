@@ -2,6 +2,27 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.5.2 -- 2026-04-16
+
+### Fixed
+- **macOS: filesystem picker writes "on" instead of actual mountpoint** -- the install.sh parser assumed Linux `/proc/mounts` field positions, but macOS `mount` output uses a different format (`/dev/disk3s1s1 on / (apfs, ...)`). Field $2 is "on", not the mountpoint. Now detects macOS via `$OSTYPE` and parses correctly with sed. Also filters macOS virtual volumes (Preboot, Recovery, VM, xarts, iSCPreboot, Hardware, devfs, autofs) and uses `df -k` instead of the GNU-only `df -B1`. (HA Forum Post #43, reported by spry-salt)
+- **Command Timeout false positives on USB drives** -- SMART attribute 188 (Command_Timeout) was triggering MAYBE on any non-zero decoded value. Low counts (1-100) are normal from USB sleep/wake cycles, SATA power management (ALPM), and NCQ reordering. Backblaze data shows 84% of drives accumulate non-zero Command_Timeout over their lifetime -- the correlation is with elevated counts, not merely non-zero. Threshold raised from >0 to >100. (HA Forum Post #43, reported by spry-salt)
+- **Windows: winget source picker appears during smartmontools install** -- added `--disable-interactivity --source winget` to suppress the interactive source selection prompt.
+
+### Added
+- **Windows: interface picker in installer** -- multi-homed Windows hosts can now select the mDNS advertise interface during install, matching the Unix installer. Virtual adapters (Hyper-V, TAP, Tailscale, WireGuard, WSL, Loopback) are labeled and shown separately. Single-adapter machines auto-select without prompting.
+- **Windows: filesystem picker in installer** -- Windows installer now offers disk usage monitoring setup, matching the Unix installer. Enumerates fixed volumes via Get-Volume with human-readable sizes and percent used. Supports comma-separated selection, "all", or "none".
+- **Windows: upgrade-aware field migration** -- upgrading from older configs now detects missing `advertise_interface` (prompts only on multi-NIC) and `filesystems` fields, offering to add them. Append-only -- existing config is never rewritten.
+- **Windows: real filesystem monitoring in agent** -- replaced the stub `filesystem_windows.go` with a real implementation using Win32 `GetDiskFreeSpaceEx`. Windows agents with filesystems configured now report actual disk usage data via `/api/filesystems`.
+
+### Security
+- **Agent: timing-safe token comparison** -- bearer token authentication now uses a constant-time comparison that is resistant to timing side-channel attacks. The previous implementation leaked information about the token with every failed request, making it theoretically possible to recover the full token one character at a time. The new approach reveals nothing about the token regardless of the input, matching the standard used by web frameworks and authentication libraries across the industry.
+
+### Upgrade Notes
+- **macOS users seeing "statfs on failed":** this release fixes the installer. Re-run the installer to regenerate config.yaml with correct mountpoints, then restart the agent.
+- **USB drive users seeing false MAYBE alerts:** the Command Timeout threshold is now >100 instead of >0. Update the integration via HACS and reload to clear stale alerts.
+- **Windows users:** significant update. Re-run the installer to get the interface picker, filesystem picker, and upgrade-aware field migration. The agent now supports real disk usage monitoring -- the installer will offer to set it up.
+
 ## v0.5.1 — 2026-04-15
 
 ### Fixed
