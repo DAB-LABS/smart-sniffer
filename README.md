@@ -191,7 +191,7 @@ Binaries output to `agent/build/`.
 
 ## Quick Start
 
-**Requires:** `smartmontools` on each monitored machine — the installer handles this automatically (Homebrew on macOS, apt/dnf/yum on Linux).
+**Requires:** `smartmontools` **7.0+** on each monitored machine (for JSON output support). The installer handles installation automatically (Homebrew on macOS, apt/dnf/yum on Linux), but some older distros ship smartctl 6.x which does not support the `--json` flag the agent relies on. Run `smartctl --version` to check. If you're on 6.x, install a newer version from the [smartmontools releases page](https://www.smartmontools.org/wiki/Download) or from a backports repository.
 
 ### 1. Install the agent
 
@@ -346,6 +346,7 @@ This is the most common "why isn't my drive showing data?" scenario. It's a hard
 - [ ] Standby-aware polling (`smartctl -n standby`)
 - [ ] YAML-based SMART attribute definitions (vendor field mapping, transforms, units)
 - [ ] SAS/SCSI drive support
+- [ ] Agent: smartctl minimum version check (fail early with clear message if < 7.0)
 
 ## Testing
 
