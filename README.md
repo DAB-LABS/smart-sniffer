@@ -347,6 +347,15 @@ This is the most common "why isn't my drive showing data?" scenario. It's a hard
 - [ ] YAML-based SMART attribute definitions (vendor field mapping, transforms, units)
 - [ ] SAS/SCSI drive support
 - [ ] Agent: smartctl minimum version check (fail early with clear message if < 7.0)
+- [ ] Agent: container-aware filesystem reporting (MNT_PREFIX path mapping for Docker deployments)
+
+## Community Deployments
+
+| Deployment | Maintainer | Description |
+|------------|-----------|-------------|
+| [Docker](https://github.com/fireinice/docker-smart-sniffer) | [@fireinice](https://github.com/fireinice) | Dockerfile + auto-generated docker-compose with per-drive capability scoping. Available on [Docker Hub](https://hub.docker.com/r/fireinice/smart-sniffer). |
+
+Note: disk usage monitoring (`/api/filesystems`) is not yet supported in Docker deployments. Container-aware path mapping is [on the roadmap](#roadmap).
 
 ## Testing
 
