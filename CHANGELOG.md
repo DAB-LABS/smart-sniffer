@@ -1,6 +1,25 @@
-# Changelog
++# Changelog
 
 All notable changes to SMART Sniffer are documented here.
+
+## v0.5.3 -- 2026-04-19
+
+### Fixed
+- **Noisy agent logs from drives with error history** -- drives with old error log entries (common on aged HDDs) caused the agent to log a warning every scan cycle, roughly 1,440 lines per day per drive. The agent now decodes the smartctl exit code properly: actual failures still warn, but informational flags about drive history are logged once and then suppressed.
+- **OS detection on Windows agents** -- the health endpoint reported "unknown" for the OS field on Windows because it relied on a Unix-only command. Now uses Go's built-in platform detection and correctly reports "windows", "linux", "darwin", etc.
+
+### Added
+- **Standby-aware polling for NAS users** -- new `standby_mode` config option prevents the agent from waking sleeping HDDs during scans. When a drive is in standby, the agent serves cached data instead of spinning the disk up. The installer detects spinning drives and offers to enable this automatically. Keeps your NAS quiet and your drives resting when they should be.
+- **Agent connectivity sensor in Home Assistant** -- a new binary sensor per agent shows Connected or Disconnected in real time. Unlike drive sensors that go "Unavailable" when the agent is offline, this sensor stays available and explicitly shows the connection state, making it easy to build automations around agent outages.
+- **Agent diagnostic entities** -- version, last seen, IP, port, scan interval, and auth status are now available as entities under each agent device. Version is enabled by default; the rest are hidden by default and can be enabled in entity settings.
+- **Minimum smartctl version check** -- the agent now verifies smartctl 7.0+ is installed before starting, with clear upgrade instructions if not. Older versions lack the JSON output the agent depends on, and previously failed silently.
+- **OS and uptime in health endpoint** -- the agent's `/api/health` response now includes host OS and uptime, used by the new diagnostic entities.
+- **Standby indicators on drive sensors** -- when a drive is sleeping and being served from cache, its sensors gain `in_standby` and `data_as_of` attributes so you can tell the data is stale and how old it is.
+
+### Upgrade Notes
+- **Agent update required.** Re-run the installer or replace the binary to get the new features. Existing configs work without changes -- all new options default to current behavior.
+- **Integration update required.** Update via HACS and reload to pick up the new connectivity sensor and diagnostic entities.
+- **NAS users with spinning drives:** after updating the agent, re-run the installer to enable standby-aware polling, or manually add `standby_mode: standby` to your config.yaml.
 
 ## v0.5.2.1 -- 2026-04-16
 
