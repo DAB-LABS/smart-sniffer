@@ -36,8 +36,8 @@ from .attention import (
     STATE_YES,
     evaluate_attention,
 )
-from .const import DOMAIN, FILESYSTEMS_KEY
-from .coordinator import SmartSnifferCoordinator
+from .const import CONF_TOKEN, DOMAIN, FILESYSTEMS_KEY
+from .coordinator import AgentHealthCoordinator, SmartSnifferCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -368,7 +368,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up SMART Sniffer sensor entities from a config entry."""
-    coordinator: SmartSnifferCoordinator = hass.data[DOMAIN][entry.entry_id]
+    data = hass.data[DOMAIN][entry.entry_id]
+    coordinator: SmartSnifferCoordinator = data["coordinator"]
+    health_coordinator: AgentHealthCoordinator = data["health_coordinator"]
 
     entities: list[SensorEntity] = []
     for drive_id, drive_data in coordinator.data.items():
@@ -426,6 +428,13 @@ async def async_setup_entry(
         entities.append(
             SmartSnifferFilesystemSensor(coordinator, fs_info)
         )
+
+    # --- Agent diagnostic sensors ---
+    entities.append(AgentVersionSensor(health_coordinator, entry))
+    entities.append(AgentLastSeenSensor(health_coordinator, entry))
+    entities.append(AgentIPSensor(health_coordinator, entry))
+    entities.append(AgentPortSensor(health_coordinator, entry))
+    entities.append(AgentScanIntervalSensor(health_coordinator, entry))
 
     async_add_entities(entities, update_before_add=False)
 
@@ -531,6 +540,17 @@ class SmartSnifferSensor(CoordinatorEntity[SmartSnifferCoordinator], SensorEntit
         if drive_data is None:
             return None
         return _extract_attribute(drive_data, self.entity_description.key)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Add standby attributes when the drive is sleeping."""
+        drive_data = self.coordinator.data.get(self._drive_id, {})
+        if drive_data.get("in_standby"):
+            return {
+                "in_standby": True,
+                "data_as_of": drive_data.get("last_updated", "unknown"),
+            }
+        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -783,6 +803,148 @@ class SmartSnifferFilesystemSensor(
             "used_gb": _bytes_to_gb(fs.get("used_bytes", 0)),
             "available_gb": _bytes_to_gb(fs.get("available_bytes", 0)),
         }
+
+
+# ---------------------------------------------------------------------------
+# Agent diagnostic sensors
+# ---------------------------------------------------------------------------
+
+def _agent_device_info(entry: ConfigEntry) -> dict[str, Any]:
+    """Build device_info for the per-agent device (shared with binary_sensor)."""
+    from .const import CONF_HOST
+    host = entry.data.get(CONF_HOST, "unknown")
+    title = entry.title or f"SMART Sniffer ({host})"
+    return {
+        "identifiers": {(DOMAIN, f"{entry.entry_id}_agent")},
+        "name": title,
+        "manufacturer": "SMART Sniffer",
+        "model": "Agent",
+    }
+
+
+class AgentVersionSensor(
+    CoordinatorEntity[AgentHealthCoordinator], SensorEntity
+):
+    """Agent version reported by /api/health."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Agent Version"
+    _attr_icon = "mdi:tag-outline"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = True
+
+    def __init__(self, coordinator: AgentHealthCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_agent_version"
+        self._attr_device_info = _agent_device_info(entry)
+
+    @property
+    def native_value(self) -> str | None:
+        return self.coordinator.data.get("version") or None
+
+
+class AgentLastSeenSensor(
+    CoordinatorEntity[AgentHealthCoordinator], SensorEntity
+):
+    """Timestamp of the last successful health check."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Agent Last Seen"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:clock-check-outline"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, coordinator: AgentHealthCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_agent_last_seen"
+        self._attr_device_info = _agent_device_info(entry)
+
+    @property
+    def native_value(self):
+        """Return UTC-aware datetime. HA renders in user's timezone."""
+        from datetime import datetime, timezone
+        last_seen = self.coordinator.data.get("last_seen")
+        if last_seen is None:
+            return None
+        try:
+            dt = datetime.fromisoformat(last_seen)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+        except (ValueError, TypeError):
+            return None
+
+
+class AgentIPSensor(
+    CoordinatorEntity[AgentHealthCoordinator], SensorEntity
+):
+    """Agent IP address from config entry (read-only diagnostic)."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Agent IP"
+    _attr_icon = "mdi:ip-network"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, coordinator: AgentHealthCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_agent_ip"
+        self._attr_device_info = _agent_device_info(entry)
+
+    @property
+    def native_value(self) -> str:
+        from .const import CONF_HOST
+        return self._entry.data.get(CONF_HOST, "unknown")
+
+
+class AgentPortSensor(
+    CoordinatorEntity[AgentHealthCoordinator], SensorEntity
+):
+    """Agent port from config entry (read-only diagnostic)."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Agent Port"
+    _attr_icon = "mdi:ethernet"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, coordinator: AgentHealthCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_agent_port"
+        self._attr_device_info = _agent_device_info(entry)
+
+    @property
+    def native_value(self) -> int:
+        from .const import CONF_PORT
+        return self._entry.data.get(CONF_PORT, 9099)
+
+
+class AgentScanIntervalSensor(
+    CoordinatorEntity[AgentHealthCoordinator], SensorEntity
+):
+    """Agent scan interval from config entry (read-only diagnostic)."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Scan Interval"
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.SECONDS
+    _attr_icon = "mdi:timer-outline"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, coordinator: AgentHealthCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_agent_scan_interval"
+        self._attr_device_info = _agent_device_info(entry)
+
+    @property
+    def native_value(self) -> int:
+        from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+        return self._entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
 
 
 # ---------------------------------------------------------------------------

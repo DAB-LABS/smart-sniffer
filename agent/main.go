@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -25,6 +26,10 @@ import (
 // version is set at build time via -ldflags "-X main.version=...".
 // Falls back to "dev" for untagged builds.
 var version = "0.1.0"
+
+// startTime records when the agent process started, used for the uptime
+// field in /api/health.
+var startTime = time.Now()
 
 // ---------------------------------------------------------------------------
 // RunAgent — shared entry point for all platforms
@@ -62,6 +67,21 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 		return err
 	}
 
+	const minSmartctlVersion = "7.0"
+	if !isSmartctlVersionOK(smartctlVer, minSmartctlVersion) {
+		return fmt.Errorf(`ERROR: smartctl %s is too old. The agent requires smartctl %s or newer
+for JSON output support (--json flag).
+
+Your options:
+  1. Update smartmontools from https://www.smartmontools.org/wiki/Download
+  2. Check if a newer version is available in your package manager:
+       apt:  sudo apt install smartmontools
+       dnf:  sudo dnf install smartmontools
+       brew: brew install smartmontools
+
+Run 'smartctl --version' to check your current version.`, smartctlVer, minSmartctlVersion)
+	}
+
 	drives, err := preflightScanDrives()
 	if err != nil {
 		return err
@@ -85,9 +105,12 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 	log.Printf("Listening on: 0.0.0.0:%d", cfg.Port)
 	log.Printf("Auth: %s", authLabel)
 	log.Printf("mDNS: %s", mdnsLabel)
+	if cfg.StandbyMode != "never" {
+		log.Printf("Standby mode: %s", cfg.StandbyMode)
+	}
 
 	// --- Cache / background scanner ---
-	cache := NewDriveCache(cfg.ScanInterval)
+	cache := NewDriveCache(cfg.ScanInterval, cfg.StandbyMode)
 	cache.Refresh() // initial population
 
 	// --- Filesystem cache (if configured) ---
@@ -262,13 +285,11 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 	return nil
 }
 
-// detectOS returns the runtime OS as a short string for mDNS TXT records.
+// detectOS returns the runtime OS as a short string for mDNS TXT records
+// and the /api/health response. Uses runtime.GOOS instead of shelling out
+// to uname, which doesn't exist on Windows.
 func detectOS() string {
-	out, err := exec.Command("uname", "-s").Output()
-	if err != nil {
-		return "unknown"
-	}
-	return strings.ToLower(strings.TrimSpace(string(out)))
+	return runtime.GOOS // "linux", "darwin", "windows", etc.
 }
 
 // ---------------------------------------------------------------------------
@@ -317,6 +338,27 @@ func parseSmartctlVersion(output string) string {
 		return m[1]
 	}
 	return ""
+}
+
+// isSmartctlVersionOK returns true if ver >= minVer (both as "X.Y" strings).
+// Returns true for "unknown" versions to avoid blocking on parse failures --
+// the agent will fail later on --json calls anyway.
+func isSmartctlVersionOK(ver, minVer string) bool {
+	if ver == "unknown" || ver == "" {
+		return true
+	}
+	parse := func(s string) (int, int) {
+		parts := strings.SplitN(s, ".", 2)
+		major, _ := strconv.Atoi(parts[0])
+		minor := 0
+		if len(parts) > 1 {
+			minor, _ = strconv.Atoi(parts[1])
+		}
+		return major, minor
+	}
+	vMaj, vMin := parse(ver)
+	mMaj, mMin := parse(minVer)
+	return vMaj > mMaj || (vMaj == mMaj && vMin >= mMin)
 }
 
 // preflightScanDrives runs "smartctl --scan" and checks for permission errors
@@ -400,6 +442,8 @@ func authMiddleware(token string, next http.Handler) http.Handler {
 type healthResponse struct {
 	Status      string   `json:"status"`
 	Version     string   `json:"version"`
+	OS          string   `json:"os"`
+	Uptime      int      `json:"uptime_seconds"`
 	Endpoints   []string `json:"endpoints"`
 	Drives      int      `json:"drives"`
 	Filesystems int      `json:"filesystems"`
@@ -423,6 +467,8 @@ func handleHealth(cache *DriveCache) http.HandlerFunc {
 		resp := healthResponse{
 			Status:      "ok",
 			Version:     version,
+			OS:          detectOS(),
+			Uptime:      int(time.Since(startTime).Seconds()),
 			Endpoints:   endpoints,
 			Drives:      driveCount,
 			Filesystems: fsCount,
@@ -439,21 +485,25 @@ func handleHealth(cache *DriveCache) http.HandlerFunc {
 
 // DriveCache holds cached SMART data for all discovered drives.
 type DriveCache struct {
-	mu           sync.RWMutex
-	interval     time.Duration
-	drives       map[string]DriveInfo // keyed by slug id
-	driveOrder   []string             // preserve discovery order
-	fsCache      *FilesystemCache     // refreshed alongside drive data (nil = disabled)
+	mu             sync.RWMutex
+	interval       time.Duration
+	drives         map[string]DriveInfo // keyed by slug id
+	driveOrder     []string             // preserve discovery order
+	fsCache        *FilesystemCache     // refreshed alongside drive data (nil = disabled)
+	lastHealthBits map[string]int       // per-device last-seen health bits (suppress repeat logs)
+	standbyMode    string               // never, standby, sleep, idle
 }
 
 // DriveInfo is the per-drive cached payload.
 type DriveInfo struct {
-	ID         string          `json:"id"`
-	DevicePath string          `json:"device_path"`
-	Model      string          `json:"model"`
-	Serial     string          `json:"serial"`
-	Protocol   string          `json:"protocol"` // ATA, NVMe, SCSI, …
-	RawJSON    json.RawMessage `json:"smart_data"`
+	ID          string          `json:"id"`
+	DevicePath  string          `json:"device_path"`
+	Model       string          `json:"model"`
+	Serial      string          `json:"serial"`
+	Protocol    string          `json:"protocol"`                      // ATA, NVMe, SCSI, ...
+	InStandby   bool            `json:"in_standby,omitempty"`          // true when drive was skipped due to standby
+	LastUpdated string          `json:"last_updated,omitempty"`        // ISO 8601 timestamp of last successful SMART fetch
+	RawJSON     json.RawMessage `json:"smart_data"`
 }
 
 // DriveSummary is the abbreviated representation returned by GET /api/drives.
@@ -465,10 +515,12 @@ type DriveSummary struct {
 	Protocol   string `json:"protocol"`
 }
 
-func NewDriveCache(interval time.Duration) *DriveCache {
+func NewDriveCache(interval time.Duration, standbyMode string) *DriveCache {
 	return &DriveCache{
-		interval: interval,
-		drives:   make(map[string]DriveInfo),
+		interval:       interval,
+		drives:         make(map[string]DriveInfo),
+		lastHealthBits: make(map[string]int),
+		standbyMode:    standbyMode,
 	}
 }
 
@@ -498,7 +550,36 @@ func (dc *DriveCache) Refresh() {
 	var order []string
 
 	for _, dev := range scanResult.Devices {
-		info := dc.fetchDriveInfo(dev.Name, dev.Protocol)
+		info, inStandby := dc.fetchDriveInfo(dev.Name, dev.Protocol)
+		if inStandby {
+			// Drive is sleeping -- serve last known data with standby flag.
+			slug := makeDriveSlug("", dev.Name) // fallback slug from path
+			dc.mu.RLock()
+			if existing, ok := dc.drives[slug]; ok {
+				existing.InStandby = true
+				newDrives[existing.ID] = existing
+				order = append(order, existing.ID)
+				slug = existing.ID // use the real ID for logging
+			} else {
+				// Check all cached drives by device path (serial-based slug won't match path-based slug).
+				for id, d := range dc.drives {
+					if d.DevicePath == dev.Name {
+						d.InStandby = true
+						newDrives[id] = d
+						order = append(order, id)
+						slug = id
+						break
+					}
+				}
+			}
+			dc.mu.RUnlock()
+			// Log standby transition once.
+			if prev, ok := dc.drives[slug]; !ok || !prev.InStandby {
+				log.Printf("drive %s is in standby, serving cached data", dev.Name)
+			}
+			continue
+		}
+		info.InStandby = false
 		newDrives[info.ID] = info
 		order = append(order, info.ID)
 	}
@@ -516,20 +597,100 @@ func (dc *DriveCache) Refresh() {
 	}
 }
 
+// decodeExecBits returns human-readable labels for smartctl execution
+// failure bits (0-2). These indicate the command itself failed.
+func decodeExecBits(code int) string {
+	bits := code & 0x07
+	var reasons []string
+	if bits&1 != 0 {
+		reasons = append(reasons, "command line parse error")
+	}
+	if bits&2 != 0 {
+		reasons = append(reasons, "device open failed")
+	}
+	if bits&4 != 0 {
+		reasons = append(reasons, "command failed or checksum error")
+	}
+	return strings.Join(reasons, ", ")
+}
+
+// decodeHealthBits returns human-readable labels for smartctl drive
+// health flag bits (3-7). These indicate drive status, not command failure.
+func decodeHealthBits(code int) string {
+	bits := code & 0xF8
+	var flags []string
+	if bits&8 != 0 {
+		flags = append(flags, "DISK FAILING")
+	}
+	if bits&16 != 0 {
+		flags = append(flags, "prefail attributes <= threshold")
+	}
+	if bits&32 != 0 {
+		flags = append(flags, "usage attributes <= threshold")
+	}
+	if bits&64 != 0 {
+		flags = append(flags, "error log has records")
+	}
+	if bits&128 != 0 {
+		flags = append(flags, "self-test log has errors")
+	}
+	return strings.Join(flags, ", ")
+}
+
 // fetchDriveInfo calls smartctl -a --json on a single device and parses the
-// key fields we care about.
-func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string) DriveInfo {
-	out, err := exec.Command("smartctl", "--json", "-a", devicePath).CombinedOutput()
+// key fields we care about. Returns (info, inStandby). When inStandby is true,
+// the drive was sleeping and no SMART data was collected.
+func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string) (DriveInfo, bool) {
+	args := []string{"--json", "-a"}
+	if dc.standbyMode != "never" {
+		args = append(args, "-n", dc.standbyMode)
+	}
+	args = append(args, devicePath)
+
+	out, err := exec.Command("smartctl", args...).CombinedOutput()
 	if err != nil {
-		// smartctl exits non-zero when SMART status is failing — that's expected.
-		// We still want to parse the JSON if possible.
-		log.Printf("smartctl -a %s exited with error (may be normal): %v", devicePath, err)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			code := exitErr.ExitCode()
+
+			// Bit 1 (value 2) with standby mode = drive is sleeping.
+			// smartctl prints "Device is in STANDBY mode" and exits.
+			if dc.standbyMode != "never" && code == 2 {
+				return DriveInfo{DevicePath: devicePath, Protocol: protocol}, true
+			}
+
+			execBits := code & 0x07
+			healthBits := code & 0xF8
+
+			// Bits 0-2: execution failures -- always log as WARNING.
+			if execBits != 0 {
+				log.Printf("WARNING: smartctl -a %s failed (exit code %d: %s)",
+					devicePath, code, decodeExecBits(code))
+			}
+
+			// Bits 3-7: drive health flags -- log once, suppress repeats.
+			if healthBits != 0 {
+				dc.mu.RLock()
+				prev := dc.lastHealthBits[devicePath]
+				dc.mu.RUnlock()
+				if healthBits != prev {
+					log.Printf("smartctl -a %s: drive health flags (exit code %d: %s)",
+						devicePath, code, decodeHealthBits(code))
+					dc.mu.Lock()
+					dc.lastHealthBits[devicePath] = healthBits
+					dc.mu.Unlock()
+				}
+			}
+		} else {
+			// Not an ExitError (binary missing, permissions, etc.)
+			log.Printf("WARNING: smartctl -a %s: %v", devicePath, err)
+		}
 	}
 
 	info := DriveInfo{
-		DevicePath: devicePath,
-		Protocol:   protocol,
-		RawJSON:    json.RawMessage(out),
+		DevicePath:  devicePath,
+		Protocol:    protocol,
+		LastUpdated: time.Now().UTC().Format(time.RFC3339),
+		RawJSON:     json.RawMessage(out),
 	}
 
 	// Best-effort extraction of model/serial from the JSON blob.
@@ -557,7 +718,7 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string) DriveInfo {
 	// Build a URL-safe slug from serial (preferred) or device path.
 	info.ID = makeDriveSlug(info.Serial, devicePath)
 
-	return info
+	return info, false
 }
 
 // extractString does a shallow lookup in a JSON object for a string value.

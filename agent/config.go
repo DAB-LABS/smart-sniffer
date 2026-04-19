@@ -30,6 +30,7 @@ type Config struct {
 	AdvertiseInterface string             `yaml:"advertise_interface"` // restrict mDNS to this interface (e.g. "eth0")
 	MDNSName           string             `yaml:"mdns_name"`           // custom mDNS instance name (default: smartha-<hostname>)
 	Filesystems        []FilesystemConfig `yaml:"filesystems"`         // empty = disk usage monitoring disabled
+	StandbyMode        string             `yaml:"standby_mode"`        // never, standby, sleep, idle (default: never)
 }
 
 // defaultConfig returns sane defaults.
@@ -122,6 +123,17 @@ func LoadConfig() (*Config, error) {
 	}
 	if cfg.ScanInterval < 5*time.Second {
 		return nil, fmt.Errorf("scan_interval too short (minimum 5s): %v", cfg.ScanInterval)
+	}
+
+	// Standby mode validation -- default to "never" if not set.
+	if cfg.StandbyMode == "" {
+		cfg.StandbyMode = "never"
+	}
+	validStandbyModes := map[string]bool{
+		"never": true, "standby": true, "sleep": true, "idle": true,
+	}
+	if !validStandbyModes[cfg.StandbyMode] {
+		return nil, fmt.Errorf("invalid standby_mode %q (must be never, standby, sleep, or idle)", cfg.StandbyMode)
 	}
 
 	return &cfg, nil

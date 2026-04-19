@@ -24,13 +24,14 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .attention import _has_usable_smart_data
-from .const import DOMAIN
-from .coordinator import SmartSnifferCoordinator
+from .const import CONF_TOKEN, DOMAIN
+from .coordinator import AgentHealthCoordinator, SmartSnifferCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -96,13 +97,21 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up SMART Sniffer binary sensor entities from a config entry."""
-    coordinator: SmartSnifferCoordinator = hass.data[DOMAIN][entry.entry_id]
+    data = hass.data[DOMAIN][entry.entry_id]
+    coordinator: SmartSnifferCoordinator = data["coordinator"]
+    health_coordinator: AgentHealthCoordinator = data["health_coordinator"]
 
-    entities: list[SmartSnifferHealthSensor] = []
+    entities: list[BinarySensorEntity] = []
+
+    # Per-drive health sensors.
     for drive_id, drive_data in coordinator.data.items():
         if drive_id.startswith("_"):
             continue  # skip internal keys like _filesystems
         entities.append(SmartSnifferHealthSensor(coordinator, drive_id, drive_data))
+
+    # Agent-level connectivity and auth sensors.
+    entities.append(AgentStatusBinarySensor(health_coordinator, entry))
+    entities.append(AuthActiveBinarySensor(health_coordinator, entry))
 
     async_add_entities(entities, update_before_add=False)
 
@@ -159,9 +168,109 @@ class SmartSnifferHealthSensor(
         drive_data = self.coordinator.data.get(self._drive_id)
         if not drive_data:
             return {}
+        attrs: dict[str, Any] = {}
         smart_data = drive_data.get("smart_data", {})
         if isinstance(smart_data, dict):
             status = smart_data.get("smart_status", {})
             if isinstance(status, dict):
-                return {"smart_passed": status.get("passed")}
-        return {}
+                attrs["smart_passed"] = status.get("passed")
+        # Standby attributes when drive is sleeping.
+        if drive_data.get("in_standby"):
+            attrs["in_standby"] = True
+            attrs["data_as_of"] = drive_data.get("last_updated", "unknown")
+        return attrs
+
+
+# ---------------------------------------------------------------------------
+# Agent connectivity binary sensor
+# ---------------------------------------------------------------------------
+
+class AgentStatusBinarySensor(
+    CoordinatorEntity[AgentHealthCoordinator], BinarySensorEntity
+):
+    """Binary sensor showing whether the agent is reachable.
+
+    device_class CONNECTIVITY: on = connected, off = disconnected.
+    Because this entity uses AgentHealthCoordinator (which never raises
+    UpdateFailed), it stays available even when the agent is offline --
+    it just flips to "off".
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Agent Status"
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_entity_registry_enabled_default = True
+    _attr_icon = "mdi:lan-connect"
+
+    def __init__(
+        self,
+        coordinator: AgentHealthCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        super().__init__(coordinator)
+        self._entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_agent_status"
+        self._attr_device_info = _agent_device_info(entry)
+
+    @property
+    def is_on(self) -> bool:
+        """Return True when the agent is reachable."""
+        return self.coordinator.data.get("connected", False)
+
+    @property
+    def icon(self) -> str:
+        if self.is_on:
+            return "mdi:lan-connect"
+        return "mdi:lan-disconnect"
+
+
+class AuthActiveBinarySensor(
+    CoordinatorEntity[AgentHealthCoordinator], BinarySensorEntity
+):
+    """Binary sensor showing whether token auth is configured for this agent.
+
+    Reads from the config entry data, not from the agent. Diagnostic only.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Auth Active"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(
+        self,
+        coordinator: AgentHealthCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        super().__init__(coordinator)
+        self._entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_auth_active"
+        self._attr_device_info = _agent_device_info(entry)
+
+    @property
+    def is_on(self) -> bool:
+        """Return True when a token is configured."""
+        return bool(self._entry.data.get(CONF_TOKEN, ""))
+
+    @property
+    def icon(self) -> str:
+        return "mdi:lock" if self.is_on else "mdi:lock-open-variant"
+
+
+def _agent_device_info(entry: ConfigEntry) -> dict[str, Any]:
+    """Build device_info for the per-agent device.
+
+    Groups all agent-level entities (status, version, diagnostics) under a
+    single device named after the agent's configured hostname or IP.
+    """
+    from .const import CONF_HOST
+
+    host = entry.data.get(CONF_HOST, "unknown")
+    title = entry.title or f"SMART Sniffer ({host})"
+
+    return {
+        "identifiers": {(DOMAIN, f"{entry.entry_id}_agent")},
+        "name": title,
+        "manufacturer": "SMART Sniffer",
+        "model": "Agent",
+    }

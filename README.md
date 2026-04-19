@@ -346,6 +346,7 @@ This is the most common "why isn't my drive showing data?" scenario. It's a hard
 - [ ] Standby-aware polling (`smartctl -n standby`)
 - [ ] YAML-based SMART attribute definitions (vendor field mapping, transforms, units)
 - [ ] SAS/SCSI drive support
+- [ ] Integration: agent connectivity sensor + diagnostic entities (version, last seen, IP, port, auth)
 - [ ] Agent: smartctl minimum version check (fail early with clear message if < 7.0)
 - [ ] Agent: container-aware filesystem reporting (MNT_PREFIX path mapping for Docker deployments)
 

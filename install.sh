@@ -831,14 +831,44 @@ if [ "$KEEP_CONFIG" = "false" ] && [ -n "$TTY_IN" ]; then
   echo ""
   pick_interface
 
+  # --- Standby-aware polling (HDD detection) ---
+  STANDBY_MODE="never"
+  _HAS_HDD="false"
+  if command -v smartctl &>/dev/null; then
+    _SCAN_JSON=$(smartctl --json --scan 2>/dev/null || true)
+    if [ -n "$_SCAN_JSON" ]; then
+      # Check each drive's rotation_rate. >0 means spinning disk (HDD).
+      while IFS= read -r _DEV_PATH; do
+        _DEV_INFO=$(smartctl --json -i "$_DEV_PATH" 2>/dev/null || true)
+        _ROT=$(echo "$_DEV_INFO" | grep -o '"rotation_rate"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*$' || true)
+        if [ -n "$_ROT" ] && [ "$_ROT" -gt 0 ] 2>/dev/null; then
+          _HAS_HDD="true"
+          break
+        fi
+      done < <(echo "$_SCAN_JSON" | grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)"/\1/')
+    fi
+  fi
+  if [ "$_HAS_HDD" = "true" ]; then
+    echo ""
+    echo "  Spinning drives (HDDs) detected. The agent can skip drives in"
+    echo "  standby to avoid waking them up. Recommended for NAS setups."
+    echo ""
+    read -rp "  Enable standby-aware polling? [Y/n]: " _STANDBY_ANS < "$TTY_IN"
+    case "$_STANDBY_ANS" in
+      [nN]*) STANDBY_MODE="never" ;;
+      *) STANDBY_MODE="standby" ;;
+    esac
+  fi
+
 elif [ "$KEEP_CONFIG" = "false" ]; then
-  info "Non-interactive mode detected — using defaults."
+  info "Non-interactive mode detected -- using defaults."
   PORT=""
   TOKEN=""
   SCAN_INTERVAL=""
   ADV_IFACE=""
   FS_YAML=""
   FS_DISPLAY=""
+  STANDBY_MODE="never"
 fi
 
 PORT="${PORT:-9099}"
@@ -885,6 +915,9 @@ CONFEOF
   fi
   if [ -n "$ADV_IFACE" ]; then
     echo "advertise_interface: $ADV_IFACE" >> "$INSTALL_CFG/config.yaml"
+  fi
+  if [ -n "$STANDBY_MODE" ] && [ "$STANDBY_MODE" != "never" ]; then
+    echo "standby_mode: $STANDBY_MODE" >> "$INSTALL_CFG/config.yaml"
   fi
   if [ -n "$FS_YAML" ]; then
     echo "" >> "$INSTALL_CFG/config.yaml"

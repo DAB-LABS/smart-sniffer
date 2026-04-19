@@ -676,6 +676,32 @@ try {
 
         # --- Fresh install: filesystem picker ---
         $PickedFS = Pick-Filesystem
+
+        # --- Fresh install: standby-aware polling (HDD detection) ---
+        $StandbyMode = "never"
+        $HasHDD = $false
+        try {
+            $ScanJson = & smartctl --json --scan 2>$null | ConvertFrom-Json
+            foreach ($Dev in $ScanJson.devices) {
+                $DevInfo = & smartctl --json -i $Dev.name 2>$null | ConvertFrom-Json
+                if ($DevInfo.rotation_rate -and $DevInfo.rotation_rate -gt 0) {
+                    $HasHDD = $true
+                    break
+                }
+            }
+        } catch { }
+        if ($HasHDD) {
+            Write-Host ""
+            Write-Host "  Spinning drives (HDDs) detected. The agent can skip drives in"
+            Write-Host "  standby to avoid waking them up. Recommended for NAS setups."
+            Write-Host ""
+            $StandbyAns = Read-Host "  Enable standby-aware polling? [Y/n]"
+            if ($StandbyAns -match '^[nN]') {
+                $StandbyMode = "never"
+            } else {
+                $StandbyMode = "standby"
+            }
+        }
     }
 
     # ---------------------------------------------------------------------------
@@ -739,6 +765,9 @@ try {
         }
         if ($PickedIface) {
             $ConfigContent += "`nadvertise_interface: $PickedIface"
+        }
+        if ($StandbyMode -and $StandbyMode -ne "never") {
+            $ConfigContent += "`nstandby_mode: $StandbyMode"
         }
         if ($PickedFS) {
             $ConfigContent += "`n$PickedFS"

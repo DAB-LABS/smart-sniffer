@@ -61,7 +61,7 @@ async def async_get_config_entry_diagnostics(
       - Per-drive summary: model, protocol, attention state, reasons.
       - Full (redacted) SMART data per drive for deep debugging.
     """
-    coordinator: SmartSnifferCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: SmartSnifferCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
 
     # Redact config entry.
     config_data = async_redact_data(dict(entry.data), CONFIG_REDACT_KEYS)

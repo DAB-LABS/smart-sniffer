@@ -340,3 +340,69 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             del self._prev_state[drive_id]
             self._prev_reasons.pop(drive_id, None)
             pn_dismiss(self.hass, _notif_id(drive_id))
+
+
+class AgentHealthCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+    """Lightweight coordinator that pings /api/health.
+
+    Never raises UpdateFailed -- always returns a result dict with
+    connected=True/False so the binary sensor stays available even
+    when the agent is offline.
+    """
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        self.host: str = entry.data[CONF_HOST]
+        self.port: int = entry.data[CONF_PORT]
+        self.token: str = entry.data.get(CONF_TOKEN, "")
+        self.entry = entry
+        interval = entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=f"{DOMAIN}_health",
+            update_interval=timedelta(seconds=interval),
+        )
+
+        # Track last known values so we can serve them when the agent is down.
+        self._last_version: str = ""
+        self._last_seen: str | None = None
+        self._last_os: str = ""
+        self._last_uptime: int | None = None
+
+    async def _async_update_data(self) -> dict[str, Any]:
+        """Ping the agent health endpoint. Never raises UpdateFailed."""
+        from homeassistant.util import dt as dt_util
+
+        session = async_get_clientsession(self.hass)
+        url = f"http://{self.host}:{self.port}/api/health"
+        headers = {"Authorization": f"Bearer {self.token}"} if self.token else {}
+
+        try:
+            async with session.get(
+                url,
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+                now = dt_util.utcnow()
+                self._last_version = data.get("version", "")
+                self._last_seen = now.isoformat()
+                self._last_os = data.get("os", "")
+                self._last_uptime = data.get("uptime_seconds")
+                return {
+                    "connected": True,
+                    "version": self._last_version,
+                    "os": self._last_os,
+                    "uptime_seconds": self._last_uptime,
+                    "last_seen": self._last_seen,
+                }
+        except (aiohttp.ClientError, asyncio.TimeoutError, TimeoutError):
+            return {
+                "connected": False,
+                "version": self._last_version,
+                "os": self._last_os,
+                "uptime_seconds": None,
+                "last_seen": self._last_seen,
+            }
