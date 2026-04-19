@@ -36,7 +36,7 @@ from .attention import (
     STATE_YES,
     evaluate_attention,
 )
-from .const import CONF_TOKEN, DOMAIN, FILESYSTEMS_KEY
+from .const import DOMAIN, FILESYSTEMS_KEY
 from .coordinator import AgentHealthCoordinator, SmartSnifferCoordinator
 
 _LOGGER = logging.getLogger(__name__)
