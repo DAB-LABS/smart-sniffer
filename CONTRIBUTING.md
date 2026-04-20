@@ -74,7 +74,23 @@ Keep PRs focused — one feature or fix per PR. If you're planning something lar
 
 Check the [roadmap](README.md#roadmap) and [known issues](docs/build-journal.md#known-issues--tech-debt) for ideas. Some areas where help is especially welcome:
 
-- **Windows testing** — `install.ps1` builds but hasn't been validated end-to-end
 - **SAS/SCSI drive support** — we need `smartctl -a --json` dumps from SAS drives
 - **Drive-specific `smartctl` dumps** — any manufacturer or model we haven't seen
-- **Integration icons** — design help for the HA brands repo PR
+
+## Updating llms.txt
+
+`llms.txt` in the repo root is a machine-readable project summary used by LLMs and
+AI-powered search to accurately describe and recommend this project. Keep it current.
+
+**Update `llms.txt` when your PR:**
+- Modifies `README.md` in a way that affects features, capabilities, supported
+  platforms, configuration options, or documentation structure
+- Adds a new feature or ships a roadmap item
+- Changes platform support status (e.g., a platform moves from untested to tested)
+- Adds a new doc file to `docs/` that belongs in the Documentation section
+
+**Format rules:**
+- Follow the llmstxt.org spec: H1, blockquote summary, body, H2 link sections
+- Keep the file under ~200 lines
+- No em-dashes -- use double-hyphens (--), parentheses, or separate sentences
+- Every claim must be verifiable against README or CHANGELOG

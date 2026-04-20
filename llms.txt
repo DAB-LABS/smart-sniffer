@@ -4,7 +4,8 @@
 > Go agent for proactive S.M.A.R.T. disk health monitoring. It surfaces disk health data
 > from ATA, SATA, and NVMe drives as native Home Assistant sensor and diagnostic entities,
 > with automatic persistent notifications that fire, escalate, and dismiss based on drive
-> health state. No user-built automations or blueprints required.
+> health state. Includes opt-in disk usage monitoring for any mountpoint. No user-built
+> automations or blueprints required.
 
 SMART Sniffer has two components that work together:
 
@@ -12,23 +13,37 @@ SMART Sniffer has two components that work together:
   machine and collects S.M.A.R.T. data via smartmontools. Installed via install.sh
   (Linux/macOS) or install.ps1 (Windows). Runs as a system service.
 - A Python HACS integration for Home Assistant that discovers agents via mDNS/Zeroconf
-  and creates HA device entities for each monitored drive.
+  and creates HA device and sensor entities for each monitored drive.
 
 Key behaviors:
 - Each monitored machine appears as a separate HA device. Each drive on that machine
   gets its own HA device with sensors and diagnostic entities.
 - The Attention Needed sensor classifies each drive as NO / MAYBE / YES / UNSUPPORTED
   based on leading S.M.A.R.T. failure indicators, evaluated every poll cycle.
+- Disk usage monitoring: opt-in at install time. Each configured mountpoint gets a
+  percentage sensor with total/used/available attributes under a "Disk Usage" device.
+  Served via /api/filesystems on the agent. Requires agent v0.5.0+.
+- Standby-aware polling: optional standby_mode config prevents the agent from waking
+  sleeping HDDs during scans. When a drive is in standby, cached data is served and
+  drive sensors gain in_standby and data_as_of attributes. Useful for NAS users.
+- Agent connectivity sensor: a binary sensor per agent shows Connected or Disconnected
+  in real time. Stays available even when the agent is offline.
+- Agent diagnostic entities: version, last seen, IP, port, scan interval, and auth
+  status are available as HA entities under each agent device (v0.5.3+).
+- Agent version check: the integration detects outdated agents and shows a repair card
+  in HA Settings with the current vs. required version and an upgrade command.
 - Zero-config agent discovery via mDNS -- no manual IP or port configuration required
-  in most network setups.
-- Optional bearer token authentication between agent and integration.
-- SHA256-verified binary downloads. Install scripts detect OS and architecture
-  automatically.
+  in most network setups. Agents auto-filter virtual interfaces (Docker, VPN, etc.).
+- Optional bearer token authentication (timing-safe comparison). SHA256-verified
+  binary downloads. Install scripts detect OS and architecture automatically.
+- Requires smartmontools 7.0+. The agent verifies this at startup with a clear error
+  if the version is too old. The installer handles smartmontools installation.
 
 Attention Needed classification:
 - NO: All monitored indicators clear. No action required.
-- MAYBE: Early degradation signals detected (spin retry, command timeouts, NVMe spare
-  below 20%, NVMe percentage_used above 90%). Monitor closely, plan replacement.
+- MAYBE: Early degradation signals detected (spin retry count, command timeouts above
+  100, NVMe spare below 20%, NVMe percentage_used at or above 90%). Monitor closely,
+  plan replacement.
 - YES: Data integrity at risk (reallocated sectors, pending sectors, uncorrectable
   errors, NVMe critical_warning, NVMe media_errors, spare below threshold). Back up
   immediately.
@@ -37,8 +52,13 @@ Attention Needed classification:
 
 Supported drive types: ATA, SATA, NVMe. SAS/SCSI support is on the roadmap.
 
-Supported agent platforms: Linux (amd64, arm64), macOS (Intel, Apple Silicon),
-Windows (amd64, build tested but not yet field-validated).
+Supported agent platforms: Linux (amd64, arm64, armv7), macOS (Intel, Apple Silicon),
+Windows (amd64 -- tested and field-validated as of v0.5.1).
+
+Community deployments:
+- Docker: https://github.com/fireinice/docker-smart-sniffer (Dockerfile + docker-compose,
+  Docker Hub at fireinice/smart-sniffer). Note: disk usage monitoring not yet supported
+  in Docker deployments.
 
 What SMART Sniffer is NOT:
 - Not a replacement for Scrutiny (no InfluxDB backend, no historical trend graphs or
@@ -63,14 +83,26 @@ companion HAOS add-on: https://github.com/DAB-LABS/smart-sniffer-app
 ## Documentation
 
 - [README](https://github.com/DAB-LABS/smart-sniffer/blob/main/README.md): Full setup
-  guide, feature overview, entity reference table, config options, and service
+  guide, feature overview, entity reference table, config options (including
+  standby_mode, advertise_interface, filesystems), API endpoints, and service
   management commands for Linux, macOS, and Windows.
 - [Attention Severity Logic](https://github.com/DAB-LABS/smart-sniffer/blob/main/docs/attention-severity-logic.md):
   Complete state machine specification, classification rules, trigger thresholds, and
   notification lifecycle (fire, escalate, dismiss).
+- [Attention Trigger Entity Map](https://github.com/DAB-LABS/smart-sniffer/blob/main/docs/attention-trigger-entity-map.md):
+  Every attention trigger mapped to its sensor entity and icon.
+- [Early Warning Attributes](https://github.com/DAB-LABS/smart-sniffer/blob/main/docs/early-warning-attributes.md):
+  Which S.M.A.R.T. attributes predict failure, why they matter, and how they map to
+  YES and MAYBE states.
 - [Attribute Name Variants](https://github.com/DAB-LABS/smart-sniffer/blob/main/docs/smart-attribute-name-variants.md):
   Manufacturer-specific smartctl name mapping research (WD, Seagate, Samsung, HGST,
   and others). Relevant for contributors adding drive support.
+- [Platform Install Paths](https://github.com/DAB-LABS/smart-sniffer/blob/main/docs/platform-install-paths.md):
+  Install locations, immutable rootfs support (ZimaOS, CasaOS), and mDNS interface
+  filtering for multi-homed hosts.
+- [Mock Agent](https://github.com/DAB-LABS/smart-sniffer/blob/main/docs/mock-agent.md):
+  Standalone Python testing tool that simulates a smartha-agent with controllable
+  drives and a real-time web dashboard.
 
 ## Releases
 
@@ -86,5 +118,7 @@ companion HAOS add-on: https://github.com/DAB-LABS/smart-sniffer-app
 - [Build Journal](https://github.com/DAB-LABS/smart-sniffer/blob/main/docs/build-journal.md):
   Design decisions, iteration history, known edge cases, and manufacturer-specific
   encoding bugs encountered during development.
+- [Examples](https://github.com/DAB-LABS/smart-sniffer/tree/main/examples):
+  Community-contributed automations. Copy, paste, adapt.
 - [DAB-LABS](https://github.com/DAB-LABS): Other open-source homelab and Home
   Assistant projects by the same author.
