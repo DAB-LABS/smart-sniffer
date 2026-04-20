@@ -30,3 +30,4 @@ docs/internal/
 # OS
 .DS_Store
 Thumbs.db
+trash/
