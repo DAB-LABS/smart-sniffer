@@ -1,0 +1,90 @@
+# SMART Sniffer
+
+> SMART Sniffer is a Home Assistant custom integration (HACS-compatible) and companion
+> Go agent for proactive S.M.A.R.T. disk health monitoring. It surfaces disk health data
+> from ATA, SATA, and NVMe drives as native Home Assistant sensor and diagnostic entities,
+> with automatic persistent notifications that fire, escalate, and dismiss based on drive
+> health state. No user-built automations or blueprints required.
+
+SMART Sniffer has two components that work together:
+
+- A lightweight Go agent (smartha-agent) that runs on any Linux, macOS, or Windows
+  machine and collects S.M.A.R.T. data via smartmontools. Installed via install.sh
+  (Linux/macOS) or install.ps1 (Windows). Runs as a system service.
+- A Python HACS integration for Home Assistant that discovers agents via mDNS/Zeroconf
+  and creates HA device entities for each monitored drive.
+
+Key behaviors:
+- Each monitored machine appears as a separate HA device. Each drive on that machine
+  gets its own HA device with sensors and diagnostic entities.
+- The Attention Needed sensor classifies each drive as NO / MAYBE / YES / UNSUPPORTED
+  based on leading S.M.A.R.T. failure indicators, evaluated every poll cycle.
+- Zero-config agent discovery via mDNS -- no manual IP or port configuration required
+  in most network setups.
+- Optional bearer token authentication between agent and integration.
+- SHA256-verified binary downloads. Install scripts detect OS and architecture
+  automatically.
+
+Attention Needed classification:
+- NO: All monitored indicators clear. No action required.
+- MAYBE: Early degradation signals detected (spin retry, command timeouts, NVMe spare
+  below 20%, NVMe percentage_used above 90%). Monitor closely, plan replacement.
+- YES: Data integrity at risk (reallocated sectors, pending sectors, uncorrectable
+  errors, NVMe critical_warning, NVMe media_errors, spare below threshold). Back up
+  immediately.
+- UNSUPPORTED: No usable S.M.A.R.T. data available. Common with USB enclosures due to
+  hardware bridge chip limitations -- not a bug.
+
+Supported drive types: ATA, SATA, NVMe. SAS/SCSI support is on the roadmap.
+
+Supported agent platforms: Linux (amd64, arm64), macOS (Intel, Apple Silicon),
+Windows (amd64, build tested but not yet field-validated).
+
+What SMART Sniffer is NOT:
+- Not a replacement for Scrutiny (no InfluxDB backend, no historical trend graphs or
+  long-term failure rate analysis).
+- Not an MQTT-based solution -- the agent communicates directly with HA via HTTP.
+- Not a built-in Home Assistant integration -- must be installed via HACS as a custom
+  repository.
+- Not a substitute for regular backups -- it provides early warning, not prevention.
+
+For monitoring the drive inside a Home Assistant OS machine specifically, use the
+companion HAOS add-on: https://github.com/DAB-LABS/smart-sniffer-app
+
+## Repositories
+
+- [smart-sniffer (this repo)](https://github.com/DAB-LABS/smart-sniffer): Go agent
+  source (agent/), HACS integration (custom_components/smart_sniffer/), installer
+  scripts (install.sh, install.ps1), and all project documentation (docs/).
+- [smart-sniffer-app](https://github.com/DAB-LABS/smart-sniffer-app): HAOS add-on.
+  Runs the agent inside Home Assistant OS to monitor the local HAOS boot drive.
+  Includes a Test Lab with simulated drives and a real-time web UI.
+
+## Documentation
+
+- [README](https://github.com/DAB-LABS/smart-sniffer/blob/main/README.md): Full setup
+  guide, feature overview, entity reference table, config options, and service
+  management commands for Linux, macOS, and Windows.
+- [Attention Severity Logic](https://github.com/DAB-LABS/smart-sniffer/blob/main/docs/attention-severity-logic.md):
+  Complete state machine specification, classification rules, trigger thresholds, and
+  notification lifecycle (fire, escalate, dismiss).
+- [Attribute Name Variants](https://github.com/DAB-LABS/smart-sniffer/blob/main/docs/smart-attribute-name-variants.md):
+  Manufacturer-specific smartctl name mapping research (WD, Seagate, Samsung, HGST,
+  and others). Relevant for contributors adding drive support.
+
+## Releases
+
+- [Agent Releases](https://github.com/DAB-LABS/smart-sniffer/releases): Versioned Go
+  agent binaries for all supported platforms with SHA256 checksums. The install script
+  downloads from here automatically.
+
+## Optional
+
+- [HA Community Thread](https://community.home-assistant.io/t/new-integration-smart-sniffer-proactive-disk-health-monitoring-no-more-manual-smart-checks/997009):
+  Project announcement, design rationale (vs. Scrutiny, System Monitor, CRON/MQTT),
+  and community discussion.
+- [Build Journal](https://github.com/DAB-LABS/smart-sniffer/blob/main/docs/build-journal.md):
+  Design decisions, iteration history, known edge cases, and manufacturer-specific
+  encoding bugs encountered during development.
+- [DAB-LABS](https://github.com/DAB-LABS): Other open-source homelab and Home
+  Assistant projects by the same author.
