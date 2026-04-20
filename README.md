@@ -343,11 +343,11 @@ This is the most common "why isn't my drive showing data?" scenario. It's a hard
 - [ ] Temperature-based attention triggers (absolute threshold + trend over time)
 - [ ] Configurable alert thresholds via options flow
 - [ ] Per-drive scan intervals
-- [ ] Standby-aware polling (`smartctl -n standby`)
+- [x] Standby-aware polling (`smartctl -n standby`) -- shipped v0.5.3
 - [ ] YAML-based SMART attribute definitions (vendor field mapping, transforms, units)
 - [ ] SAS/SCSI drive support
-- [ ] Integration: agent connectivity sensor + diagnostic entities (version, last seen, IP, port, auth)
-- [ ] Agent: smartctl minimum version check (fail early with clear message if < 7.0)
+- [x] Integration: agent connectivity sensor + diagnostic entities (version, last seen, IP, port, auth) -- shipped v0.5.3
+- [x] Agent: smartctl minimum version check (fail early with clear message if < 7.0) -- shipped v0.5.3
 - [ ] Agent: container-aware filesystem reporting (MNT_PREFIX path mapping for Docker deployments)
 
 ## Community Deployments
