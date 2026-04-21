@@ -24,12 +24,15 @@ Key behaviors:
   percentage sensor with total/used/available attributes under a "Disk Usage" device.
   Served via /api/filesystems on the agent. Requires agent v0.5.0+.
 - Standby-aware polling: optional standby_mode config prevents the agent from waking
-  sleeping HDDs during scans. When a drive is in standby, cached data is served and
-  drive sensors gain in_standby and data_as_of attributes. Useful for NAS users.
+  sleeping HDDs during scans. When a drive is in standby, cached data is served. Each
+  drive has a dedicated Standby binary sensor (v0.5.4+) that reports whether the drive
+  is currently spun down, with a data_as_of attribute showing how stale the cached
+  SMART readings are. Useful for NAS users with sleeping drives.
 - Agent connectivity sensor: a binary sensor per agent shows Connected or Disconnected
   in real time. Stays available even when the agent is offline.
-- Agent diagnostic entities: version, last seen, IP, port, scan interval, and auth
-  status are available as HA entities under each agent device (v0.5.3+).
+- Agent diagnostic entities: version, last seen, IP, port, HA Poll Interval, OS, and
+  auth status are available as HA entities under each agent device (v0.5.3+, OS added
+  in v0.5.4).
 - Agent version check: the integration detects outdated agents and shows a repair card
   in HA Settings with the current vs. required version and an upgrade command.
 - Zero-config agent discovery via mDNS -- no manual IP or port configuration required

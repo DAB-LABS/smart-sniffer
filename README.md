@@ -67,6 +67,7 @@ Attributes: `mountpoint`, `device`, `fstype`, `total_gb`, `used_gb`, `available_
 |--------|-------------|
 | Attention Needed | Proactive health alert — `NO` / `MAYBE` / `YES` / `UNSUPPORTED` |
 | Health | SMART pass/fail — OK, Problem, or Unknown |
+| Standby | Whether the drive is currently spun down. When On, exposes a `data_as_of` attribute showing when the cached SMART readings were last refreshed. |
 | Temperature | Current drive temp (°C) |
 | Power-On Hours | Total hours powered on |
 | SMART Status | Raw SMART verdict (PASSED / FAILED) |
@@ -85,6 +86,33 @@ Attributes: `mountpoint`, `device`, `fstype`, `total_gb`, `used_gb`, `available_
 | Available Spare | NVMe reserve block pool (%) |
 | Available Spare Threshold | Manufacturer-set minimum spare (%) |
 | Current Pending Sector Count | Sectors waiting for reallocation (ATA) |
+
+</details>
+
+<details>
+<summary><strong>Entities per agent</strong></summary>
+
+<br>
+
+Each agent host groups under its own HA device alongside the drive devices. These entities describe the agent itself rather than any one drive. Enabled-by-default entities show up as soon as you reload the integration; the rest are visible from the device page's "disabled" section and can be turned on from entity settings.
+
+**Primary (enabled by default):**
+
+| Entity | Type | Description |
+|--------|------|-------------|
+| Agent Status | binary_sensor | Connectivity. On when reachable, Off when disconnected. Stays available across outages so automations can trigger on it. |
+| Agent Version | sensor | Semantic version reported by the agent. Drives the "Agent version outdated" HA repair notification. |
+| OS | sensor | Agent host OS: `linux`, `darwin`, or `windows`. Reports `unknown` for agents older than v0.5.3. |
+
+**Diagnostic (disabled by default):**
+
+| Entity | Type | Description |
+|--------|------|-------------|
+| Agent Last Seen | sensor | Timestamp of the most recent successful poll. |
+| Agent IP | sensor | IP address recorded for the agent in the HA config entry. |
+| Agent Port | sensor | Port the agent is serving on (default 9099). |
+| HA Poll Interval | sensor | How often Home Assistant polls the agent, in seconds. Distinct from the agent's own `scan_interval`. |
+| Auth Active | binary_sensor | On when a bearer token is configured for this agent. |
 
 </details>
 
@@ -131,7 +159,7 @@ filesystems:                   # optional — set by installer's disk usage pick
 
 All options can also be set via CLI flags: `--port`, `--token`, `--scan-interval`, `--interface`, `--config`.
 
-**Scan interval:** Uses Go duration syntax — `30s`, `5m`, `1h`, `24h` are all valid. Each poll reads SMART data via `smartctl`, which wakes any drive that is spun down or in standby. If you have drives that sleep between accesses, a longer interval like `12h` or `24h` keeps them from waking unnecessarily.
+**Scan interval:** Uses Go duration syntax — `30s`, `5m`, `1h`, `24h` are all valid. Each poll reads SMART data via `smartctl`, which wakes any drive that is spun down or in standby. If you have drives that sleep between accesses, a longer interval like `12h` or `24h` keeps them from waking unnecessarily. This is the *agent-side* read cadence and is separate from the HA Poll Interval entity, which reflects how often Home Assistant pulls fresh data from the agent itself.
 
 **Network interface:** The `advertise_interface` setting restricts mDNS to a single interface. The installer sets this during setup if you pick a specific interface. When not set, the agent auto-filters known virtual interfaces (Docker, ZeroTier, Tailscale, WireGuard, etc.) and advertises on all remaining physical interfaces. To change the interface after install, edit `config.yaml` and restart the service — no reinstall needed.
 
@@ -348,6 +376,8 @@ This is the most common "why isn't my drive showing data?" scenario. It's a hard
 - [ ] SAS/SCSI drive support
 - [x] Integration: agent connectivity sensor + diagnostic entities (version, last seen, IP, port, auth) -- shipped v0.5.3
 - [x] Agent: smartctl minimum version check (fail early with clear message if < 7.0) -- shipped v0.5.3
+- [x] Integration: dedicated Drive Standby binary sensor with `data_as_of` attribute -- shipped v0.5.4
+- [x] Integration: Agent OS diagnostic sensor (linux / darwin / windows) -- shipped v0.5.4
 - [ ] Agent: container-aware filesystem reporting (MNT_PREFIX path mapping for Docker deployments)
 
 ## Community Deployments

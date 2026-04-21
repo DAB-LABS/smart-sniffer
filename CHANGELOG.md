@@ -2,6 +2,23 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.5.4 -- 2026-04-21
+
+Integration-only release. No agent changes required.
+
+### Added
+- **Drive Standby binary sensor** -- each drive now has a dedicated Standby entity that reports on when the drive is spun down and off when it is active. When on, the sensor exposes a `data_as_of` attribute showing when the cached SMART readings were last refreshed. Makes it straightforward to automate on standby state directly rather than reading an attribute off the Health sensor.
+- **Agent OS diagnostic sensor** -- the agent device now exposes an OS entity reporting the agent host as linux, darwin, or windows. Visible by default; useful for at-a-glance inventory across mixed deployments.
+
+### Changed
+- **Scan Interval renamed to HA Poll Interval** -- the existing agent diagnostic entity has been renamed to clarify that it represents how often Home Assistant polls the agent, not how often the agent itself reads SMART data from drives. The underlying entity is preserved, so existing automations and templates referencing the entity ID continue to work.
+
+### Deprecated
+- **`binary_sensor.*_health` attributes `in_standby` and `data_as_of`** -- superseded by the new `binary_sensor.*_standby` entity (state and `data_as_of` attribute). The attributes remain on the Health sensor in this release for backward compatibility with v0.5.3 automations and will be removed in a future release. Tracked in `docs/internal/process/deprecations.md`.
+
+### Upgrade Notes
+- **Integration update only.** Update via HACS and reload. No agent update, installer re-run, or configuration change is required.
+
 ## v0.5.3 -- 2026-04-19
 
 ### Fixed
@@ -14,7 +31,7 @@ All notable changes to SMART Sniffer are documented here.
 - **Agent diagnostic entities** -- version, last seen, IP, port, scan interval, and auth status are now available as entities under each agent device. Version is enabled by default; the rest are hidden by default and can be enabled in entity settings.
 - **Minimum smartctl version check** -- the agent now verifies smartctl 7.0+ is installed before starting, with clear upgrade instructions if not. Older versions lack the JSON output the agent depends on, and previously failed silently.
 - **OS and uptime in health endpoint** -- the agent's `/api/health` response now includes host OS and uptime, used by the new diagnostic entities.
-- **Standby indicators on drive sensors** -- when a drive is sleeping and being served from cache, its sensors gain `in_standby` and `data_as_of` attributes so you can tell the data is stale and how old it is.
+- **Standby indicators on drive sensors** -- when a drive is sleeping and being served from cache, its sensors gain `in_standby` and `data_as_of` attributes so you can tell the data is stale and how old it is. *(Deprecated in v0.5.4 -- replaced by a dedicated Standby binary sensor. The v0.5.3 attributes remain for backward compatibility.)*
 
 ### Upgrade Notes
 - **Agent update required.** Re-run the installer or replace the binary to get the new features. Existing configs work without changes -- all new options default to current behavior.

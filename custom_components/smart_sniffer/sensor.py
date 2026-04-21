@@ -434,7 +434,8 @@ async def async_setup_entry(
     entities.append(AgentLastSeenSensor(health_coordinator, entry))
     entities.append(AgentIPSensor(health_coordinator, entry))
     entities.append(AgentPortSensor(health_coordinator, entry))
-    entities.append(AgentScanIntervalSensor(health_coordinator, entry))
+    entities.append(AgentOSSensor(health_coordinator, entry))
+    entities.append(AgentPollIntervalSensor(health_coordinator, entry))
 
     async_add_entities(entities, update_before_add=False)
 
@@ -922,13 +923,44 @@ class AgentPortSensor(
         return self._entry.data.get(CONF_PORT, 9099)
 
 
-class AgentScanIntervalSensor(
+class AgentOSSensor(
     CoordinatorEntity[AgentHealthCoordinator], SensorEntity
 ):
-    """Agent scan interval from config entry (read-only diagnostic)."""
+    """Agent host OS (linux, darwin, windows) from the health endpoint."""
 
     _attr_has_entity_name = True
-    _attr_name = "Scan Interval"
+    _attr_name = "OS"
+    _attr_icon = "mdi:monitor"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = True
+
+    def __init__(self, coordinator: AgentHealthCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_agent_os"
+        self._attr_device_info = _agent_device_info(entry)
+
+    @property
+    def native_value(self) -> str | None:
+        value = self.coordinator.data.get("os")
+        return value or None
+
+
+class AgentPollIntervalSensor(
+    CoordinatorEntity[AgentHealthCoordinator], SensorEntity
+):
+    """HA-side poll interval from config entry (read-only diagnostic).
+
+    Reports how often Home Assistant pulls fresh data from the agent.
+    Distinct from the agent's own scan_interval (how often the agent
+    reads SMART data from drives).
+
+    Unique ID retains the legacy "_agent_scan_interval" suffix so existing
+    entity registry entries are preserved across the v0.5.4 rename.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "HA Poll Interval"
     _attr_device_class = SensorDeviceClass.DURATION
     _attr_native_unit_of_measurement = UnitOfTime.SECONDS
     _attr_icon = "mdi:timer-outline"

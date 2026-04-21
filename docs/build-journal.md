@@ -352,7 +352,7 @@ Immediate:
 
 - [ ] Fix `--config` flag in Go agent (or fix Windows installer to use working directory)
 - [ ] Clean committed build artifacts from git history
-- [ ] Update README entity table with all current sensors
+- [x] Update README entity table with all current sensors -- ✅ shipped v0.5.4 (added per-agent entity table covering v0.5.3 diagnostics + v0.5.4 Drive Standby and Agent OS)
 - [x] Update `early-warning-attributes.md` YAML examples (binary → enum) — ✅ fixed in v0.4.22
 - [x] Validate release workflow (push `v0.1.0` tag, watch Actions) — ✅ working
 - [x] Test `install.sh` on Linux — ✅ tested on Kali VM (QEMU). Install, reinstall, uninstall all working. Auth token verified.

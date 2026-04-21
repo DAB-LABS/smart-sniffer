@@ -1,14 +1,19 @@
-"""Binary sensor for SMART Sniffer — drive health.
+"""Binary sensors for SMART Sniffer — drive health and standby.
 
-One binary sensor per drive:
+Per-drive binary sensors:
 
-  health — SMART's official pass/fail verdict + NVMe critical_warning.
-           This is the lagging indicator: drives can report PASSED right up
-           until catastrophic failure.
+  health  — SMART's official pass/fail verdict + NVMe critical_warning.
+            This is the lagging indicator: drives can report PASSED right up
+            until catastrophic failure.
 
-           device_class PROBLEM: on = SMART FAILED, off = SMART PASSED.
-           Returns None (HA renders "Unknown") when the drive provides no
-           usable SMART data (e.g., USB enclosures blocking passthrough).
+            device_class PROBLEM: on = SMART FAILED, off = SMART PASSED.
+            Returns None (HA renders "Unknown") when the drive provides no
+            usable SMART data (e.g., USB enclosures blocking passthrough).
+
+  standby — Whether the drive is currently spun down. When on, the SMART
+            readings for this drive are being served from cache; the
+            sensor exposes a data_as_of attribute so consumers can see
+            how stale those readings are. Introduced in v0.5.4.
 
 The early-warning "Attention Needed" sensor lives in sensor.py as an enum
 sensor (NO / MAYBE / YES / UNSUPPORTED). See attention.py for the logic.
@@ -103,11 +108,12 @@ async def async_setup_entry(
 
     entities: list[BinarySensorEntity] = []
 
-    # Per-drive health sensors.
+    # Per-drive health + standby sensors.
     for drive_id, drive_data in coordinator.data.items():
         if drive_id.startswith("_"):
             continue  # skip internal keys like _filesystems
         entities.append(SmartSnifferHealthSensor(coordinator, drive_id, drive_data))
+        entities.append(DriveStandbySensor(coordinator, drive_id, drive_data))
 
     # Agent-level connectivity and auth sensors.
     entities.append(AgentStatusBinarySensor(health_coordinator, entry))
@@ -174,11 +180,73 @@ class SmartSnifferHealthSensor(
             status = smart_data.get("smart_status", {})
             if isinstance(status, dict):
                 attrs["smart_passed"] = status.get("passed")
-        # Standby attributes when drive is sleeping.
+        # DEPRECATED (v0.5.4): the in_standby and data_as_of attributes on
+        # this sensor are superseded by the dedicated DriveStandbySensor
+        # (binary_sensor.*_standby). Kept here for backward compatibility
+        # with v0.5.3 automations/templates. Planned removal in a future
+        # release. See docs/internal/process/deprecations.md.
         if drive_data.get("in_standby"):
             attrs["in_standby"] = True
             attrs["data_as_of"] = drive_data.get("last_updated", "unknown")
         return attrs
+
+
+class DriveStandbySensor(
+    CoordinatorEntity[SmartSnifferCoordinator], BinarySensorEntity
+):
+    """Binary sensor showing whether the drive is currently in standby.
+
+    on  = drive is spun down / sleeping; SMART data served from cache
+    off = drive is active; SMART data is fresh
+
+    When on, exposes `data_as_of` as an attribute so consumers can see how
+    stale the cached readings are. Introduced in v0.5.4 as the canonical
+    replacement for the in_standby/data_as_of attributes previously attached
+    to the Health sensor.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Standby"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = True
+
+    def __init__(
+        self,
+        coordinator: SmartSnifferCoordinator,
+        drive_id: str,
+        drive_data: dict[str, Any],
+    ) -> None:
+        super().__init__(coordinator)
+        self._drive_id = drive_id
+        model  = drive_data.get("model", "Unknown Drive")
+        serial = drive_data.get("serial", drive_id)
+        self._attr_unique_id = (
+            f"{coordinator.config_entry.entry_id}_{drive_id}_standby"
+        )
+        self._attr_device_info = {
+            "identifiers":   {(DOMAIN, drive_id)},
+            "name":          f"{model} ({serial})",
+            "manufacturer":  model.split()[0] if model else "Unknown",
+            "model":         model,
+            "serial_number": serial,
+        }
+
+    @property
+    def is_on(self) -> bool:
+        """Return True when the drive is in standby."""
+        drive_data = self.coordinator.data.get(self._drive_id) or {}
+        return bool(drive_data.get("in_standby", False))
+
+    @property
+    def icon(self) -> str:
+        return "mdi:sleep" if self.is_on else "mdi:power"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        if not self.is_on:
+            return {}
+        drive_data = self.coordinator.data.get(self._drive_id) or {}
+        return {"data_as_of": drive_data.get("last_updated", "unknown")}
 
 
 # ---------------------------------------------------------------------------
