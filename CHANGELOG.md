@@ -2,6 +2,15 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.5.5.1 -- 2026-04-24
+
+Agent-only patch. No integration, installer, or config changes.
+
+Addresses the PATH resolution issue reported by @EagleDTW in [#17](https://github.com/DAB-LABS/smart-sniffer/issues/17) -- Synology DSM (and other NAS platforms) ship an outdated smartctl in `/usr/bin` that shadows newer versions installed via package managers.
+
+### Fixed
+- **smartctl path auto-resolution** -- the agent no longer relies solely on `PATH` to find `smartctl`. If the version in `PATH` is missing or older than 7.0, the agent searches 13 known platform-specific install locations (SynoCommunity, Entware, Homebrew, MacPorts, NixOS, Unraid NerdTools, QNAP QPKG, standard Linux/BSD paths). The first 7.0+ binary found is used automatically. Zero new flags, zero config -- the agent finds the right binary itself. Logged on startup: `using smartctl: /path/to/smartctl (version X.Y)`.
+
 ## v0.5.5 -- 2026-04-24
 
 Agent-only release. No integration or installer changes required.

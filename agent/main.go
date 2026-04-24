@@ -58,37 +58,26 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 	}
 
 	// --discover flag: probe drives, detect protocols, optionally write config.
-	// Must exit before preflight checks (no HTTP server started).
+	// Must resolve smartctl path before running (discover needs to call smartctl).
 	if cfg.Discover {
+		smartctlPath, _, resolveErr := resolveSmartctlPath("7.0")
+		if resolveErr != nil {
+			return resolveErr
+		}
+		cfg.SmartctlPath = smartctlPath
 		return RunDiscover(cfg, cfg.NoWrite)
 	}
 
-	// --- Preflight checks (order matters) ---
-	if err := preflightSmartctlExists(); err != nil {
-		return err
-	}
-
-	smartctlVer, err := preflightSmartctlVersion()
+	// --- Preflight: resolve smartctl binary ---
+	const minSmartctlVersion = "7.0"
+	smartctlPath, smartctlVer, err := resolveSmartctlPath(minSmartctlVersion)
 	if err != nil {
 		return err
 	}
+	cfg.SmartctlPath = smartctlPath
+	log.Printf("using smartctl: %s (version %s)", smartctlPath, smartctlVer)
 
-	const minSmartctlVersion = "7.0"
-	if !isSmartctlVersionOK(smartctlVer, minSmartctlVersion) {
-		return fmt.Errorf(`ERROR: smartctl %s is too old. The agent requires smartctl %s or newer
-for JSON output support (--json flag).
-
-Your options:
-  1. Update smartmontools from https://www.smartmontools.org/wiki/Download
-  2. Check if a newer version is available in your package manager:
-       apt:  sudo apt install smartmontools
-       dnf:  sudo dnf install smartmontools
-       brew: brew install smartmontools
-
-Run 'smartctl --version' to check your current version.`, smartctlVer, minSmartctlVersion)
-	}
-
-	drives, err := preflightScanDrives()
+	drives, err := preflightScanDrives(cfg.SmartctlPath)
 	if err != nil {
 		return err
 	}
@@ -302,38 +291,9 @@ func detectOS() string {
 // Preflight checks
 // ---------------------------------------------------------------------------
 
-func preflightSmartctlExists() error {
-	_, err := exec.LookPath("smartctl")
-	if err != nil {
-		return fmt.Errorf(`ERROR: smartctl not found in PATH.
-smartmontools is required for SMART Sniffer to function.
-
-Install it for your platform:
-  Linux (Debian/Ubuntu):  sudo apt install smartmontools
-  Linux (RHEL/Fedora):    sudo dnf install smartmontools
-  macOS (Homebrew):       brew install smartmontools
-  Windows (Chocolatey):   choco install smartmontools
-
-More info: https://www.smartmontools.org/wiki/Download
-`)
-	}
-	return nil
-}
-
-// preflightSmartctlVersion runs "smartctl --version", extracts the version
-// string and returns it. Exits on unexpected failure.
-func preflightSmartctlVersion() (string, error) {
-	out, err := exec.Command("smartctl", "--version").CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("ERROR: failed to run smartctl --version: %v\nOutput: %s", err, string(out))
-	}
-	ver := parseSmartctlVersion(string(out))
-	if ver == "" {
-		ver = "unknown"
-	}
-	log.Printf("smartctl %s detected", ver)
-	return ver, nil
-}
+// preflightSmartctlExists and preflightSmartctlVersion have been replaced
+// by resolveSmartctlPath() which handles both existence and version checking
+// with fallback to known platform-specific paths.
 
 // parseSmartctlVersion extracts a version like "7.4" from the --version output.
 var versionRe = regexp.MustCompile(`smartctl\s+(\d+\.\d+)`)
@@ -367,10 +327,112 @@ func isSmartctlVersionOK(ver, minVer string) bool {
 	return vMaj > mMaj || (vMaj == mMaj && vMin >= mMin)
 }
 
+// smartctlSearchPaths lists known installation locations for smartctl across
+// platforms. Checked in order when the PATH version is missing or too old.
+// See docs/internal/research/smartctl-install-paths.md for full research.
+var smartctlSearchPaths = []string{
+	// NAS platforms (most likely to need fallback)
+	"/var/packages/synocli-disk/target/sbin/smartctl", // SynoCommunity on Synology
+	"/opt/sbin/smartctl",                               // Entware (Synology/QNAP)
+	"/opt/bin/smartctl",                                // Entware alternate
+	"/boot/extra/sbin/smartctl",                        // Unraid NerdTools
+	"/boot/extra/bin/smartctl",                         // Unraid NerdTools alternate
+	"/share/CACHEDEV1_DATA/.qpkg/smartmontools/bin/smartctl", // QNAP QPKG
+
+	// Standard Linux
+	"/usr/sbin/smartctl", // Debian, Ubuntu, RHEL, Fedora, Arch, Alpine, Proxmox, OMV
+
+	// BSD / TrueNAS CORE
+	"/usr/local/sbin/smartctl", // FreeBSD, OpenBSD
+
+	// macOS
+	"/usr/local/bin/smartctl",  // Homebrew (Intel)
+	"/opt/homebrew/bin/smartctl", // Homebrew (Apple Silicon)
+	"/opt/local/sbin/smartctl", // MacPorts
+
+	// NixOS
+	"/run/current-system/sw/sbin/smartctl", // NixOS system profile
+}
+
+// resolveSmartctlPath finds the best smartctl binary available. It checks
+// PATH first, then falls back to known platform-specific paths. Returns the
+// full path and version string, or an error if no usable binary is found.
+func resolveSmartctlPath(minVersion string) (string, string, error) {
+	// 1. Try PATH first (current behavior for most users).
+	pathBin, err := exec.LookPath("smartctl")
+	if err == nil {
+		ver := getSmartctlVersion(pathBin)
+		if isSmartctlVersionOK(ver, minVersion) {
+			return pathBin, ver, nil
+		}
+		log.Printf("smartctl in PATH is %s (requires %s+), searching known paths...", ver, minVersion)
+	}
+
+	// 2. Search known platform-specific paths.
+	for _, candidate := range smartctlSearchPaths {
+		info, statErr := os.Stat(candidate)
+		if statErr != nil || info.IsDir() {
+			continue
+		}
+		if info.Mode()&0111 == 0 {
+			continue // not executable
+		}
+		ver := getSmartctlVersion(candidate)
+		if ver == "" {
+			continue
+		}
+		if isSmartctlVersionOK(ver, minVersion) {
+			log.Printf("found smartctl %s at %s", ver, candidate)
+			return candidate, ver, nil
+		}
+	}
+
+	// 3. Nothing found.
+	if pathBin != "" {
+		return "", "", fmt.Errorf(`ERROR: smartctl found in PATH but version is too old.
+The agent requires smartctl %s or newer for JSON output support.
+
+The smartctl in your PATH is at: %s
+
+Install a newer version:
+  Linux (Debian/Ubuntu):  sudo apt install smartmontools
+  Linux (RHEL/Fedora):    sudo dnf install smartmontools
+  macOS (Homebrew):       brew install smartmontools
+  Synology:               Install SynoCli Disk Tools from SynoCommunity
+  QNAP:                   Install smartmontools via Entware (opkg install smartmontools)
+
+Run 'smartctl --version' to check your current version.`, minVersion, pathBin)
+	}
+
+	return "", "", fmt.Errorf(`ERROR: smartctl not found in PATH or known locations.
+smartmontools is required for SMART Sniffer to function.
+
+Install it for your platform:
+  Linux (Debian/Ubuntu):  sudo apt install smartmontools
+  Linux (RHEL/Fedora):    sudo dnf install smartmontools
+  macOS (Homebrew):       brew install smartmontools
+  Windows (Chocolatey):   choco install smartmontools
+  Synology:               Install SynoCli Disk Tools from SynoCommunity
+  QNAP:                   Install smartmontools via Entware (opkg install smartmontools)
+
+More info: https://www.smartmontools.org/wiki/Download
+`)
+}
+
+// getSmartctlVersion runs "<path> --version" and returns the version string,
+// or "" if it can't be determined.
+func getSmartctlVersion(path string) string {
+	out, err := exec.Command(path, "--version").CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	return parseSmartctlVersion(string(out))
+}
+
 // preflightScanDrives runs "smartctl --scan" and checks for permission errors
 // or zero drives.
-func preflightScanDrives() ([]string, error) {
-	out, err := exec.Command("smartctl", "--scan").CombinedOutput()
+func preflightScanDrives(smartctlPath string) ([]string, error) {
+	out, err := exec.Command(smartctlPath, "--scan").CombinedOutput()
 	outStr := string(out)
 
 	// Permission errors surface in different ways depending on OS.
@@ -558,10 +620,10 @@ func (dc *DriveCache) Refresh() {
 	}
 	dc.mu.Unlock()
 
-	scanOut, err := exec.Command("smartctl", "--json", scanCmd).CombinedOutput()
+	scanOut, err := exec.Command(dc.cfg.SmartctlPath, "--json", scanCmd).CombinedOutput()
 	if err != nil && scanCmd == "--scan-open" {
 		log.Println("--scan-open failed, falling back to --scan")
-		scanOut, err = exec.Command("smartctl", "--json", "--scan").CombinedOutput()
+		scanOut, err = exec.Command(dc.cfg.SmartctlPath, "--json", "--scan").CombinedOutput()
 	}
 	if err != nil {
 		log.Printf("drive scan error: %v", err)
@@ -703,8 +765,8 @@ func decodeHealthBits(code int) string {
 
 // runSmartctl runs smartctl with the given args and returns (output, exitCode, error).
 // error is non-nil only for non-ExitError failures (missing binary, permissions, etc.).
-func runSmartctl(args []string) ([]byte, int, error) {
-	out, err := exec.Command("smartctl", args...).CombinedOutput()
+func runSmartctl(smartctlPath string, args []string) ([]byte, int, error) {
+	out, err := exec.Command(smartctlPath, args...).CombinedOutput()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return out, exitErr.ExitCode(), nil
@@ -736,7 +798,7 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string) (DriveInfo, bo
 	}
 	args = append(args, devicePath)
 
-	out, code, execErr := runSmartctl(args)
+	out, code, execErr := runSmartctl(dc.cfg.SmartctlPath, args)
 	if execErr != nil {
 		// Non-ExitError (binary missing, permissions, etc.)
 		log.Printf("WARNING: smartctl -a %s: %v", devicePath, execErr)
@@ -755,7 +817,7 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string) (DriveInfo, bo
 			}
 			satArgs = append(satArgs, devicePath)
 
-			satOut, satCode, satExecErr := runSmartctl(satArgs)
+			satOut, satCode, satExecErr := runSmartctl(dc.cfg.SmartctlPath, satArgs)
 			if satExecErr == nil && satCode&0x02 == 0 {
 				log.Printf("INFO: %s reports as SCSI but SAT succeeded -- using SAT for this drive", devicePath)
 				dc.mu.Lock()

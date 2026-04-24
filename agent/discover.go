@@ -31,10 +31,10 @@ func RunDiscover(cfg *Config, noWrite bool) error {
 	fmt.Println("Scanning drives...")
 
 	// Always use --scan-open in discover mode for best protocol detection.
-	scanOut, err := exec.Command("smartctl", "--json", "--scan-open").CombinedOutput()
+	scanOut, err := exec.Command(cfg.SmartctlPath, "--json", "--scan-open").CombinedOutput()
 	if err != nil {
 		// Fall back to --scan if --scan-open is unsupported.
-		scanOut, err = exec.Command("smartctl", "--json", "--scan").CombinedOutput()
+		scanOut, err = exec.Command(cfg.SmartctlPath, "--json", "--scan").CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("smartctl --scan failed: %v", err)
 		}
@@ -56,7 +56,7 @@ func RunDiscover(cfg *Config, noWrite bool) error {
 		fmt.Printf("  Standard scan found 0 drives.\n")
 	} else {
 		for _, dev := range scanResult.Devices {
-			r := probeOneDrive(dev.Name, dev.Protocol)
+			r := probeOneDrive(cfg.SmartctlPath, dev.Name, dev.Protocol)
 			results = append(results, r)
 			printDriveResult(r)
 		}
@@ -90,7 +90,7 @@ func RunDiscover(cfg *Config, noWrite bool) error {
 				continue
 			}
 
-			r := probeOneDrive(path, "sat")
+			r := probeOneDrive(cfg.SmartctlPath, path, "sat")
 			results = append(results, r)
 			printDriveResult(r)
 		}
@@ -176,7 +176,7 @@ func RunDiscover(cfg *Config, noWrite bool) error {
 
 // probeOneDrive attempts to read SMART data from a single drive path, trying
 // SAT fallback if the initial protocol fails. Returns a discoverDriveResult.
-func probeOneDrive(path, protocol string) discoverDriveResult {
+func probeOneDrive(smartctlPath, path, protocol string) discoverDriveResult {
 	r := discoverDriveResult{path: path, scanProto: protocol}
 
 	args := []string{"--json", "-a"}
@@ -185,7 +185,7 @@ func probeOneDrive(path, protocol string) discoverDriveResult {
 	}
 	args = append(args, path)
 
-	out, err := exec.Command("smartctl", args...).CombinedOutput()
+	out, err := exec.Command(smartctlPath, args...).CombinedOutput()
 	code := 0
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -210,7 +210,7 @@ func probeOneDrive(path, protocol string) discoverDriveResult {
 	if strings.EqualFold(protocol, "scsi") || strings.EqualFold(protocol, "sat") {
 		r.satRetried = true
 		satArgs := []string{"--json", "-a", "-d", "sat", path}
-		satOut, satErr := exec.Command("smartctl", satArgs...).CombinedOutput()
+		satOut, satErr := exec.Command(smartctlPath, satArgs...).CombinedOutput()
 		satCode := 0
 		if satErr != nil {
 			if satExitErr, ok := satErr.(*exec.ExitError); ok {

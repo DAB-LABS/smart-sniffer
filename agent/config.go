@@ -41,6 +41,7 @@ type Config struct {
 	DeviceOverrides    []DeviceOverride   `yaml:"device_overrides"`    // manual protocol overrides per device path
 	Discover           bool               `yaml:"-"`                   // set by --discover flag; not read from config file
 	NoWrite            bool               `yaml:"-"`                   // set by --no-write flag; skips config write in discover mode
+	SmartctlPath       string             `yaml:"-"`                   // resolved path to smartctl binary; set by resolveSmartctlPath()
 }
 
 // defaultConfig returns sane defaults.
