@@ -2,6 +2,23 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.5.5 -- 2026-04-24
+
+Agent-only release. No integration or installer changes required.
+
+Addresses issues [#16](https://github.com/DAB-LABS/smart-sniffer/issues/16) (QNAP SATA drives misreported as SCSI) and [#17](https://github.com/DAB-LABS/smart-sniffer/issues/17) (Synology `/dev/sata*` paths not discovered by scan).
+
+### Added
+- **NAS protocol auto-detection on startup** -- the agent now uses `smartctl --scan-open` on its first scan cycle instead of `--scan`. This opens device handles and gives more accurate protocol detection, which fixes QNAP HBAs that report SATA drives as SCSI. Subsequent cycles revert to regular `--scan` to avoid waking sleeping drives.
+- **SAT fallback for misreported SCSI drives** -- if a drive is reported as SCSI but smartctl cannot read it, the agent automatically retries with `-d sat` (SCSI-to-ATA Translation). If that works, the agent uses SAT for that drive going forward and logs it once. No config required -- QNAP users affected by #16 should see this pick up their drives automatically.
+- **`device_overrides` config option** -- for drives that need an explicit protocol the agent cannot auto-detect (Synology `/dev/sata*` paths, RAID controllers with custom `-d` syntax), you can now list them in `config.yaml`. Overridden devices are treated as first-class drives even if they are not found by `--scan`.
+- **`--discover` diagnostic flag** -- run `smartha-agent --discover` to probe every drive, test protocol detection, check SAT fallback, and print a clear summary of what the agent will see at runtime. On Synology, it also probes `/dev/sata1` through `/dev/sata8`. If any drives need `device_overrides`, it offers to write the config for you. Useful for support: paste the output into a GitHub issue and we can diagnose protocol problems without asking for manual smartctl runs.
+
+### Upgrade Notes
+- **Agent update only.** Replace the binary or re-run the installer. No integration update, config migration, or installer re-run is required.
+- **QNAP users affected by #16:** update the agent -- no config change needed. The SAT fallback handles this automatically.
+- **Synology users affected by #17:** update the agent and run `smartha-agent --discover` to generate the `device_overrides` block for your config. Restart the agent after writing the config.
+
 ## v0.5.4 -- 2026-04-21
 
 Integration-only release. No agent changes required.

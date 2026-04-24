@@ -20,6 +20,13 @@ type FilesystemConfig struct {
 	Device string `yaml:"device"`
 }
 
+// DeviceOverride allows manual protocol specification for drives that
+// auto-detection cannot handle (Synology paths, RAID controllers, etc.).
+type DeviceOverride struct {
+	Device   string `yaml:"device"`
+	Protocol string `yaml:"protocol"`
+}
+
 // Config holds all agent configuration. Values are resolved with this
 // precedence: CLI flags > config file > defaults.
 type Config struct {
@@ -31,6 +38,9 @@ type Config struct {
 	MDNSName           string             `yaml:"mdns_name"`           // custom mDNS instance name (default: smartha-<hostname>)
 	Filesystems        []FilesystemConfig `yaml:"filesystems"`         // empty = disk usage monitoring disabled
 	StandbyMode        string             `yaml:"standby_mode"`        // never, standby, sleep, idle (default: never)
+	DeviceOverrides    []DeviceOverride   `yaml:"device_overrides"`    // manual protocol overrides per device path
+	Discover           bool               `yaml:"-"`                   // set by --discover flag; not read from config file
+	NoWrite            bool               `yaml:"-"`                   // set by --no-write flag; skips config write in discover mode
 }
 
 // defaultConfig returns sane defaults.
@@ -70,6 +80,8 @@ func LoadConfig() (*Config, error) {
 	noMDNS := flag.Bool("no-mdns", false, "Disable mDNS/Zeroconf service advertisement")
 	advIface := flag.String("interface", "", "Restrict mDNS advertisement to this network interface")
 	mdnsName := flag.String("mdns-name", "", "Custom mDNS instance name (default: smartha-<hostname>)")
+	discover := flag.Bool("discover", false, "Probe drives and detect protocols (diagnostic tool)")
+	noWrite := flag.Bool("no-write", false, "With --discover: print proposed overrides but do not write config")
 	flag.Parse()
 
 	// --- Attempt to load config.yaml ---
@@ -116,6 +128,12 @@ func LoadConfig() (*Config, error) {
 	if *mdnsName != "" {
 		cfg.MDNSName = *mdnsName
 	}
+	if *discover {
+		cfg.Discover = true
+	}
+	if *noWrite {
+		cfg.NoWrite = true
+	}
 
 	// Sanity checks
 	if cfg.Port < 1 || cfg.Port > 65535 {
@@ -134,6 +152,16 @@ func LoadConfig() (*Config, error) {
 	}
 	if !validStandbyModes[cfg.StandbyMode] {
 		return nil, fmt.Errorf("invalid standby_mode %q (must be never, standby, sleep, or idle)", cfg.StandbyMode)
+	}
+
+	// Validate device_overrides
+	for i, ov := range cfg.DeviceOverrides {
+		if ov.Device == "" {
+			return nil, fmt.Errorf("device_overrides[%d]: device path is required", i)
+		}
+		if ov.Protocol == "" {
+			return nil, fmt.Errorf("device_overrides[%d]: protocol is required for %s", i, ov.Device)
+		}
 	}
 
 	return &cfg, nil

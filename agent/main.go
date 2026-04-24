@@ -57,6 +57,12 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 		return fmt.Errorf("failed to load configuration: %w", err)
 	}
 
+	// --discover flag: probe drives, detect protocols, optionally write config.
+	// Must exit before preflight checks (no HTTP server started).
+	if cfg.Discover {
+		return RunDiscover(cfg, cfg.NoWrite)
+	}
+
 	// --- Preflight checks (order matters) ---
 	if err := preflightSmartctlExists(); err != nil {
 		return err
@@ -110,7 +116,7 @@ Run 'smartctl --version' to check your current version.`, smartctlVer, minSmartc
 	}
 
 	// --- Cache / background scanner ---
-	cache := NewDriveCache(cfg.ScanInterval, cfg.StandbyMode)
+	cache := NewDriveCache(cfg)
 	cache.Refresh() // initial population
 
 	// --- Filesystem cache (if configured) ---
@@ -492,6 +498,9 @@ type DriveCache struct {
 	fsCache        *FilesystemCache     // refreshed alongside drive data (nil = disabled)
 	lastHealthBits map[string]int       // per-device last-seen health bits (suppress repeat logs)
 	standbyMode    string               // never, standby, sleep, idle
+	firstPoll      bool                 // true until first Refresh() completes; uses --scan-open on first poll
+	protocolCache  map[string]string    // per-device-path detected or overridden protocol
+	cfg            *Config              // full agent config (for device_overrides access)
 }
 
 // DriveInfo is the per-drive cached payload.
@@ -515,35 +524,90 @@ type DriveSummary struct {
 	Protocol   string `json:"protocol"`
 }
 
-func NewDriveCache(interval time.Duration, standbyMode string) *DriveCache {
+func NewDriveCache(cfg *Config) *DriveCache {
 	return &DriveCache{
-		interval:       interval,
+		interval:       cfg.ScanInterval,
 		drives:         make(map[string]DriveInfo),
 		lastHealthBits: make(map[string]int),
-		standbyMode:    standbyMode,
+		standbyMode:    cfg.StandbyMode,
+		firstPoll:      true,
+		protocolCache:  make(map[string]string),
+		cfg:            cfg,
 	}
+}
+
+// scanDevice is the per-entry shape returned by smartctl --scan / --scan-open.
+type scanDevice struct {
+	Name     string `json:"name"`
+	InfoName string `json:"info_name"`
+	Type     string `json:"type"`
+	Protocol string `json:"protocol"`
 }
 
 // Refresh re-scans drives and pulls full SMART data for each.
 func (dc *DriveCache) Refresh() {
-	// Discover drives via JSON scan.
-	scanOut, err := exec.Command("smartctl", "--json", "--scan").CombinedOutput()
+	// On the first poll, use --scan-open so smartctl opens device handles for
+	// accurate protocol detection. Subsequent polls use --scan to avoid waking
+	// sleeping drives. Fall back to --scan if --scan-open is unsupported.
+	scanCmd := "--scan"
+	dc.mu.Lock()
+	if dc.firstPoll {
+		scanCmd = "--scan-open"
+		dc.firstPoll = false
+		log.Println("first poll: using --scan-open for protocol detection")
+	}
+	dc.mu.Unlock()
+
+	scanOut, err := exec.Command("smartctl", "--json", scanCmd).CombinedOutput()
+	if err != nil && scanCmd == "--scan-open" {
+		log.Println("--scan-open failed, falling back to --scan")
+		scanOut, err = exec.Command("smartctl", "--json", "--scan").CombinedOutput()
+	}
 	if err != nil {
 		log.Printf("drive scan error: %v", err)
 		return
 	}
 
 	var scanResult struct {
-		Devices []struct {
-			Name     string `json:"name"`
-			InfoName string `json:"info_name"`
-			Type     string `json:"type"`
-			Protocol string `json:"protocol"`
-		} `json:"devices"`
+		Devices []scanDevice `json:"devices"`
 	}
 	if err := json.Unmarshal(scanOut, &scanResult); err != nil {
 		log.Printf("failed to parse scan JSON: %v", err)
 		return
+	}
+
+	// Cache the detected protocol for each device found by scan.
+	dc.mu.Lock()
+	for _, dev := range scanResult.Devices {
+		if dev.Protocol != "" {
+			dc.protocolCache[dev.Name] = dev.Protocol
+		}
+	}
+	dc.mu.Unlock()
+
+	// Merge device_overrides: cache their protocols and inject any devices that
+	// weren't found by scan (e.g. Synology /dev/sata* paths).
+	if dc.cfg != nil {
+		for _, ov := range dc.cfg.DeviceOverrides {
+			dc.mu.Lock()
+			dc.protocolCache[ov.Device] = ov.Protocol
+			dc.mu.Unlock()
+
+			found := false
+			for _, dev := range scanResult.Devices {
+				if dev.Name == ov.Device {
+					found = true
+					break
+				}
+			}
+			if !found {
+				scanResult.Devices = append(scanResult.Devices, scanDevice{
+					Name:     ov.Device,
+					Protocol: ov.Protocol,
+				})
+				log.Printf("added override device: %s (protocol: %s)", ov.Device, ov.Protocol)
+			}
+		}
 	}
 
 	newDrives := make(map[string]DriveInfo, len(scanResult.Devices))
@@ -637,27 +701,74 @@ func decodeHealthBits(code int) string {
 	return strings.Join(flags, ", ")
 }
 
+// runSmartctl runs smartctl with the given args and returns (output, exitCode, error).
+// error is non-nil only for non-ExitError failures (missing binary, permissions, etc.).
+func runSmartctl(args []string) ([]byte, int, error) {
+	out, err := exec.Command("smartctl", args...).CombinedOutput()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return out, exitErr.ExitCode(), nil
+		}
+		return out, -1, err
+	}
+	return out, 0, nil
+}
+
 // fetchDriveInfo calls smartctl -a --json on a single device and parses the
 // key fields we care about. Returns (info, inStandby). When inStandby is true,
 // the drive was sleeping and no SMART data was collected.
 func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string) (DriveInfo, bool) {
+	// Check the protocol cache: if we have a confirmed working protocol for this
+	// device (e.g. "sat" from a previous SAT fallback, or a device_override),
+	// use it upfront instead of relying on the scan-reported protocol.
+	dc.mu.RLock()
+	if cached, ok := dc.protocolCache[devicePath]; ok {
+		protocol = cached
+	}
+	dc.mu.RUnlock()
+
 	args := []string{"--json", "-a"}
 	if dc.standbyMode != "never" {
 		args = append(args, "-n", dc.standbyMode)
 	}
+	if strings.EqualFold(protocol, "sat") {
+		args = append(args, "-d", "sat")
+	}
 	args = append(args, devicePath)
 
-	out, err := exec.Command("smartctl", args...).CombinedOutput()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			code := exitErr.ExitCode()
+	out, code, execErr := runSmartctl(args)
+	if execErr != nil {
+		// Non-ExitError (binary missing, permissions, etc.)
+		log.Printf("WARNING: smartctl -a %s: %v", devicePath, execErr)
+	} else if code != 0 {
+		// Bit 1 (value 2) with standby mode = drive is sleeping.
+		if dc.standbyMode != "never" && code == 2 {
+			return DriveInfo{DevicePath: devicePath, Protocol: protocol}, true
+		}
 
-			// Bit 1 (value 2) with standby mode = drive is sleeping.
-			// smartctl prints "Device is in STANDBY mode" and exits.
-			if dc.standbyMode != "never" && code == 2 {
-				return DriveInfo{DevicePath: devicePath, Protocol: protocol}, true
+		// SAT fallback: if device open failed (bit 1 set) and protocol is SCSI,
+		// retry with -d sat. Log the fallback once per device via protocolCache.
+		if code&0x02 != 0 && strings.EqualFold(protocol, "scsi") {
+			satArgs := []string{"--json", "-a", "-d", "sat"}
+			if dc.standbyMode != "never" {
+				satArgs = append(satArgs, "-n", dc.standbyMode)
 			}
+			satArgs = append(satArgs, devicePath)
 
+			satOut, satCode, satExecErr := runSmartctl(satArgs)
+			if satExecErr == nil && satCode&0x02 == 0 {
+				log.Printf("INFO: %s reports as SCSI but SAT succeeded -- using SAT for this drive", devicePath)
+				dc.mu.Lock()
+				dc.protocolCache[devicePath] = "sat"
+				dc.mu.Unlock()
+				out = satOut
+				code = satCode
+				protocol = "sat"
+				// Fall through to normal parsing below with the SAT output.
+			}
+		}
+
+		if code != 0 {
 			execBits := code & 0x07
 			healthBits := code & 0xF8
 
@@ -680,9 +791,6 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string) (DriveInfo, bo
 					dc.mu.Unlock()
 				}
 			}
-		} else {
-			// Not an ExitError (binary missing, permissions, etc.)
-			log.Printf("WARNING: smartctl -a %s: %v", devicePath, err)
 		}
 	}
 
