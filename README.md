@@ -292,6 +292,54 @@ Stops the service, removes the binary, config, and service files.
 
 Every drive on the machine appears as its own HA device.
 
+## NAS & RAID Setup
+
+Most Linux, macOS and Windows machines work out of the box. NAS devices and RAID controllers sometimes need extra steps because their storage controllers present drives differently than standard SATA/NVMe.
+
+### Diagnosing drive detection
+
+If the agent starts but reports no drives (or fewer than expected), run:
+
+```bash
+smartha-agent --discover
+```
+
+This probes every drive the OS exposes, tests protocol detection, and tells you exactly what the agent will see at runtime. On Synology NAS devices, it also probes the proprietary `/dev/sata1` through `/dev/sata8` paths. If any drives need manual configuration, it offers to write the config for you.
+
+Paste the `--discover` output into a GitHub issue if you need help -- it gives us everything we need to diagnose remotely.
+
+### Protocol detection (QNAP, some HBA controllers)
+
+Some NAS HBA controllers (common on QNAP) report SATA drives as SCSI to the operating system. The agent handles this automatically since v0.5.5: it detects the mismatch on the first scan and retries with SCSI-to-ATA Translation (SAT). No config change needed.
+
+### Synology NAS
+
+Synology DSM uses proprietary device paths (`/dev/sata1`, `/dev/sata2`, etc.) that `smartctl --scan` does not find. Synology also ships smartmontools 6.5, which is too old for the agent (requires 7.0+).
+
+Setup steps:
+
+1. Install **SynoCli Disk Tools** from the [SynoCommunity](https://synocommunity.com/) package source in DSM Package Center. This provides smartmontools 7.4+.
+2. Run `smartha-agent --discover` to detect your drives and generate config.
+3. Restart the agent: `sudo systemctl restart smartha-agent`
+
+### RAID controllers (MegaRAID, HP SmartArray, etc.)
+
+Drives behind hardware RAID controllers need an explicit protocol flag (e.g. `-d megaraid,0`) to reach the physical drives through the RAID layer. Add a `device_overrides` section to your `config.yaml`:
+
+```yaml
+device_overrides:
+  - device: /dev/sda
+    protocol: megaraid,0
+  - device: /dev/sda
+    protocol: megaraid,1
+```
+
+Each entry maps a device path to the smartctl `-d` protocol string. The agent treats overridden devices as first-class drives even if they are not found by `smartctl --scan`. Run `smartha-agent --discover` to probe your controller and see what protocol each drive needs.
+
+### smartmontools version
+
+The agent requires smartmontools **7.0+** for JSON output support. Most current Linux distros ship 7.x. Older or embedded systems (Synology DSM, QNAP QTS, some RHEL/CentOS 7 installs) may ship 6.x or older. Run `smartctl --version` to check. The agent logs a clear error on startup if the version is too old.
+
 <br>
 
 ## Screenshots
@@ -373,6 +421,7 @@ This is the most common "why isn't my drive showing data?" scenario. It's a hard
 - [ ] Per-drive scan intervals
 - [x] Standby-aware polling (`smartctl -n standby`) -- shipped v0.5.3
 - [ ] YAML-based SMART attribute definitions (vendor field mapping, transforms, units)
+- [x] NAS protocol detection (SAT fallback, `--discover`, `device_overrides`) -- shipped v0.5.5
 - [ ] SAS/SCSI drive support
 - [x] Integration: agent connectivity sensor + diagnostic entities (version, last seen, IP, port, auth) -- shipped v0.5.3
 - [x] Agent: smartctl minimum version check (fail early with clear message if < 7.0) -- shipped v0.5.3
