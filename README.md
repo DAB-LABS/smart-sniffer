@@ -147,10 +147,11 @@ Create `config.yaml` in the working directory or `/etc/smartha-agent/`:
 
 ```yaml
 port: 9099
-token: "your-secret-token"    # optional — omit to disable auth
+token: "your-secret-token"    # optional -- omit to disable auth
 scan_interval: 60s
-advertise_interface: eth0      # optional — restrict mDNS to this interface
-filesystems:                   # optional — set by installer's disk usage picker
+standby_mode: standby          # optional -- never, standby, sleep, or idle
+advertise_interface: eth0      # optional -- restrict mDNS to this interface
+filesystems:                   # optional -- set by installer's disk usage picker
   - path: /
     uuid: a1b2c3d4-5678-90ab-cdef-1234567890ab
     device: /dev/sda1
@@ -159,7 +160,9 @@ filesystems:                   # optional — set by installer's disk usage pick
 
 All options can also be set via CLI flags: `--port`, `--token`, `--scan-interval`, `--interface`, `--config`.
 
-**Scan interval:** Uses Go duration syntax — `30s`, `5m`, `1h`, `24h` are all valid. Each poll reads SMART data via `smartctl`, which wakes any drive that is spun down or in standby. If you have drives that sleep between accesses, a longer interval like `12h` or `24h` keeps them from waking unnecessarily. This is the *agent-side* read cadence and is separate from the HA Poll Interval entity, which reflects how often Home Assistant pulls fresh data from the agent itself.
+**Scan interval:** Uses Go duration syntax -- `30s`, `5m`, `1h`, `24h` are all valid. When `standby_mode` is set, the agent skips sleeping drives and serves cached data, so the interval does not cause unnecessary wake-ups. When `standby_mode` is `never` (the default), each poll wakes any drive that is spun down. This is the *agent-side* read cadence and is separate from the HA Poll Interval entity, which reflects how often Home Assistant pulls fresh data from the agent itself.
+
+**Standby mode:** Controls whether the agent avoids waking sleeping drives during polling. Set to `standby`, `sleep`, or `idle` to match your drives' power management (these correspond to `smartctl -n` modes). When set, the agent passes `-n <mode>` to smartctl on each poll -- if a drive is in that power state, smartctl exits without waking it and the agent serves the last cached SMART data with an `in_standby` flag. The default is `never`, which wakes drives on every poll. On the very first poll after startup, the agent always wakes all drives regardless of this setting to collect a SMART baseline (serial number, model, attributes). This one-time wake ensures every drive is registered with a stable identity from the start. Subsequent polls honor the standby setting normally.
 
 **Network interface:** The `advertise_interface` setting restricts mDNS to a single interface. The installer sets this during setup if you pick a specific interface. When not set, the agent auto-filters known virtual interfaces (Docker, ZeroTier, Tailscale, WireGuard, etc.) and advertises on all remaining physical interfaces. To change the interface after install, edit `config.yaml` and restart the service — no reinstall needed.
 
