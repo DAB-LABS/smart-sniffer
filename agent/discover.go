@@ -193,8 +193,8 @@ func probeOneDrive(smartctlPath, path, protocol string) discoverDriveResult {
 		}
 	}
 
-	// Execution failure bits (0-2). Bit 1 = device open failed.
-	openFailed := code&0x02 != 0
+	// Execution failure bits (0-2). Any set = smartctl could not read the drive.
+	openFailed := code&0x07 != 0
 
 	if !openFailed {
 		r.smartOK = true
@@ -217,7 +217,7 @@ func probeOneDrive(smartctlPath, path, protocol string) discoverDriveResult {
 				satCode = satExitErr.ExitCode()
 			}
 		}
-		if satCode&0x02 == 0 {
+		if satCode&0x07 == 0 {
 			r.satOK = true
 			r.model, r.serial = extractSmartModelSerial(satOut)
 			// SAT auto-fallback handled at runtime -- only needs config if it won't

@@ -2,6 +2,16 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.5.5.2 -- 2026-04-25
+
+Agent-only patch. No integration, installer, or config changes.
+
+Fixes the SAT fallback not triggering on QNAP hardware reported by @gbravery in [#16](https://github.com/DAB-LABS/smart-sniffer/issues/16).
+
+### Fixed
+- **SAT fallback now triggers on all smartctl execution failures** -- the fallback previously only activated when smartctl reported "device open failed" (exit code bit 1). On QNAP, drives open fine under SCSI but return "command failed" (exit code bit 2) because the SMART commands don't work over the SCSI translation layer. The agent now retries with SAT on any of the three execution failure bits, covering both the Synology and QNAP failure modes.
+- **`--discover` no longer reports false positives** -- the diagnostic tool previously reported "SMART data: Yes" for drives that returned execution errors other than "device open failed". It now correctly flags any execution failure as a problem and attempts SAT fallback.
+
 ## v0.5.5.1 -- 2026-04-24
 
 Agent-only patch. No integration, installer, or config changes.

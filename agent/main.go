@@ -808,9 +808,11 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string) (DriveInfo, bo
 			return DriveInfo{DevicePath: devicePath, Protocol: protocol}, true
 		}
 
-		// SAT fallback: if device open failed (bit 1 set) and protocol is SCSI,
-		// retry with -d sat. Log the fallback once per device via protocolCache.
-		if code&0x02 != 0 && strings.EqualFold(protocol, "scsi") {
+		// SAT fallback: if any execution failure bits (0-2) are set and protocol
+		// is SCSI, retry with -d sat. Bit 1 = device open failed (Synology),
+		// bit 2 = command failed/checksum error (QNAP). Both indicate a protocol
+		// mismatch on NAS HBAs where SATA drives present as SCSI.
+		if code&0x07 != 0 && strings.EqualFold(protocol, "scsi") {
 			satArgs := []string{"--json", "-a", "-d", "sat"}
 			if dc.standbyMode != "never" {
 				satArgs = append(satArgs, "-n", dc.standbyMode)
@@ -818,7 +820,7 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string) (DriveInfo, bo
 			satArgs = append(satArgs, devicePath)
 
 			satOut, satCode, satExecErr := runSmartctl(dc.cfg.SmartctlPath, satArgs)
-			if satExecErr == nil && satCode&0x02 == 0 {
+			if satExecErr == nil && satCode&0x07 == 0 {
 				log.Printf("INFO: %s reports as SCSI but SAT succeeded -- using SAT for this drive", devicePath)
 				dc.mu.Lock()
 				dc.protocolCache[devicePath] = "sat"
