@@ -613,10 +613,11 @@ func (dc *DriveCache) Refresh() {
 	// sleeping drives. Fall back to --scan if --scan-open is unsupported.
 	scanCmd := "--scan"
 	dc.mu.Lock()
+	isFirstPoll := dc.firstPoll
 	if dc.firstPoll {
 		scanCmd = "--scan-open"
 		dc.firstPoll = false
-		log.Println("first poll: using --scan-open for protocol detection")
+		log.Println("first poll: using --scan-open for protocol detection, waking drives for SMART baseline")
 	}
 	dc.mu.Unlock()
 
@@ -676,7 +677,7 @@ func (dc *DriveCache) Refresh() {
 	var order []string
 
 	for _, dev := range scanResult.Devices {
-		info, inStandby := dc.fetchDriveInfo(dev.Name, dev.Protocol)
+		info, inStandby := dc.fetchDriveInfo(dev.Name, dev.Protocol, isFirstPoll)
 		if inStandby {
 			// Drive is sleeping -- serve last known data with standby flag.
 			slug := makeDriveSlug("", dev.Name) // fallback slug from path
@@ -779,7 +780,7 @@ func runSmartctl(smartctlPath string, args []string) ([]byte, int, error) {
 // fetchDriveInfo calls smartctl -a --json on a single device and parses the
 // key fields we care about. Returns (info, inStandby). When inStandby is true,
 // the drive was sleeping and no SMART data was collected.
-func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string) (DriveInfo, bool) {
+func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bool) (DriveInfo, bool) {
 	// Check the protocol cache: if we have a confirmed working protocol for this
 	// device (e.g. "sat" from a previous SAT fallback, or a device_override),
 	// use it upfront instead of relying on the scan-reported protocol.
@@ -790,7 +791,7 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string) (DriveInfo, bo
 	dc.mu.RUnlock()
 
 	args := []string{"--json", "-a"}
-	if dc.standbyMode != "never" {
+	if dc.standbyMode != "never" && !skipStandby {
 		args = append(args, "-n", dc.standbyMode)
 	}
 	if strings.EqualFold(protocol, "sat") {
@@ -814,7 +815,7 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string) (DriveInfo, bo
 		// mismatch on NAS HBAs where SATA drives present as SCSI.
 		if code&0x07 != 0 && strings.EqualFold(protocol, "scsi") {
 			satArgs := []string{"--json", "-a", "-d", "sat"}
-			if dc.standbyMode != "never" {
+			if dc.standbyMode != "never" && !skipStandby {
 				satArgs = append(satArgs, "-n", dc.standbyMode)
 			}
 			satArgs = append(satArgs, devicePath)

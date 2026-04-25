@@ -2,6 +2,15 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.5.5.3 -- 2026-04-25
+
+Agent-only patch. No integration, installer, or config changes.
+
+Fixes drives being silently dropped when sleeping on agent startup, reported by @rolandg-reflow in [#18](https://github.com/DAB-LABS/smart-sniffer/issues/18).
+
+### Fixed
+- **Drives no longer vanish when sleeping on startup** -- the agent's first poll after starting now wakes all drives to collect a full SMART baseline (serial, model, attributes). This ensures every drive is registered with its stable serial-based ID immediately. Subsequent polls honor `standby_mode` normally -- sleeping drives are skipped and cached data is served. Previously, a drive that was asleep on the first poll was silently dropped from the API because there was no cached data to serve.
+
 ## v0.5.5.2 -- 2026-04-25
 
 Agent-only patch. No integration, installer, or config changes.
