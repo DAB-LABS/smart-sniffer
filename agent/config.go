@@ -55,17 +55,90 @@ func defaultConfig() Config {
 // defaultSkipPrefixes are interface name prefixes that are skipped when no
 // explicit advertise_interface is configured. These are almost never the
 // real LAN interface and cause duplicate/unreachable mDNS discoveries.
+//
+// Intentionally EXCLUDED (ambiguous -- can be primary LAN on some platforms):
+//   bond*  -- Synology bonded NICs, NAS LACP
+//   br     -- (bare, no dash) Unraid br0 is the host bridge
+//   vlan*  -- may carry the only routable IP
+//   qvs*   -- QNAP virtual switch AND primary management interface
+//   qbr*   -- QNAP/OpenStack, ambiguous
+//   qvo*   -- QNAP/OpenStack, ambiguous
+//   qvb*   -- QNAP/OpenStack, ambiguous
+//
+// See docs/internal/research/mdns-interface-prefixes.md for full rationale.
 var defaultSkipPrefixes = []string{
-	"docker", // Docker bridge (docker0)
-	"br-",    // Docker custom networks
-	"veth",   // Docker/container veth pairs
-	"zt",     // ZeroTier VPN
-	"tailscale", "ts", // Tailscale VPN
-	"wg",    // WireGuard VPN
+	// --- Loopback ---
+	"lo", // Loopback
+
+	// --- Container / Docker ---
+	"docker",          // Docker bridge (docker0)
+	"docker_gwbridge", // Docker Swarm gateway bridge
+	"br-",             // Docker custom networks (br-<hash>)
+	"veth",            // Docker/container veth pairs
+	"podman",          // Podman container bridge
+	"hassio",          // Home Assistant OS supervisor bridge
+
+	// --- LXC / LXD ---
+	"lxcbr", // LXC container bridge (caused #19 on QNAP)
+	"lxdbr", // LXD container bridge
+
+	// --- Kubernetes CNI ---
+	"flannel", // Flannel overlay (default on TrueNAS SCALE K3s)
+	"cni",     // Generic CNI bridge
+	"calico",  // Calico overlay
+	"cali",    // Calico veth pairs (cali12345)
+	"cilium_", // Cilium overlay (cilium_host, cilium_net, cilium_vxlan)
+	"weave",   // Weave Net overlay
+	"crc",     // CodeReady Containers (OpenShift local)
+
+	// --- VPN / Tunnel ---
+	"zt",        // ZeroTier
+	"tailscale", // Tailscale (long form)
+	"ts",        // Tailscale (short form)
+	"wg",        // WireGuard
+	"tun",       // OpenVPN / generic tunnel
+	"tap",       // Generic TAP
+	"utun",      // macOS userspace tunnel
+	"ipsec",     // IPsec tunnel
+	"gre",       // GRE tunnel
+	"geneve",    // Geneve encapsulation
+	"vxlan",     // VXLAN overlay
+	"erspan",    // Encapsulated Remote SPAN
+
+	// --- Hypervisor / VM ---
 	"virbr", // libvirt/KVM virtual bridge
 	"vbox",  // VirtualBox host-only
 	"vmnet", // VMware host-only
-	"lo",    // Loopback
+	"vmbr",  // Proxmox virtual bridge
+	"xenbr", // Xen hypervisor bridge
+	"qemu",  // QEMU virtual NIC
+	"vmk",   // VMware ESXi VMkernel
+	"hv_",   // Hyper-V virtual interfaces
+	"fwbr",  // Proxmox firewall bridge
+	"fwpr",  // Proxmox firewall proxy
+	"fwln",  // Proxmox firewall link
+
+	// --- macOS virtual ---
+	"ap",     // Apple access point (ap1)
+	"awdl",   // Apple Wireless Direct Link (AirDrop)
+	"llw",    // Low Latency WLAN (Apple)
+	"bridge", // macOS VM bridging (bridge0)
+	"gif",    // macOS/BSD generic tunnel
+	"stf",    // macOS/BSD 6to4 tunnel
+	"anpi",   // Apple Network Privacy Interface
+	"qlf",    // Apple internal (qlf0)
+
+	// --- Windows virtual ---
+	"vethernet", // Hyper-V virtual Ethernet
+	"isatap",    // ISATAP tunnel adapter
+
+	// --- Linux misc ---
+	"dummy", // Dummy interfaces (dummy0)
+	"ifb",   // Intermediate Functional Block
+	"ovs",   // Open vSwitch
+	"ham",   // FreeBSD HAST mirror
+	"epair", // FreeBSD jail virtual pair
+	"vnet",  // FreeBSD bhyve/jail virtual NIC
 }
 
 // LoadConfig reads configuration from config.yaml (if present) then overlays
@@ -282,8 +355,10 @@ func PreferredIP(ifaces []net.Interface) string {
 			score := 80
 			if isVirtual {
 				score = 90
-			} else if strings.HasPrefix(ipStr, "192.168.") || strings.HasPrefix(ipStr, "10.") {
+			} else if strings.HasPrefix(ipStr, "192.168.") {
 				score = 10
+			} else if strings.HasPrefix(ipStr, "10.") {
+				score = 20
 			} else if strings.HasPrefix(ipStr, "172.") {
 				score = 50
 			} else if strings.HasPrefix(ipStr, "100.") {

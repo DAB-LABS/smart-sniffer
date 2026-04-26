@@ -2,6 +2,16 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.5.5.4 -- 2026-04-25
+
+Agent-only patch. No integration, installer, or config changes.
+
+Fixes the mDNS agent advertising an unreachable container bridge IP on QNAP (and similar platforms), reported by @gbravery in [#19](https://github.com/DAB-LABS/smart-sniffer/issues/19).
+
+### Fixed
+- **mDNS interface filter expanded from 10 to 51 prefixes** -- the auto-filter now covers LXC/LXD bridges, Kubernetes CNI (Flannel, Calico, Cilium, Weave), Proxmox firewall interfaces, macOS system interfaces, Podman, Open vSwitch, and more. Previously, QNAP's LXC bridge (`lxcbr0`) slipped through and the agent advertised its container IP instead of the LAN IP. Dangerous/ambiguous prefixes (`bond`, bare `br`, `vlan`, `qvs`) are intentionally excluded since they can be primary LAN interfaces on NAS platforms.
+- **IP scoring now prefers 192.168.x over 10.x** -- when multiple candidate IPs survive filtering, `192.168.x` (almost always a home LAN) now scores higher than `10.x` (commonly used for containers, VPNs, and internal networks). Previously they scored equally and enumeration order broke the tie, which often picked the wrong one.
+
 ## v0.5.5.3 -- 2026-04-25
 
 Agent-only patch. No integration, installer, or config changes.
