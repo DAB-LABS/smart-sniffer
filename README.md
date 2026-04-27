@@ -413,24 +413,28 @@ This is the most common "why isn't my drive showing data?" scenario. It's a hard
 
 ## Roadmap
 
-- [x] HAOS App — [SMART Sniffer App](https://github.com/DAB-LABS/smart-sniffer-app) for Home Assistant OS
+- [x] HAOS App -- [SMART Sniffer App](https://github.com/DAB-LABS/smart-sniffer-app) for Home Assistant OS
 - [x] Integration icons for HA integrations page
-- [x] Disk usage monitoring (agent-side) — `/api/filesystems` endpoint with installer picker
-- [x] Disk usage monitoring (integration-side) — filesystem sensor entities in HA
-- [ ] MQTT agent mode
-- [ ] Custom Lovelace card
-- [ ] Temperature-based attention triggers (absolute threshold + trend over time)
-- [ ] Configurable alert thresholds via options flow
-- [ ] Per-drive scan intervals
+- [x] Disk usage monitoring (agent-side) -- `/api/filesystems` endpoint with installer picker
+- [x] Disk usage monitoring (integration-side) -- filesystem sensor entities in HA
 - [x] Standby-aware polling (`smartctl -n standby`) -- shipped v0.5.3
-- [ ] YAML-based SMART attribute definitions (vendor field mapping, transforms, units)
-- [x] NAS protocol detection (SAT fallback, `--discover`, `device_overrides`) -- shipped v0.5.5
-- [ ] SAS/SCSI drive support
 - [x] Integration: agent connectivity sensor + diagnostic entities (version, last seen, IP, port, auth) -- shipped v0.5.3
 - [x] Agent: smartctl minimum version check (fail early with clear message if < 7.0) -- shipped v0.5.3
 - [x] Integration: dedicated Drive Standby binary sensor with `data_as_of` attribute -- shipped v0.5.4
 - [x] Integration: Agent OS diagnostic sensor (linux / darwin / windows) -- shipped v0.5.4
+- [x] NAS protocol detection (SAT fallback, `--discover`, `device_overrides`) -- shipped v0.5.5
+- [x] Agent: smartctl path auto-resolution (finds newer smartctl when PATH version is outdated) -- shipped v0.5.5.1
+- [x] Agent: broadened SAT fallback to all smartctl execution failure bits -- shipped v0.5.5.2
+- [x] Agent: first-poll wake (collects SMART baseline from sleeping drives on startup) -- shipped v0.5.5.3
+- [x] Agent: expanded mDNS interface filter (51 prefixes) + IP scoring improvement -- shipped v0.5.5.4
+- [ ] MQTT agent mode
+- [ ] Custom Lovelace card
+- [ ] Configurable alert thresholds via options flow
+- [ ] Per-drive scan intervals
+- [ ] YAML-based SMART attribute definitions (vendor field mapping, transforms, units)
+- [ ] SAS/SCSI drive support
 - [ ] Agent: container-aware filesystem reporting (MNT_PREFIX path mapping for Docker deployments)
+- [ ] Agent: runtime interface detection (replace static prefix list with OS-level physical NIC detection)
 
 ## Community Deployments
 
