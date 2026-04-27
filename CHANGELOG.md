@@ -2,6 +2,14 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.5.5.5 -- 2026-04-27
+
+Installer-only patch. No agent, integration, or config changes.
+
+### Fixed
+- **macOS: installer now removes Gatekeeper quarantine flag** -- files downloaded via curl get a `com.apple.quarantine` extended attribute that blocks execution with an "unidentified developer" dialog. The installer now strips this automatically. Previously, macOS users had to run `xattr -d` manually or navigate System Settings after install.
+- **Installer interface picker labels updated** -- the network interface picker now correctly tags LXC/LXD bridges, Proxmox interfaces, Podman, HA OS supervisor bridges, and tunnel/VPN interfaces. Previously only Docker, ZeroTier, Tailscale, WireGuard, libvirt, VirtualBox, and VMware were labeled.
+
 ## v0.5.5.4 -- 2026-04-25
 
 Agent-only patch. No integration, installer, or config changes.

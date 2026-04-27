@@ -215,7 +215,12 @@ pick_filesystems() {
 # Network interface picker — shows numbered list, user enters a number
 # or "all". Sets ADV_IFACE to the chosen interface or "" for auto-filter.
 # ---------------------------------------------------------------------------
-VIRTUAL_PREFIXES="docker|br-|veth|zt|tailscale|ts|wg|virbr|vbox|vmnet|utun|lo"
+# Cosmetic labels for the interface picker UI. This list does NOT need to
+# mirror every entry in agent/config.go's defaultSkipPrefixes (51 entries).
+# It only tags common virtual interfaces so users can identify them during
+# install. The actual runtime filtering is handled by the Go agent.
+# Keep loosely in sync -- add entries when users report confusion.
+VIRTUAL_PREFIXES="docker|docker_gwbridge|br-|lxcbr|lxdbr|veth|podman|hassio|zt|tailscale|ts|wg|tun|tap|utun|virbr|vmbr|fwbr|fwpr|fwln|vbox|vmnet|lo"
 
 pick_interface() {
   local -a iface_names=()
@@ -237,14 +242,17 @@ pick_interface() {
     if echo "$iface" | grep -qiE "^($VIRTUAL_PREFIXES)"; then
       case "$iface" in
         docker*|br-*) tag_label="${YELLOW}(Docker)${NC}" ;;
-        veth*)        tag_label="${YELLOW}(Docker container)${NC}" ;;
+        veth*|podman*) tag_label="${YELLOW}(container)${NC}" ;;
+        lxcbr*|lxdbr*) tag_label="${YELLOW}(LXC/LXD)${NC}" ;;
+        hassio*)      tag_label="${YELLOW}(HA OS)${NC}" ;;
         zt*)          tag_label="${YELLOW}(ZeroTier)${NC}" ;;
         tailscale*|ts*) tag_label="${YELLOW}(Tailscale)${NC}" ;;
         wg*)          tag_label="${YELLOW}(WireGuard)${NC}" ;;
+        tun*|tap*|utun*) tag_label="${YELLOW}(VPN tunnel)${NC}" ;;
         virbr*)       tag_label="${YELLOW}(libvirt)${NC}" ;;
+        vmbr*|fwbr*|fwpr*|fwln*) tag_label="${YELLOW}(Proxmox)${NC}" ;;
         vbox*)        tag_label="${YELLOW}(VirtualBox)${NC}" ;;
         vmnet*)       tag_label="${YELLOW}(VMware)${NC}" ;;
-        utun*)        tag_label="${YELLOW}(VPN tunnel)${NC}" ;;
         lo*)          tag_label="${YELLOW}(loopback)${NC}" ;;
         *)            tag_label="${YELLOW}(virtual)${NC}" ;;
       esac
@@ -894,6 +902,16 @@ fi
 info "Installing binary to $INSTALL_BIN..."
 cp "$TMPDIR/$BINARY_FILE" "$INSTALL_BIN"
 chmod +x "$INSTALL_BIN"
+
+# macOS: remove Gatekeeper quarantine flag so the binary can run without
+# an "unidentified developer" dialog. Files downloaded via curl get the
+# com.apple.quarantine xattr automatically. This attribute is NOT
+# SIP-protected and can be removed with sudo. The || true ensures this
+# is a no-op on Linux (where xattr may not exist).
+# Verified working through macOS Tahoe (16) as of April 2026.
+if [ "$PLATFORM" = "darwin" ]; then
+  xattr -d com.apple.quarantine "$INSTALL_BIN" 2>/dev/null || true
+fi
 success "Binary installed."
 
 # ---------------------------------------------------------------------------

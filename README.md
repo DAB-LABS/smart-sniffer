@@ -244,6 +244,29 @@ irm https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.ps1 | 
 </details>
 
 <details>
+<summary>macOS: "unidentified developer" warning</summary>
+
+The agent binary is not code-signed or notarized. macOS Gatekeeper will block it on first run with a "cannot be opened" or "unidentified developer" dialog.
+
+If you installed via the install script, remove the quarantine flag manually:
+
+```bash
+sudo xattr -d com.apple.quarantine /usr/local/bin/smartha-agent
+```
+
+Then restart the service:
+
+```bash
+sudo launchctl kickstart -k system/com.dablabs.smartha-agent
+```
+
+Alternatively, go to **System Settings > Privacy & Security**, find the blocked app, and click **Open Anyway**.
+
+> **Note:** The right-click > Open workaround was removed in macOS Sequoia (15.0). The `xattr` method above works on all current macOS versions including Sequoia.
+
+</details>
+
+<details>
 <summary>Pin a specific version</summary>
 
 ```bash
