@@ -85,6 +85,23 @@ _WARNING_ATA: dict[str, str] = {
 # Counts above this threshold suggest real controller or interconnect issues.
 _COMMAND_TIMEOUT_WARN_THRESHOLD = 100
 
+# WARNING: SSD wear leveling -- percentage of rated life consumed.
+# ATA normalized VALUE is "life remaining" (100 = new, 0 = worn); we
+# invert to "percentage used" and warn at >= 90%.  Matches the NVMe
+# percentage_used threshold.
+_ATA_WEAR_NAMES: set[str] = {
+    "Wear_Leveling_Count",
+    "Wear_Range_Delta",
+    "Media_Wearout_Indicator",
+    "SSD_Life_Left",
+    "Remaining_Lifetime_Perc",
+    "Percent_Lifetime_Remain",
+    "Perc_Rated_Life_Remain",
+    "Percent_Life_Remaining",
+    "Drive_Life_Protection_Stat",
+}
+_ATA_WEAR_WARN_THRESHOLD = 90  # percentage used
+
 # ---------------------------------------------------------------------------
 # Vendor-specific raw value decoding
 # ---------------------------------------------------------------------------
@@ -288,6 +305,22 @@ def evaluate_attention(
             elif decoded > 0:
                 warning_reasons.append(f"{label}: {decoded} (expected 0)")
                 seen_labels.add(label)
+
+    # WARNING -- ATA SSD wear leveling.
+    # Normalized VALUE is "life remaining"; invert to "percentage used".
+    if "SSD wear" not in seen_labels:
+        for attr in ata_attrs:
+            if attr.get("name", "") in _ATA_WEAR_NAMES:
+                normalized = attr.get("value")
+                if normalized is not None:
+                    pct_used = max(0, 100 - normalized)
+                    if pct_used >= _ATA_WEAR_WARN_THRESHOLD:
+                        warning_reasons.append(
+                            f"SSD wear at {pct_used}% of rated life -- "
+                            "consider scheduling replacement"
+                        )
+                        seen_labels.add("SSD wear")
+                break  # one wear attribute per drive
 
     return _assemble(critical_reasons, warning_reasons)
 

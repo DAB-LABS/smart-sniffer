@@ -96,7 +96,13 @@ These indicate early degradation but don't necessarily mean data has been lost y
 | `Spin_Retry_Count` | 10 | HDD only. Motor struggling to spin up. Early mechanical wear. |
 | `Command_Timeout` | 188 | Drive internally timed out. Controller or interconnect issues. |
 
-> **Note:** When both critical and warning triggers are active, the state is **YES** (critical wins) and all reasons are combined in the reasons list — critical reasons first, warning reasons appended.
+#### WARNING (state: MAYBE) -- SSD wear threshold
+
+| SMART Attribute Name(s) | Condition | What it means |
+|---|---|---|
+| `Wear_Leveling_Count`, `Media_Wearout_Indicator`, `SSD_Life_Left`, `Remaining_Lifetime_Perc`, `Percent_Lifetime_Remain`, `Perc_Rated_Life_Remain`, `Percent_Life_Remaining`, `Drive_Life_Protection_Stat`, `Wear_Range_Delta` | >= 90% used (after inversion from normalized VALUE) | SSD nearing end of rated write endurance. ATA normalized VALUE is inverted to "percentage used" for consistency with NVMe. Added in v0.5.6. |
+
+> **Note:** When both critical and warning triggers are active, the state is **YES** (critical wins) and all reasons are combined in the reasons list -- critical reasons first, warning reasons appended.
 
 ---
 

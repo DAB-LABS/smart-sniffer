@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"syscall"
 )
@@ -36,6 +37,34 @@ func (fc *FilesystemCache) Refresh() {
 		freeBytes := stat.Bfree * uint64(stat.Bsize)
 		info.UsedBytes = info.TotalBytes - freeBytes
 		info.AvailableBytes = stat.Bavail * uint64(stat.Bsize)
+
+		// Phase 1A: btrfs statvfs fallback.
+		//
+		// We trigger fallback only when TotalBytes == 0 on a btrfs mount.
+		// We do NOT broaden the trigger to "implausible non-zero" cases
+		// (e.g. btrfs single-disk near-full overstating free). That would
+		// fork a subprocess on every poll cycle for every btrfs mount,
+		// which is wasteful. The CTO's panel point that btrfs CLI is the
+		// more reliable source still stands -- this is a deliberate
+		// performance/reliability tradeoff. See plan-btrfs-filesystem-
+		// reporting.md for the full reasoning.
+		if info.TotalBytes == 0 && cfg.FSType == "btrfs" {
+			usage, err := tryBtrfsFallback(cfg.Path)
+			switch {
+			case err == nil:
+				info.TotalBytes = usage.Total
+				info.UsedBytes = usage.Used
+				info.AvailableBytes = usage.Available
+				log.Printf("filesystem: using btrfs-progs for %s (statvfs returned zero)", cfg.Path)
+			case errors.Is(err, errBtrfsProgsMissing):
+				log.Printf("filesystem: btrfs-progs not installed, returning statvfs zeros for %s", cfg.Path)
+			case errors.Is(err, errBtrfsTimeout):
+				log.Printf("filesystem: btrfs filesystem usage timed out after 5s for %s", cfg.Path)
+			default:
+				// Wraps errBtrfsParse or an exec error treated as parse-class.
+				log.Printf("filesystem: btrfs filesystem usage parse error for %s: %v", cfg.Path, err)
+			}
+		}
 
 		if info.TotalBytes > 0 {
 			info.UsePercent = float64(info.UsedBytes) / float64(info.TotalBytes) * 100.0

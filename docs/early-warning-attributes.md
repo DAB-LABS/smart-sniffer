@@ -34,6 +34,7 @@ All of these should read **0** on a healthy drive. Any non-zero value triggers t
 | **Offline Uncorrectable / Reported Uncorrectable Errors** | 198 / 187 | > 0 | ~7.5× higher failure rate | Sectors that failed during offline scan or ECC correction. Non-zero means data loss has likely occurred. |
 | **Spin Retry Count** | 10 | > 0 | Moderate | HDD only. Drive is struggling to spin up the platter motor. Non-zero means mechanical wear is starting. Entity only created for drives that report this attribute. |
 | **Command Timeout** | 188 | > 100 | Moderate | Drive internally timed out on a command. Low counts (1~100) are common from USB sleep/wake cycles, SATA power management (ALPM), and NCQ reordering ~ not failure indicators. Counts above 100 suggest controller or interconnect degradation. Seagate/OEM drives pack three 16-bit counters into the 48-bit raw value; the integration decodes to the lower 16 bits automatically (v0.4.26+). Backblaze lists attribute 188 as one of five failure-correlated attributes, but 84% of drives show non-zero values at some point ~ the correlation is with elevated counts, not merely non-zero. |
+| **SSD Wear Level** | varies (177, 202, 230, 231, 233) | >= 90% used | Moderate | ATA SSD endurance indicator. The normalized VALUE from the drive represents "life remaining" (100 = new, 0 = worn); SMART Sniffer inverts this to "percentage used" for consistency with NVMe. Warning triggers at >= 90% used, matching NVMe threshold. Added in v0.5.6. |
 
 ### NVMe Drives
 
@@ -44,7 +45,7 @@ NVMe drives use a different health log structure. The following map to the `atte
 | **critical_warning** | Any bit set (≠ 0) | Bitmask. Bits indicate: spare below threshold, temperature out of range, NVM subsystem reliability degraded, read-only mode, volatile backup device failed. |
 | **media_errors** | > 0 | Cumulative unrecoverable media errors. Equivalent to Offline Uncorrectable for ATA. Should always be 0. |
 | **available_spare** | ≤ available_spare_threshold OR < 20% | Percentage of spare NVMe blocks remaining. The drive reports its own threshold; SMART Sniffer also warns at < 20% as an early heads-up before the official threshold is reached. |
-| **percentage_used** | ≥ 90% | 0% = new drive, 100% = fully worn (inverse of most ATA wear indicators). At 90%+ the drive is nearing end of rated write endurance. |
+| **percentage_used** | >= 90% | 0% = new drive, 100% = fully worn. At 90%+ the drive is nearing end of rated write endurance. As of v0.5.6, ATA SSDs use the same unified scale and threshold. |
 
 ---
 
@@ -60,7 +61,8 @@ NVMe drives use a different health log structure. The following map to the `atte
 | Command Timeout | ✅ | Added in this release |
 | Power Cycle Count | ✅ | Diagnostic sensor — not a failure trigger, but context for wear |
 | NVMe Available Spare | ✅ | Added in this release |
-| NVMe Percentage Used | ✅ (via Wear Leveling sensor) | Already mapped |
+| ATA SSD Wear Level | ✅ (via Wear Level sensor) | Added in v0.5.6 -- unified with NVMe scale |
+| NVMe Percentage Used | ✅ (via Wear Level sensor) | Already mapped |
 | UDMA CRC Error Count (ID 199) | ❌ | Indicates cable/interconnect issues, not drive failure. Useful but out of scope for v1. |
 | Raw Read Error Rate (ID 1) | ❌ | Highly manufacturer-specific encoding; Seagate packs ECC stats into the raw value making direct comparison unreliable. |
 | Seek Error Rate (ID 7) | ❌ | Same Seagate encoding issue as above. |

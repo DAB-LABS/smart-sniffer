@@ -2,6 +2,29 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.5.6 -- 2026-05-02
+
+Agent + integration release. Both components updated.
+
+### Fixed
+- **Wear level sensor now reports consistent "percentage used" across ATA and NVMe drives** -- ATA SSDs report a normalized SMART value where 100 means "new" and 0 means "worn." NVMe drives report `percentage_used` where 0 means "new" and 100 means "worn" -- the opposite scale. Previously, the integration passed both values through as-is, so the same sensor meant opposite things depending on drive protocol. Now ATA values are inverted to match NVMe: 0% = new drive, 100% = fully worn. **Breaking change:** if you have automations based on the ATA wear sensor, your values will invert (e.g., a new Samsung 870 EVO previously showed 99, now shows 1).
+- **Installer filesystem picker: bind mount deduplication** -- the picker now parses `/proc/self/mountinfo` (when available) and deduplicates entries by `(source, fstype, root)`. Previously, bind mounts of the same filesystem appeared as separate entries, tripling the list on systems like ZimaOS. Falls back to `/proc/mounts` and then `mount` on systems where mountinfo is not available.
+- **Installer filesystem picker: path unescaping** -- mount paths containing spaces, tabs, newlines, or backslashes are now displayed correctly. The kernel escapes these characters in mountinfo/proc output (`\040` for space, etc.) and the installer previously showed the raw escaped strings.
+- **Installer summary now shows the correct IP** -- the post-install summary previously showed the first IP from `hostname -I`, which on systems with Docker bridges or virtual interfaces was often an unreachable internal IP (e.g., `172.18.0.1`). It now shows the IP of the mDNS-advertised interface you selected during setup.
+
+### Added
+- **ATA SSD wear now triggers attention warnings** -- ATA SSDs with wear level at 90% or higher (after inversion to "percentage used") now fire a WARNING in the Attention Needed sensor, matching the existing NVMe threshold. Previously only NVMe drives got wear-based attention warnings.
+- **btrfs filesystem fallback** -- when `statvfs` returns zero for a btrfs mount (a known quirk on some multi-device or DUP-profile configurations), the agent falls back to `btrfs filesystem usage --raw` for accurate size/usage data. Requires `btrfs-progs` to be installed (most btrfs systems have it). Without it, the mount reports as `(unknown size)` in the picker and zero-byte usage from the API.
+- **Installer: bind mount hiding** -- bind mounts of subdirectories are hidden by default behind a `[+N bind mounts hidden]` tag with a y/N prompt to reveal them. Reduces noise on systems with many bind mounts.
+
+### Changed
+- **Sensor name:** "Wear Leveling / Percentage Used" renamed to "Wear Level (% Used)" for clarity.
+
+### Upgrade Notes
+- **Both agent and integration should be updated.** Replace the agent binary or re-run the installer. Update the integration via HACS or manually.
+- **Wear sensor breaking change:** ATA SSD wear values are inverted. If you have automations checking wear level, review your thresholds. The sensor now consistently means "percentage of rated life consumed" for both ATA and NVMe. A new drive reads ~0-1%, a heavily worn drive reads 90%+.
+- **btrfs users:** install `btrfs-progs` if not already present for accurate filesystem reporting. The agent works without it but btrfs mounts will show zero usage.
+
 ## v0.5.5.5 -- 2026-04-27
 
 Installer-only patch. No agent, integration, or config changes.

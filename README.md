@@ -224,6 +224,8 @@ Binaries output to `agent/build/`.
 
 **Requires:** `smartmontools` **7.0+** on each monitored machine (for JSON output support). The installer handles installation automatically (Homebrew on macOS, apt/dnf/yum on Linux), but some older distros ship smartctl 6.x which does not support the `--json` flag the agent relies on. Run `smartctl --version` to check. If you're on 6.x, install a newer version from the [smartmontools releases page](https://www.smartmontools.org/wiki/Download) or from a backports repository.
 
+**Optional:** `btrfs-progs` is recommended on systems with btrfs filesystems. The installer's disk-usage picker and the agent's `/api/filesystems` endpoint both fall back to `btrfs filesystem usage --raw` when `statvfs` returns zero on a btrfs mount (a known quirk on some multi-device or near-full configurations). Without `btrfs-progs`, btrfs entries display as `(unknown size)` in the picker and report zero-byte usage from the API. Most distros include `btrfs-progs` by default if any btrfs filesystems exist on the system.
+
 ### 1. Install the agent
 
 Run on each machine you want to monitor:

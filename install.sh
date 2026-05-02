@@ -43,6 +43,56 @@ fail()    { echo -e "${RED}  ✗ $*${NC}"; exit 1; }
 FS_YAML=""
 FS_DISPLAY=""
 
+# Unescape kernel-style mountinfo path escapes (\040 \011 \012 \134).
+# Per fs/proc_namespace.c the kernel escapes space, tab, newline, and
+# backslash in path fields. Decoder must process \134 (backslash)
+# LAST so that literal backslashes do not re-trigger other rules.
+# Implementation: route \134 through a sentinel that cannot collide
+# with valid path content, decode the other three, then resolve the
+# sentinel to a real backslash.
+unescape_mountinfo_path() {
+  local s="$1"
+  s="${s//\\134/__SMARTSNIFFER_BS__}"
+  s="${s//\\040/ }"
+  s="${s//\\011/	}"
+  # Newline replacement uses ANSI-C $'...' for the literal newline char.
+  s="${s//\\012/$'\n'}"
+  s="${s//__SMARTSNIFFER_BS__/\\}"
+  printf '%s' "$s"
+}
+
+# Phase 2: btrfs picker display fallback.
+#
+# `df` returns total=0 for btrfs in some contexts (kernel statvfs
+# undercount on multi-device btrfs / specific kernel versions). Shell
+# out to `btrfs filesystem usage --raw <mp>` for accurate values.
+#
+# Output on stdout (success): "<total>\t<used>" as raw bytes.
+# Output on failure (any reason): empty stdout, non-zero exit.
+#
+# Failure causes (all caller-visible): btrfs binary missing, subprocess
+# timed out (5s), or output couldn't be parsed. Caller distinguishes
+# "btrfs binary missing" via the cached BTRFS_BIN var, so this helper
+# stays simple.
+btrfs_usage_for() {
+  local mp="$1"
+  local out total used
+  if command -v timeout >/dev/null 2>&1; then
+    out=$(timeout 5s btrfs filesystem usage --raw "$mp" 2>/dev/null) || return 1
+  else
+    out=$(btrfs filesystem usage --raw "$mp" 2>/dev/null) || return 1
+  fi
+  # Match the leading "Device size:" line (in the Overall: block).
+  total=$(echo "$out" | awk '/^[[:space:]]*Device size:/ {print $3; exit}')
+  # Match the bare "Used:" line in Overall: -- NOT the per-block-group
+  # "Used:" fields that appear inline like "Data,single: Size:N, Used:N".
+  used=$(echo "$out" | awk '/^[[:space:]]*Used:[[:space:]]+[0-9]+[[:space:]]*$/ {print $2; exit}')
+  [ -z "$total" ] || [ -z "$used" ] && return 1
+  [[ ! "$total" =~ ^[0-9]+$ ]] && return 1
+  [[ ! "$used" =~ ^[0-9]+$ ]] && return 1
+  printf '%s\t%s\n' "$total" "$used"
+}
+
 pick_filesystems() {
   FS_YAML=""
   FS_DISPLAY=""
@@ -51,30 +101,91 @@ pick_filesystems() {
   local -a fs_mps=()
   local -a fs_devs=()
   local -a fs_types=()
+  local -a fs_roots=()
   local -a fs_uuids=()
   local -a fs_labels=()
 
-  # Detect real block-device mounts.
-  local mounts
-  if [ -f /proc/mounts ]; then
+  # ---------------------------------------------------------------
+  # Source selection: mountinfo on Linux (Phase 1B-1), mount on macOS.
+  #
+  # /proc/self/mountinfo gives us the `root` field, which lets us
+  # dedup bind mounts via the strict (source, fstype, root) key.
+  # /proc/mounts lacks `root`, so it cannot tell duplicate mounts
+  # of the same filesystem apart from bind mounts of subdirs.
+  #
+  # Fallback chain on Linux:
+  #   1. /proc/self/mountinfo  (preferred -- enables dedup)
+  #   2. /proc/mounts          (fallback -- duplicates may slip through)
+  #   3. mount                 (last resort, parses mount-output format)
+  # ---------------------------------------------------------------
+  local mounts mount_source=""
+  if [[ "$OSTYPE" == darwin* ]]; then
+    mounts=$(mount)
+    mount_source="mount"
+  elif [ -r /proc/self/mountinfo ]; then
+    mounts=$(cat /proc/self/mountinfo)
+    mount_source="mountinfo"
+  elif [ -f /proc/mounts ]; then
     mounts=$(cat /proc/mounts)
+    mount_source="proc_mounts"
   else
     mounts=$(mount)
+    mount_source="mount"
   fi
 
+  # Phase 2: cache btrfs binary availability once. Used by the per-mount
+  # fallback when df returns zero on btrfs filesystems. We track whether
+  # any btrfs mount was encountered so we can warn the user once if the
+  # binary is missing -- one warning per picker run, not per entry.
+  local btrfs_bin=""
+  command -v btrfs >/dev/null 2>&1 && btrfs_bin=$(command -v btrfs)
+  local btrfs_seen_missing_progs=0
+
   while IFS= read -r line; do
-    local dev mp fstype
+    local dev mp fstype root="/"
 
     # macOS mount output: /dev/disk3s1s1 on / (apfs, sealed, local, ...)
+    # Linux /proc/self/mountinfo:
+    #   36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
+    #   ^id par maj  ^root ^mp  ^opts     opt-fields  - ^fstype ^source super-opts
     # Linux /proc/mounts: /dev/sda1 / ext4 rw,relatime 0 0
     if [[ "$OSTYPE" == darwin* ]]; then
       dev=$(echo "$line" | awk '{print $1}')
       mp=$(echo "$line" | sed 's/.* on \(.*\) (.*/\1/' | sed 's/ *$//')
       fstype=$(echo "$line" | sed 's/.*(\([^,)]*\).*/\1/' | sed 's/ *$//')
+    elif [ "$mount_source" = "mountinfo" ]; then
+      # mountinfo: fields before `-` separator vary in count (optional
+      # fields). Split on " - " first, then extract.
+      # Pre-`-`: 1=id 2=parent 3=major:minor 4=root 5=mp 6=opts ...
+      # Post-`-`: fstype source super_opts
+      local pre post
+      pre="${line% - *}"
+      post="${line#* - }"
+      # Skip if separator not found (malformed line).
+      [ "$pre" = "$line" ] && continue
+      root=$(echo "$pre" | awk '{print $4}')
+      mp=$(echo "$pre" | awk '{print $5}')
+      fstype=$(echo "$post" | awk '{print $1}')
+      dev=$(echo "$post" | awk '{print $2}')
+      # Phase 1B-2: unescape kernel path escapes. Apply to mp, root,
+      # and dev. fstype never contains escapes per kernel, but the
+      # path fields routinely do (any whitespace in mount paths or
+      # device names becomes \040, etc).
+      mp="$(unescape_mountinfo_path "$mp")"
+      root="$(unescape_mountinfo_path "$root")"
+      dev="$(unescape_mountinfo_path "$dev")"
     else
       dev=$(echo "$line" | awk '{print $1}')
       mp=$(echo "$line" | awk '{print $2}')
       fstype=$(echo "$line" | awk '{print $3}')
+      # /proc/mounts lacks `root`. Default to "/" so dedup degrades
+      # to (dev, fstype) -- correct for partition mounts, may
+      # collapse subdir bind mounts incorrectly. Best effort fallback.
+      root="/"
+      # /proc/mounts uses the same kernel escape rules as mountinfo,
+      # so unescape paths and source here too.
+      mp="$(unescape_mountinfo_path "$mp")"
+      dev="$(unescape_mountinfo_path "$dev")"
     fi
 
     # Filter to real block devices and common filesystems.
@@ -106,7 +217,7 @@ pick_filesystems() {
     # Get usage info from df.
     # macOS df doesn't support -B1 (GNU coreutils). Use -k for 1K blocks
     # on macOS and -B1 for byte-accurate values on Linux.
-    local df_line total pct hr_total
+    local df_line total pct hr_total used
     if [[ "$OSTYPE" == darwin* ]]; then
       df_line=$(df -k "$mp" 2>/dev/null | tail -1)
       total=$(echo "$df_line" | awk '{print $2}')
@@ -119,7 +230,30 @@ pick_filesystems() {
       pct=$(echo "$df_line" | awk '{print $5}' | tr -d '%')
     fi
 
-    if [ "$total" -gt 1099511627776 ] 2>/dev/null; then
+    # Phase 2: btrfs display fallback. df returns zero for btrfs in some
+    # picker contexts (statvfs vs multi-device). Re-fetch via
+    # `btrfs filesystem usage --raw`. Two failure modes both fall through
+    # to "(unknown size)": btrfs-progs missing, or parse failure.
+    if [ "$fstype" = "btrfs" ] && { [ -z "$total" ] || [ "$total" = "0" ]; }; then
+      if [ -n "$btrfs_bin" ]; then
+        local btrfs_out
+        if btrfs_out=$(btrfs_usage_for "$mp"); then
+          total=$(echo "$btrfs_out" | awk '{print $1}')
+          used=$(echo "$btrfs_out" | awk '{print $2}')
+          if [ "$total" -gt 0 ] 2>/dev/null; then
+            pct=$(awk -v u="$used" -v t="$total" 'BEGIN { printf "%d", (u*100)/t }')
+          fi
+        fi
+      else
+        # No btrfs binary available. Fall through to (unknown size).
+        btrfs_seen_missing_progs=1
+      fi
+    fi
+
+    if [ -z "$total" ] || [ "$total" = "0" ]; then
+      hr_total="?"
+      pct="?"
+    elif [ "$total" -gt 1099511627776 ] 2>/dev/null; then
       hr_total="$(echo "$total" | awk '{printf "%.1fT", $1/1099511627776}')";
     elif [ "$total" -gt 1073741824 ] 2>/dev/null; then
       hr_total="$(echo "$total" | awk '{printf "%.0fG", $1/1073741824}')";
@@ -127,6 +261,15 @@ pick_filesystems() {
       hr_total="$(echo "$total" | awk '{printf "%.0fM", $1/1048576}')";
     else
       hr_total="${total}B"
+    fi
+
+    # When size is unknown, swap the formatted label for an explicit
+    # "(unknown size)" so the user doesn't see "?  (?% used)".
+    local fs_label
+    if [ "$hr_total" = "?" ]; then
+      fs_label="$(printf '%-16s %-6s %s' "$mp" "$fstype" "(unknown size)")"
+    else
+      fs_label="$(printf '%-16s %-6s %6s  (%s%% used)' "$mp" "$fstype" "$hr_total" "$pct")"
     fi
 
     # Get UUID.
@@ -141,10 +284,66 @@ pick_filesystems() {
     fs_mps+=("$mp")
     fs_devs+=("$dev")
     fs_types+=("$fstype")
+    fs_roots+=("$root")
     fs_uuids+=("$uuid")
-    fs_labels+=("$(printf '%-16s %-6s %6s  (%s%% used)' "$mp" "$fstype" "$hr_total" "$pct")")
+    fs_labels+=("$fs_label")
 
   done <<< "$mounts"
+
+  # Phase 2: warn once if we encountered btrfs mounts and the binary is
+  # missing. This makes the (unknown size) labels self-explanatory --
+  # the user knows what to install if they want real numbers.
+  if [ "$btrfs_seen_missing_progs" = "1" ]; then
+    warn "btrfs-progs not installed -- btrfs entries will show (unknown size). Install btrfs-progs to enable size detection."
+  fi
+
+  # ---------------------------------------------------------------
+  # Phase 1B-1: Strict (source, fstype, root) dedup.
+  #
+  # Two mounts sharing this composite key are guaranteed to point at
+  # the same filesystem subtree (per kernel mountinfo semantics).
+  # Tiebreak: keep the entry with the shortest mount_point.
+  #
+  # NOTE on filter scope: the dev filter above only admits /dev/* and
+  # zfs entries. fuse.rclone, fuse.sshfs, and similar FUSE backends
+  # are dropped before reaching dedup. Widening the filter to surface
+  # those mounts is a separate scope decision -- see follow-up note
+  # in docs/internal/research/filesystem-reporting-edge-cases.md.
+  # ---------------------------------------------------------------
+  if [ "$mount_source" = "mountinfo" ] && [ "${#fs_mps[@]}" -gt 0 ]; then
+    local -a dd_mps=() dd_devs=() dd_types=() dd_roots=() dd_uuids=() dd_labels=()
+    local -A seen_key=()  # key -> index into dd_* arrays
+    local i key existing_idx existing_mp
+    for ((i=0; i<${#fs_mps[@]}; i++)); do
+      key="${fs_devs[$i]}|${fs_types[$i]}|${fs_roots[$i]}"
+      if [ -z "${seen_key[$key]:-}" ]; then
+        # First occurrence -- append.
+        dd_mps+=("${fs_mps[$i]}")
+        dd_devs+=("${fs_devs[$i]}")
+        dd_types+=("${fs_types[$i]}")
+        dd_roots+=("${fs_roots[$i]}")
+        dd_uuids+=("${fs_uuids[$i]}")
+        dd_labels+=("${fs_labels[$i]}")
+        seen_key[$key]=$((${#dd_mps[@]} - 1))
+      else
+        # Duplicate -- replace existing if this mount_point is shorter.
+        existing_idx="${seen_key[$key]}"
+        existing_mp="${dd_mps[$existing_idx]}"
+        if [ "${#fs_mps[$i]}" -lt "${#existing_mp}" ]; then
+          dd_mps[$existing_idx]="${fs_mps[$i]}"
+          # Other fields are equal by construction (same dedup key);
+          # only the label needs refreshing because it embeds mp.
+          dd_labels[$existing_idx]="${fs_labels[$i]}"
+        fi
+      fi
+    done
+    fs_mps=("${dd_mps[@]}")
+    fs_devs=("${dd_devs[@]}")
+    fs_types=("${dd_types[@]}")
+    fs_roots=("${dd_roots[@]}")
+    fs_uuids=("${dd_uuids[@]}")
+    fs_labels=("${dd_labels[@]}")
+  fi
 
   local count=${#fs_mps[@]}
   if [ "$count" -eq 0 ]; then
@@ -152,25 +351,166 @@ pick_filesystems() {
     return
   fi
 
-  echo ""
-  echo -e "  ${BOLD}Disk Usage Monitoring${NC}"
-  echo "  Select mountpoints to report to Home Assistant."
-  echo ""
-  for ((i=0; i<count; i++)); do
-    echo "    $((i + 1))) ${fs_labels[$i]}"
-  done
-  echo ""
+  # ---------------------------------------------------------------
+  # Phase 1B-3: canonical entry + bind-mount hiding.
+  #
+  # Group dedup'd entries by (source, fstype). Within each group:
+  #   - If any entry has root="/", canonical = shortest mp among
+  #     those root="/" entries. All other entries (root="/" non-shortest
+  #     plus any root != "/") are hidden by default.
+  #   - If no entry has root="/" (typical for btrfs subvolumes), no
+  #     hiding -- every entry is its own real subtree.
+  #
+  # Single-entry groups: no hiding, no tag, no count.
+  # ---------------------------------------------------------------
+  local -a is_canonical=() is_hidden=() hidden_count_for=()
+  local -A group_canonical=()  # group_key -> canonical idx
+  local -A group_has_root_slash=()  # group_key -> "1" if any root="/" exists
+  local -A group_hidden_count=()  # group_key -> N
+  local i grp
 
+  # Initialize flag arrays.
+  for ((i=0; i<count; i++)); do
+    is_canonical+=("0")
+    is_hidden+=("0")
+    hidden_count_for+=("0")
+  done
+
+  # Pass 1: detect which (source, fstype) groups have a root="/" entry.
+  for ((i=0; i<count; i++)); do
+    grp="${fs_devs[$i]}|${fs_types[$i]}"
+    if [ "${fs_roots[$i]}" = "/" ]; then
+      group_has_root_slash[$grp]="1"
+    fi
+  done
+
+  # Pass 2: pick canonical per group.
+  #   With root="/": shortest mp among entries where root="/".
+  #   Without root="/": every entry is its own canonical (subvolume case).
+  for ((i=0; i<count; i++)); do
+    grp="${fs_devs[$i]}|${fs_types[$i]}"
+    if [ "${group_has_root_slash[$grp]:-}" = "1" ]; then
+      # Group has a root="/" entry. Only consider root="/" candidates.
+      [ "${fs_roots[$i]}" != "/" ] && continue
+      if [ -z "${group_canonical[$grp]:-}" ]; then
+        group_canonical[$grp]="$i"
+      else
+        local cur="${group_canonical[$grp]}"
+        if [ "${#fs_mps[$i]}" -lt "${#fs_mps[$cur]}" ]; then
+          group_canonical[$grp]="$i"
+        fi
+      fi
+    else
+      # No root="/" in group -- every entry is canonical.
+      is_canonical[$i]="1"
+    fi
+  done
+
+  # Pass 3: mark canonicals from group_canonical map; mark non-canonicals
+  # in root="/"-bearing groups as hidden.
+  for grp in "${!group_canonical[@]}"; do
+    local cidx="${group_canonical[$grp]}"
+    is_canonical[$cidx]="1"
+  done
+  for ((i=0; i<count; i++)); do
+    grp="${fs_devs[$i]}|${fs_types[$i]}"
+    if [ "${group_has_root_slash[$grp]:-}" = "1" ] && [ "${is_canonical[$i]}" = "0" ]; then
+      is_hidden[$i]="1"
+      group_hidden_count[$grp]=$((${group_hidden_count[$grp]:-0} + 1))
+    fi
+  done
+
+  # Annotate canonicals with their group's hidden count for display.
+  local total_hidden=0
+  local groups_with_hidden=0
+  for grp in "${!group_hidden_count[@]}"; do
+    local n="${group_hidden_count[$grp]}"
+    [ "$n" -ge 1 ] && groups_with_hidden=$((groups_with_hidden + 1))
+    total_hidden=$((total_hidden + n))
+    local cidx="${group_canonical[$grp]}"
+    hidden_count_for[$cidx]="$n"
+  done
+
+  # ---------------------------------------------------------------
+  # Display: default (collapsed) view shows only canonicals, with a
+  # [+N bind mounts hidden] tag when applicable. If the user types y
+  # to expand, reprint with all entries; non-canonical ones get a
+  # [bind mount] tag.
+  # ---------------------------------------------------------------
+  local expanded=0
+  local -a visible_indices=()
+
+  build_visible_indices() {
+    visible_indices=()
+    for ((i=0; i<count; i++)); do
+      if [ "$expanded" = "1" ] || [ "${is_hidden[$i]}" = "0" ]; then
+        visible_indices+=("$i")
+      fi
+    done
+  }
+
+  print_visible() {
+    echo ""
+    echo -e "  ${BOLD}Disk Usage Monitoring${NC}"
+    echo "  Select mountpoints to report to Home Assistant."
+    echo ""
+    local pos idx label suffix n plural
+    for ((pos=0; pos<${#visible_indices[@]}; pos++)); do
+      idx="${visible_indices[$pos]}"
+      label="${fs_labels[$idx]}"
+      suffix=""
+      if [ "$expanded" = "1" ]; then
+        # Expanded view: tag non-canonical entries.
+        [ "${is_canonical[$idx]}" = "0" ] && suffix="  [bind mount]"
+      else
+        # Collapsed view: tag canonicals that have hidden siblings.
+        n="${hidden_count_for[$idx]}"
+        if [ "$n" -ge 1 ]; then
+          plural="s"
+          [ "$n" -eq 1 ] && plural=""
+          suffix="  [+${n} bind mount${plural} hidden]"
+        fi
+      fi
+      echo "    $((pos + 1))) ${label}${suffix}"
+    done
+    echo ""
+  }
+
+  build_visible_indices
+  print_visible
+
+  # Show the y/N expansion prompt only if there are hidden mounts
+  # AND we are still in collapsed view.
+  if [ "$expanded" = "0" ] && [ "$total_hidden" -ge 1 ]; then
+    local entry_word="entries"
+    [ "$total_hidden" -eq 1 ] && entry_word="entry"
+    local part_word="partitions"
+    [ "$groups_with_hidden" -eq 1 ] && part_word="partition"
+    local hide_msg="${total_hidden} bind-mount ${entry_word} hidden across ${groups_with_hidden} ${part_word}."
+    echo "  ${hide_msg}"
+    read -rp "  Show all entries? (y/N) [N]: " EXPAND_CHOICE < "$TTY_IN"
+    case "${EXPAND_CHOICE:-N}" in
+      y|Y|yes|YES)
+        expanded=1
+        build_visible_indices
+        print_visible
+        ;;
+    esac
+  fi
+
+  local visible_count=${#visible_indices[@]}
   local range_hint="1"
-  [ "$count" -gt 1 ] && range_hint="1,2..$count"
+  [ "$visible_count" -gt 1 ] && range_hint="1,2..${visible_count}"
   read -rp "  Monitor ($range_hint / all / none) [all]: " FS_CHOICE < "$TTY_IN"
   FS_CHOICE="${FS_CHOICE:-all}"
 
-  # Parse selection.
+  # Parse selection. `num` refers to position within visible_indices.
   local -a selected_indices=()
   case "$FS_CHOICE" in
     all|ALL|a|A)
-      for ((i=0; i<count; i++)); do selected_indices+=("$i"); done
+      for ((pos=0; pos<visible_count; pos++)); do
+        selected_indices+=("${visible_indices[$pos]}")
+      done
       ;;
     none|NONE|n|N)
       info "Disk usage monitoring disabled."
@@ -181,8 +521,8 @@ pick_filesystems() {
       IFS=',' read -ra nums <<< "$FS_CHOICE"
       for num in "${nums[@]}"; do
         num=$(echo "$num" | tr -d ' ')
-        if [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "$count" ]; then
-          selected_indices+=("$((num - 1))")
+        if [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "$visible_count" ]; then
+          selected_indices+=("${visible_indices[$((num - 1))]}")
         else
           warn "Skipping invalid choice: $num"
         fi
@@ -986,8 +1326,15 @@ echo ""
 echo -e "${BOLD}  ── Agent Summary ──────────────────────────────${NC}"
 echo ""
 
-# Detect IP for display.
-_AGENT_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+# Detect IP for display — prefer the mDNS-advertised interface so
+# the summary matches what Home Assistant will actually connect to.
+_AGENT_IP=""
+if [ -n "$ADV_IFACE" ] && [ "$ADV_IFACE" != "all" ]; then
+  _AGENT_IP=$(ip -4 addr show "$ADV_IFACE" 2>/dev/null | grep -oP 'inet \K[0-9.]+' | head -1)
+  # macOS fallback (ip command may not exist)
+  [ -z "$_AGENT_IP" ] && _AGENT_IP=$(ifconfig "$ADV_IFACE" 2>/dev/null | grep -oE 'inet [0-9.]+' | awk '{print $2}' | head -1)
+fi
+[ -z "$_AGENT_IP" ] && _AGENT_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 [ -z "$_AGENT_IP" ] && _AGENT_IP=$(ifconfig 2>/dev/null | grep -oE 'inet [0-9.]+' | grep -v '127.0.0.1' | head -1 | awk '{print $2}')
 [ -z "$_AGENT_IP" ] && _AGENT_IP="localhost"
 

@@ -109,7 +109,7 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
     ),
     SensorEntityDescription(
         key="wear_leveling_count",
-        name="Wear Leveling / Percentage Used",
+        name="Wear Level (% Used)",
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=PERCENTAGE,
         icon="mdi:chart-donut",
@@ -345,12 +345,19 @@ def _extract_attribute(drive_data: dict[str, Any], key: str) -> Any | None:
                     return raw_value & 0xFFFFFFFF
 
                 # Wear-leveling attributes: the normalized VALUE column
-                # (0–100) is the correct percentage.  RAW_VALUE is a
-                # vendor-specific counter (total writes, erase cycles,
-                # etc.) that can be in the thousands.
+                # (0-100) represents percentage of life REMAINING for
+                # ATA drives (100 = new, 0 = worn).  We invert to
+                # "percentage used" (0 = new, 100 = worn) for
+                # consistency with NVMe percentage_used semantics.
+                # RAW_VALUE is a vendor-specific counter (total writes,
+                # erase cycles, etc.) and should not be used directly.
                 # See: https://github.com/DAB-LABS/smart-sniffer/issues/7
+                # See: docs/internal/research/smart-wear-leveling-semantics.md
                 if key == "wear_leveling_count":
-                    return attr.get("value")
+                    normalized = attr.get("value")
+                    if normalized is None:
+                        return None
+                    return max(0, 100 - normalized)
 
                 return raw_value
             return raw

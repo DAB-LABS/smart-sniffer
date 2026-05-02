@@ -126,7 +126,7 @@ The table below summarises which manufacturers have been confirmed for each of t
 ### 6. Wear Leveling / SSD Endurance
 
 **Logical key:** `wear_leveling_count`
-**Unit:** % (higher = more life remaining for most vendors, except Samsung where it counts write cycles)
+**Unit:** % used (0% = new, 100% = fully worn -- normalized from ATA's inverted scale)
 **Applicability:** SSDs only (ATA/SATA); NVMe uses a dedicated field
 
 | Name String                   | Manufacturers / Notes                                                    |
@@ -143,7 +143,7 @@ The table below summarises which manufacturers have been confirmed for each of t
 
 **NVMe path:** `nvme_smart_health_information_log.percentage_used` (0% = new, 100% = fully worn)
 
-> **Note — Samsung semantics inversion:** Samsung's `Wear_Leveling_Count` (ID 177) counts upward as the drive is used, reporting the number of completed wear cycles, not remaining life. The raw value needs contextual interpretation. Most other vendors report the inverse (percentage of life *remaining*). SMART Sniffer reports the raw value without inversion — users should be aware of their drive's specific semantics.
+> **ATA wear normalization (v0.5.6+):** ATA drives report the normalized VALUE column as "percentage of life remaining" (100 = new, 0 = worn). SMART Sniffer inverts this to "percentage used" (0 = new, 100 = worn) for consistency with NVMe `percentage_used` semantics. The raw value is vendor-specific (erase cycles, write counts, etc.) and is not used.
 >
 > **TODO:** SK Hynix SSDs are believed to use ID 177 for wear leveling (same as Samsung), but the exact attribute name string in `smartctl`'s drivedb has not been confirmed. Verification needed via `smartctl -a` output on an SK Hynix drive.
 
