@@ -1,0 +1,6 @@
+# Minimal SMART Sniffer Card.
+# Drop this on any Lovelace dashboard. The card discovers drives automatically.
+type: custom:smart-sniffer-card
+title: Drive Health
+columns: 2
+show_ok: true

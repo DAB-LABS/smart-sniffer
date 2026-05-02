@@ -1,0 +1,12 @@
+# SMART Sniffer Card filtered to a specific agent.
+# Useful when you have multiple agents and want a separate card per host.
+#
+# Replace AGENT_CONFIG_ENTRY_ID below with the entry ID of the agent you want.
+# You can find it via Developer Tools -> States -> any sensor on that agent's
+# device, then look at its config_entry_id, or copy it from the visual editor's
+# "Filter Agents" picker.
+type: custom:smart-sniffer-card
+title: Drives on brookdale
+columns: 2
+agents:
+  - AGENT_CONFIG_ENTRY_ID

@@ -1,0 +1,12 @@
+# SMART Sniffer Card showing only drives that need attention.
+# Healthy and standby drives are hidden. Useful for a top-of-dashboard
+# "things that need looking at" overview.
+#
+# Watch / Critical / No data drives always remain visible regardless of
+# this setting. Stale (agent offline) drives are also hidden when show_ok
+# is false; if you want them visible, set show_ok to true and consider
+# using the agents filter to scope which agents this card watches.
+type: custom:smart-sniffer-card
+title: Drives needing attention
+columns: 1
+show_ok: false
