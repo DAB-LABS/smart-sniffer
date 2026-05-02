@@ -1,0 +1,3 @@
+port: ${PORT}
+token: ${TOKEN}
+scan_interval: ${INTERVAL}
