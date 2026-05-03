@@ -14,7 +14,7 @@
  *   visual config editor pattern carried over from that prototype. Thank you.
  */
 
-const VERSION = "1.0.16";
+const VERSION = "1.0.19";
 const DOMAIN  = "smart_sniffer";
 
 /* ─── Entity-id suffix patterns ─────────────────────────────────────────────
@@ -1018,6 +1018,14 @@ class SmartSnifferCard extends HTMLElement {
     const root = this.shadowRoot;
     const cfg  = this._config;
 
+    // Capture the user's current scroll position BEFORE we tear down the
+    // card's DOM. The full re-render breaks scroll anchoring, so without
+    // this the page jumps to the top on every render. The scroll-into-view
+    // block at the bottom of this method may override this restore when
+    // the user just opened a chip; that's intentional (we want to scroll
+    // for chip expand, but not for chip close or background polls).
+    const preRenderScrollY = (typeof window !== "undefined") ? window.scrollY : 0;
+
     // First render: install styles.
     if (!root.querySelector("style")) {
       const styleEl = document.createElement("style");
@@ -1079,6 +1087,60 @@ class SmartSnifferCard extends HTMLElement {
     const haveStorage = cfg.show_storage && this._filesystems.length > 0;
     if (drives.length > 0 || haveStorage) {
       card.appendChild(this._renderDrivesSection(drives, driveAgentOrder));
+    }
+
+    // Scroll handling after a re-render. Two cases:
+    //
+    //   (1) User just clicked-to-EXPAND a chip. We may want to scroll so
+    //       the detail panel is visible: do nothing if it already fits in
+    //       viewport, otherwise pull the chip's top toward the top of the
+    //       viewport so the panel has room to render.
+    //
+    //   (2) Any other re-render (chip close, background poll, entity
+    //       update). The user did not initiate any movement; we should
+    //       leave their scroll position exactly where they left it. The
+    //       full re-render breaks scroll anchoring, so we have to restore
+    //       it manually.
+    //
+    // Both branches use requestAnimationFrame so layout has settled when
+    // we measure and adjust.
+    //
+    // This is a v1.0.x bandage. v1.1 will eliminate full re-renders and
+    // make this whole block obsolete. See
+    // docs/internal/plans/plan-card-partial-render-v1-1.md.
+    if (this._scrollActiveIntoViewAfterRender && this._selected) {
+      this._scrollActiveIntoViewAfterRender = false;
+      requestAnimationFrame(() => {
+        const activeChip = this.shadowRoot.querySelector(".ss-chip.is-active.is-expanded");
+        const detail    = this.shadowRoot.querySelector(".ss-detail");
+        if (!activeChip || !activeChip.getBoundingClientRect) {
+          // Defensive: fall back to restoring the pre-render scroll.
+          window.scrollTo({ top: preRenderScrollY, behavior: "auto" });
+          return;
+        }
+        const chipRect   = activeChip.getBoundingClientRect();
+        const detailRect = detail ? detail.getBoundingClientRect() : null;
+        const viewport   = window.innerHeight || document.documentElement.clientHeight;
+        const bottom = detailRect ? detailRect.bottom : chipRect.bottom;
+        const TOP_OFFSET = 16;
+        if (bottom > viewport || chipRect.top < 0) {
+          // Scroll just enough to bring the chip's top into view.
+          const targetScroll = window.scrollY + chipRect.top - TOP_OFFSET;
+          window.scrollTo({ top: targetScroll, behavior: "auto" });
+        } else {
+          // The expand fit nicely. Restore the pre-render scroll so the
+          // user's view of the world is exactly where they left it.
+          window.scrollTo({ top: preRenderScrollY, behavior: "auto" });
+        }
+      });
+    } else {
+      // Not an expand action. Restore the pre-render scroll position so
+      // closes and background re-renders never pop the page to the top.
+      requestAnimationFrame(() => {
+        if (window.scrollY !== preRenderScrollY) {
+          window.scrollTo({ top: preRenderScrollY, behavior: "auto" });
+        }
+      });
     }
   }
 
@@ -1518,8 +1580,12 @@ class SmartSnifferCard extends HTMLElement {
   }
 
   _toggleSelected(deviceId) {
-    if (this._selected === deviceId) this._selected = null;
-    else this._selected = deviceId;
+    // Track whether this click is OPENING a chip (not closing) so the
+    // post-render scroll-into-view logic only fires when the user just
+    // expanded something. Closing a chip should leave scroll alone.
+    const wasOpen = this._selected === deviceId;
+    this._selected = wasOpen ? null : deviceId;
+    this._scrollActiveIntoViewAfterRender = !wasOpen;
     this._render();
   }
 

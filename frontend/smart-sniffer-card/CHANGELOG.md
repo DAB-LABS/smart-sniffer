@@ -2,6 +2,25 @@
 
 All notable changes to the SMART Sniffer Card.
 
+## [1.0.19] - 2026-05-02
+
+### Fixed
+
+- Closing a chip's detail panel no longer pops the page to the top. Same fix prevents the silent scroll loss on every background poll re-render. Capture `window.scrollY` at the top of `_render()` and restore it after layout settles, except when the user just expanded a chip (in which case the smarter expand-scroll logic from 1.0.18 wins). The full re-render is still architecturally wrong for this card; the v1.1 partial-render plan is the real fix. Both bandages get retired in v1.1.
+
+## [1.0.18] - 2026-05-02
+
+### Fixed
+
+- Smarter scroll behavior on chip expand. v1.0.17's `scrollIntoView({block:"nearest"})` left the active chip in place but pushed the detail panel below the viewport, requiring the user to scroll on every click. The new logic measures whether the chip + detail panel fit in the viewport, and scrolls only when needed: chips already in a good position stay put; chips near the bottom get pulled up so the panel has room to render. 16px breathing offset above the chip keeps the layout from feeling crowded.
+
+## [1.0.17] - 2026-05-02
+
+### Fixed
+
+- Clicking a chip to expand its detail view no longer jumps the page focus to the top of the card. After the re-render that opens the detail panel, the active chip is scrolled back into view via `scrollIntoView({block:"nearest"})` deferred through `requestAnimationFrame` so the browser has settled layout. `block:"nearest"` means already-visible chips don't shift; only chips that ended up outside the viewport after the re-render get pulled back in. Closing a chip leaves scroll alone.
+- This is a surgical fix. The root cause is that every chip click triggers a full card re-render, which destroys scroll anchoring. v1.1 will replace that with partial DOM updates on toggle. See `docs/internal/plans/plan-card-partial-render-v1-1.md`.
+
 ## [1.0.16] - 2026-05-02
 
 ### Changed
