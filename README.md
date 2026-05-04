@@ -334,23 +334,21 @@ If the agent starts but reports no drives (or fewer than expected), run:
 smartha-agent --discover
 ```
 
-This probes every drive the OS exposes, tests protocol detection, and tells you exactly what the agent will see at runtime. On Synology NAS devices, it also probes the proprietary `/dev/sata1` through `/dev/sata8` paths. If any drives need manual configuration, it offers to write the config for you.
+This probes every drive the OS exposes, tests protocol detection, and tells you exactly what the agent will see at runtime. On Synology NAS devices, it also probes the proprietary `/dev/sata1` through `/dev/sata8` paths. If any drives need manual configuration, it offers to write the config for you. See the [Drive Discovery guide](docs/discover.md) for full details and example output.
 
 Paste the `--discover` output into a GitHub issue if you need help -- it gives us everything we need to diagnose remotely.
 
 ### Protocol detection (QNAP, some HBA controllers)
 
-Some NAS HBA controllers (common on QNAP) report SATA drives as SCSI to the operating system. The agent handles this automatically since v0.5.5: it detects the mismatch on the first scan and retries with SCSI-to-ATA Translation (SAT). No config change needed.
+Some NAS HBA controllers (common on QNAP) report SATA drives as SCSI to the operating system. The agent handles this automatically since v0.5.5: it detects the mismatch on the first scan and retries with SCSI-to-ATA Translation (SAT). No config change needed. See the [QNAP guide](docs/guides/qnap.md) for platform-specific details.
 
 ### Synology NAS
 
-Synology DSM uses proprietary device paths (`/dev/sata1`, `/dev/sata2`, etc.) that `smartctl --scan` does not find. Synology also ships smartmontools 6.5, which is too old for the agent (requires 7.0+).
-
-Setup steps:
+Synology DSM uses proprietary device paths (`/dev/sata1`, `/dev/sata2`, etc.) that `smartctl --scan` does not find. Synology also ships smartmontools 6.5, which is too old for the agent (requires 7.0+). See the [Synology guide](docs/guides/synology.md) for the full walkthrough, or the quick version:
 
 1. Install **SynoCli Disk Tools** from the [SynoCommunity](https://synocommunity.com/) package source in DSM Package Center. This provides smartmontools 7.4+.
 2. Run `smartha-agent --discover` to detect your drives and generate config.
-3. Restart the agent: `sudo systemctl restart smartha-agent`
+3. Restart the agent: `sudo systemctl restart smart-sniffer`
 
 ### RAID controllers (MegaRAID, HP SmartArray, etc.)
 
@@ -453,31 +451,6 @@ Step-by-step setup for NAS devices, hypervisors, and containerized environments.
 | [Docker](docs/guides/docker.md) | Device passthrough, host networking *(community -- in progress)* |
 | [Virtual Machines](docs/guides/virtual-machines.md) | ESXi, Hyper-V, VirtualBox -- why SMART needs the host |
 
-## Roadmap
-
-- [x] HAOS App -- [SMART Sniffer App](https://github.com/DAB-LABS/smart-sniffer-app) for Home Assistant OS
-- [x] Integration icons for HA integrations page
-- [x] Disk usage monitoring (agent-side) -- `/api/filesystems` endpoint with installer picker
-- [x] Disk usage monitoring (integration-side) -- filesystem sensor entities in HA
-- [x] Standby-aware polling (`smartctl -n standby`) -- shipped v0.5.3
-- [x] Integration: agent connectivity sensor + diagnostic entities (version, last seen, IP, port, auth) -- shipped v0.5.3
-- [x] Agent: smartctl minimum version check (fail early with clear message if < 7.0) -- shipped v0.5.3
-- [x] Integration: dedicated Drive Standby binary sensor with `data_as_of` attribute -- shipped v0.5.4
-- [x] Integration: Agent OS diagnostic sensor (linux / darwin / windows) -- shipped v0.5.4
-- [x] NAS protocol detection (SAT fallback, `--discover`, `device_overrides`) -- shipped v0.5.5
-- [x] Agent: smartctl path auto-resolution (finds newer smartctl when PATH version is outdated) -- shipped v0.5.5.1
-- [x] Agent: broadened SAT fallback to all smartctl execution failure bits -- shipped v0.5.5.2
-- [x] Agent: first-poll wake (collects SMART baseline from sleeping drives on startup) -- shipped v0.5.5.3
-- [x] Agent: expanded mDNS interface filter (51 prefixes) + IP scoring improvement -- shipped v0.5.5.4
-- [ ] MQTT agent mode
-- [ ] Custom Lovelace card
-- [ ] Configurable alert thresholds via options flow
-- [ ] Per-drive scan intervals
-- [ ] YAML-based SMART attribute definitions (vendor field mapping, transforms, units)
-- [ ] SAS/SCSI drive support
-- [ ] Agent: container-aware filesystem reporting (MNT_PREFIX path mapping for Docker deployments)
-- [ ] Agent: runtime interface detection (replace static prefix list with OS-level physical NIC detection)
-
 ## Community Deployments
 
 | Deployment | Maintainer | Description |
@@ -501,6 +474,35 @@ Point the HA integration at `localhost:9100` and you're testing.
 Found a bug? Have a drive that isn't mapping correctly? See [CONTRIBUTING.md](CONTRIBUTING.md) for how to help.
 
 Drive-specific `smartctl -a --json` output samples are especially welcome — they help us catch manufacturer name variants we haven't seen yet.
+
+## Roadmap
+
+- [x] HAOS App -- [SMART Sniffer App](https://github.com/DAB-LABS/smart-sniffer-app) for Home Assistant OS
+- [x] Integration icons for HA integrations page
+- [x] Disk usage monitoring (agent-side) -- `/api/filesystems` endpoint with installer picker
+- [x] Disk usage monitoring (integration-side) -- filesystem sensor entities in HA
+- [x] Standby-aware polling (`smartctl -n standby`) -- shipped v0.5.3
+- [x] Integration: agent connectivity sensor + diagnostic entities (version, last seen, IP, port, auth) -- shipped v0.5.3
+- [x] Agent: smartctl minimum version check (fail early with clear message if < 7.0) -- shipped v0.5.3
+- [x] Integration: dedicated Drive Standby binary sensor with `data_as_of` attribute -- shipped v0.5.4
+- [x] Integration: Agent OS diagnostic sensor (linux / darwin / windows) -- shipped v0.5.4
+- [x] NAS protocol detection (SAT fallback, `--discover`, `device_overrides`) -- shipped v0.5.5
+- [x] Agent: smartctl path auto-resolution (finds newer smartctl when PATH version is outdated) -- shipped v0.5.5.1
+- [x] Agent: broadened SAT fallback to all smartctl execution failure bits -- shipped v0.5.5.2
+- [x] Agent: first-poll wake (collects SMART baseline from sleeping drives on startup) -- shipped v0.5.5.3
+- [x] Agent: expanded mDNS interface filter (51 prefixes) + IP scoring improvement -- shipped v0.5.5.4
+- [x] Installer: macOS quarantine removal + expanded interface picker labels -- shipped v0.5.5.5
+- [x] Unified ATA/NVMe wear level scale + btrfs filesystem fallback + installer bind mount dedup -- shipped v0.5.6
+- [x] Custom Lovelace card -- [SMART Sniffer Card](frontend/smart-sniffer-card/) v1.0.19
+- [x] Platform installation guides -- Proxmox, Synology, QNAP, TrueNAS SCALE, Unraid, Docker, VMs
+- [x] Drive Discovery (`--discover`) documentation
+- [ ] MQTT agent mode
+- [ ] Configurable alert thresholds via options flow
+- [ ] Per-drive scan intervals
+- [ ] YAML-based SMART attribute definitions (vendor field mapping, transforms, units)
+- [ ] SAS/SCSI drive support
+- [ ] Agent: container-aware filesystem reporting (MNT_PREFIX path mapping for Docker deployments)
+- [ ] Agent: runtime interface detection (replace static prefix list with OS-level physical NIC detection)
 
 ---
 

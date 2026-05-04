@@ -373,7 +373,7 @@ Future:
 - [x] ~~**Improved release descriptions**~~ — ✅ Release body template now includes What's New, Update Your Agents, and Fresh Install sections (v0.4.27).
 - [ ] **GitHub Actions Node.js 24 migration** — Update workflow actions before June 2, 2026 deadline.
 - [ ] MQTT agent mode for environments where direct HTTP isn't ideal
-- [ ] Custom Lovelace card for drive health at a glance
+- [x] ~~Custom Lovelace card for drive health at a glance~~ -- shipped v1.0.19. See `frontend/smart-sniffer-card/`.
 - [ ] **Temperature-based attention triggers** — absolute threshold (e.g., > 55°C = MAYBE) and trend-over-time detection (sustained rise). Requires storing historical temperature readings in the coordinator.
 - [ ] Configurable thresholds via HA options flow
 - [ ] SAS/SCSI drive support
