@@ -180,7 +180,7 @@ You can re-run `--discover` at any time. Common reasons:
 Discovery handles protocol detection and Synology/QNAP platform quirks. It doesn't help with:
 
 - **Virtual disks in VMs** -- virtual disk controllers don't pass SMART commands regardless of protocol. See the [Virtual Machines guide](guides/virtual-machines.md) or the [Proxmox guide](guides/proxmox.md).
-- **Hardware RAID controllers** -- if your drives sit behind a hardware RAID controller (MegaRAID, Adaptec, etc.), `smartctl` may need a RAID-specific device type (`-d megaraid,0`). Discovery doesn't probe RAID controllers yet. Set these overrides manually in `config.yaml`.
+- **Hardware RAID controllers** -- if your drives sit behind a hardware RAID controller (MegaRAID, Adaptec, etc.), `smartctl` needs a RAID-specific device type (`-d megaraid,0`). Discovery doesn't probe RAID controllers yet. See the [RAID Controllers guide](guides/raid-controllers.md) for controller identification and config examples.
 - **USB-attached drives** -- some USB enclosures don't pass SMART commands. Try `-d sat` manually with `smartctl` to test.
 
 ## Config preservation warning

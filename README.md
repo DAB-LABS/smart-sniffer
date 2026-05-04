@@ -324,7 +324,7 @@ Every drive on the machine appears as its own HA device.
 
 Most Linux, macOS and Windows machines work out of the box. NAS devices and RAID controllers sometimes need extra steps because their storage controllers present drives differently than standard SATA/NVMe.
 
-**Platform guides:** For step-by-step walkthroughs on specific platforms, see the [Platform Installation Guides](docs/guides/) -- covering Proxmox, Synology, QNAP, TrueNAS SCALE, Unraid, Docker, and virtual machines.
+**Platform guides:** For step-by-step walkthroughs on specific platforms, see the [Platform Installation Guides](docs/guides/) -- covering Synology, QNAP, TrueNAS SCALE, Unraid, Proxmox, Docker, virtual machines, and hardware RAID controllers.
 
 ### Diagnosing drive detection
 
@@ -334,35 +334,17 @@ If the agent starts but reports no drives (or fewer than expected), run:
 smartha-agent --discover
 ```
 
-This probes every drive the OS exposes, tests protocol detection, and tells you exactly what the agent will see at runtime. On Synology NAS devices, it also probes the proprietary `/dev/sata1` through `/dev/sata8` paths. If any drives need manual configuration, it offers to write the config for you. See the [Drive Discovery guide](docs/discover.md) for full details and example output.
+This probes every drive the OS exposes, tests protocol detection, and tells you exactly what the agent will see at runtime. If any drives need manual configuration, it offers to write the config for you. See the [Drive Discovery guide](docs/discover.md) for full details and example output.
 
 Paste the `--discover` output into a GitHub issue if you need help -- it gives us everything we need to diagnose remotely.
 
-### Protocol detection (QNAP, some HBA controllers)
+### NAS devices
 
-Some NAS HBA controllers (common on QNAP) report SATA drives as SCSI to the operating system. The agent handles this automatically since v0.5.5: it detects the mismatch on the first scan and retries with SCSI-to-ATA Translation (SAT). No config change needed. See the [QNAP guide](docs/guides/qnap.md) for platform-specific details.
+NAS platforms have platform-specific quirks -- proprietary device paths (Synology), SCSI-to-ATA protocol mismatches (QNAP), outdated smartmontools versions, and LXC bridge interfaces that confuse mDNS. The agent handles most of this automatically since v0.5.5, but some platforms need `device_overrides` or a newer smartmontools. See the platform-specific guides: [Synology](docs/guides/synology.md), [QNAP](docs/guides/qnap.md), [TrueNAS SCALE](docs/guides/truenas-scale.md), [Unraid](docs/guides/unraid.md).
 
-### Synology NAS
+### Hardware RAID controllers
 
-Synology DSM uses proprietary device paths (`/dev/sata1`, `/dev/sata2`, etc.) that `smartctl --scan` does not find. Synology also ships smartmontools 6.5, which is too old for the agent (requires 7.0+). See the [Synology guide](docs/guides/synology.md) for the full walkthrough, or the quick version:
-
-1. Install **SynoCli Disk Tools** from the [SynoCommunity](https://synocommunity.com/) package source in DSM Package Center. This provides smartmontools 7.4+.
-2. Run `smartha-agent --discover` to detect your drives and generate config.
-3. Restart the agent: `sudo systemctl restart smart-sniffer`
-
-### RAID controllers (MegaRAID, HP SmartArray, etc.)
-
-Drives behind hardware RAID controllers need an explicit protocol flag (e.g. `-d megaraid,0`) to reach the physical drives through the RAID layer. Add a `device_overrides` section to your `config.yaml`:
-
-```yaml
-device_overrides:
-  - device: /dev/sda
-    protocol: megaraid,0
-  - device: /dev/sda
-    protocol: megaraid,1
-```
-
-Each entry maps a device path to the smartctl `-d` protocol string. The agent treats overridden devices as first-class drives even if they are not found by `smartctl --scan`. Run `smartha-agent --discover` to probe your controller and see what protocol each drive needs.
+Drives behind hardware RAID controllers (MegaRAID, HP SmartArray, 3ware, Areca) are hidden from the OS behind the RAID layer. `smartctl` needs a RAID-specific device type flag to reach each physical drive. `--discover` does not probe RAID controllers yet, so these require manual `device_overrides`. See the [RAID Controllers guide](docs/guides/raid-controllers.md) for controller identification, drive enumeration, and config examples.
 
 ### smartmontools version
 
@@ -450,6 +432,7 @@ Step-by-step setup for NAS devices, hypervisors, and containerized environments.
 | [Unraid](docs/guides/unraid.md) | br0 bridge, Docker deployment *(community -- in progress)* |
 | [Docker](docs/guides/docker.md) | Device passthrough, host networking *(community -- in progress)* |
 | [Virtual Machines](docs/guides/virtual-machines.md) | ESXi, Hyper-V, VirtualBox -- why SMART needs the host |
+| [Hardware RAID Controllers](docs/guides/raid-controllers.md) | MegaRAID, HP SmartArray, 3ware, Areca -- manual `device_overrides` |
 
 ## Community Deployments
 

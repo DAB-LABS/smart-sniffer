@@ -19,6 +19,7 @@ These guides walk through each platform step by step.
 | [Unraid](unraid.md) | Community guide -- br0 bridge, Docker-based deployment. *(In progress)* |
 | [Docker](docker.md) | Containerized agent deployment, device passthrough, known limitations. *(In progress)* |
 | [Virtual Machines](virtual-machines.md) | Generic VM guide -- ESXi, Hyper-V, VirtualBox. Why SMART data needs the host. |
+| [Hardware RAID Controllers](raid-controllers.md) | MegaRAID, HP SmartArray, 3ware, Areca. Manual device_overrides for RAID passthrough. |
 
 ## Quick reference
 

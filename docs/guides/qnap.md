@@ -120,7 +120,7 @@ Restart the agent after editing config.
 
 ### I have a hardware RAID controller
 
-Some QNAP models (higher-end rackmount units) have hardware RAID controllers. In that case, drives are hidden behind the RAID layer and need explicit protocol flags. See the [NAS & RAID Setup](../../README.md#nas--raid-setup) section in the main README for `device_overrides` with RAID-specific protocols like `megaraid,0`.
+Some QNAP models (higher-end rackmount units) have hardware RAID controllers. In that case, drives are hidden behind the RAID layer and need explicit protocol flags. See the [Hardware RAID Controllers guide](raid-controllers.md) for `device_overrides` with RAID-specific protocols like `megaraid,0`.
 
 Most consumer QNAP models use a standard HBA (not hardware RAID), so this doesn't apply to the typical setup.
 
