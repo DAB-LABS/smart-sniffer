@@ -432,12 +432,26 @@ This is the most common "why isn't my drive showing data?" scenario. It's a hard
 | [Trigger → Entity Map](docs/attention-trigger-entity-map.md) | Every attention trigger mapped to its sensor entity and icon |
 | [Early Warning Attributes](docs/early-warning-attributes.md) | Which SMART attributes predict failure and why |
 | [Attribute Name Variants](docs/smart-attribute-name-variants.md) | Manufacturer-specific `smartctl` name mapping research |
-| [Mock Agent](docs/mock-agent.md) | Testing tool — fake agent with controllable drives |
-| [Platform Installation Guides](docs/guides/) | Step-by-step setup for Proxmox, Synology, QNAP, TrueNAS, Unraid, Docker, VMs |
+| [Drive Discovery (`--discover`)](docs/discover.md) | Probe drives, detect protocols, auto-generate config |
+| [Mock Agent](docs/mock-agent.md) | Testing tool -- fake agent with controllable drives |
 | [Platform Install Paths](docs/platform-install-paths.md) | Install locations, immutable rootfs support, network interface filtering |
 | [Agent Version Repair](docs/agent-version-repair.md) | Design doc for agent version checking and HA repair notifications |
 | [Build Journal](docs/build-journal.md) | Design decisions, iteration history, known issues |
-| [Examples](examples/) | Community-contributed automations — copy, paste, adapt |
+| [Examples](examples/) | Community-contributed automations -- copy, paste, adapt |
+
+### Platform Installation Guides
+
+Step-by-step setup for NAS devices, hypervisors, and containerized environments. See the [guides hub](docs/guides/) for the full index.
+
+| Platform | What's covered |
+|----------|---------------|
+| [Proxmox + HA](docs/guides/proxmox.md) | Agent on host, integration in VM, mDNS, firewall |
+| [Synology DSM](docs/guides/synology.md) | SynoCli smartmontools, `/dev/sataX` paths, `--discover` |
+| [QNAP QTS](docs/guides/qnap.md) | SAT fallback, lxcbr0 exclusion, interface selection |
+| [TrueNAS SCALE](docs/guides/truenas-scale.md) | ZFS context, btrfs-progs, filesystem monitoring |
+| [Unraid](docs/guides/unraid.md) | br0 bridge, Docker deployment *(community -- in progress)* |
+| [Docker](docs/guides/docker.md) | Device passthrough, host networking *(community -- in progress)* |
+| [Virtual Machines](docs/guides/virtual-machines.md) | ESXi, Hyper-V, VirtualBox -- why SMART needs the host |
 
 ## Roadmap
 
