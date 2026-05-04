@@ -324,6 +324,8 @@ Every drive on the machine appears as its own HA device.
 
 Most Linux, macOS and Windows machines work out of the box. NAS devices and RAID controllers sometimes need extra steps because their storage controllers present drives differently than standard SATA/NVMe.
 
+**Platform guides:** For step-by-step walkthroughs on specific platforms, see the [Platform Installation Guides](docs/guides/) -- covering Proxmox, Synology, QNAP, TrueNAS SCALE, Unraid, Docker, and virtual machines.
+
 ### Diagnosing drive detection
 
 If the agent starts but reports no drives (or fewer than expected), run:
@@ -431,6 +433,7 @@ This is the most common "why isn't my drive showing data?" scenario. It's a hard
 | [Early Warning Attributes](docs/early-warning-attributes.md) | Which SMART attributes predict failure and why |
 | [Attribute Name Variants](docs/smart-attribute-name-variants.md) | Manufacturer-specific `smartctl` name mapping research |
 | [Mock Agent](docs/mock-agent.md) | Testing tool — fake agent with controllable drives |
+| [Platform Installation Guides](docs/guides/) | Step-by-step setup for Proxmox, Synology, QNAP, TrueNAS, Unraid, Docker, VMs |
 | [Platform Install Paths](docs/platform-install-paths.md) | Install locations, immutable rootfs support, network interface filtering |
 | [Agent Version Repair](docs/agent-version-repair.md) | Design doc for agent version checking and HA repair notifications |
 | [Build Journal](docs/build-journal.md) | Design decisions, iteration history, known issues |
