@@ -2,6 +2,14 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.5.6.1 -- 2026-05-04
+
+Installer-only patch. No agent, integration, or config changes.
+
+### Fixed
+- **macOS installer crash during filesystem picker** -- the bind-mount deduplication logic (added in v0.5.6) used bash 4+ associative arrays (`local -A`), which crash on macOS's built-in bash 3.2. The grouping code is now gated behind a `mountinfo` check so it only runs on Linux, where bind mounts exist and bash 4+ is standard. On macOS and BSD, every filesystem entry is treated as canonical with no bind-mount grouping. No functional change on Linux.
+- **macOS installer summary showed grep error** -- the post-install IP detection used `grep -P` (Perl regex), which is not available on macOS. Replaced with portable `grep -oE` and reordered to try `ifconfig` before `ip` so macOS hits the working path first.
+
 ## v0.5.6 -- 2026-05-02
 
 Agent + integration release. Both components updated.

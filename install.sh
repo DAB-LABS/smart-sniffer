@@ -354,6 +354,12 @@ pick_filesystems() {
   # ---------------------------------------------------------------
   # Phase 1B-3: canonical entry + bind-mount hiding.
   #
+  # Bind mounts are a Linux kernel feature exposed via mountinfo.
+  # On non-Linux platforms (macOS, BSD) there are no bind mounts to
+  # group, so every entry is canonical. The grouping logic uses bash
+  # 4+ associative arrays (local -A) which are not available on
+  # macOS's bash 3.2, so we gate the entire block on mount_source.
+  #
   # Group dedup'd entries by (source, fstype). Within each group:
   #   - If any entry has root="/", canonical = shortest mp among
   #     those root="/" entries. All other entries (root="/" non-shortest
@@ -364,72 +370,83 @@ pick_filesystems() {
   # Single-entry groups: no hiding, no tag, no count.
   # ---------------------------------------------------------------
   local -a is_canonical=() is_hidden=() hidden_count_for=()
-  local -A group_canonical=()  # group_key -> canonical idx
-  local -A group_has_root_slash=()  # group_key -> "1" if any root="/" exists
-  local -A group_hidden_count=()  # group_key -> N
-  local i grp
-
-  # Initialize flag arrays.
-  for ((i=0; i<count; i++)); do
-    is_canonical+=("0")
-    is_hidden+=("0")
-    hidden_count_for+=("0")
-  done
-
-  # Pass 1: detect which (source, fstype) groups have a root="/" entry.
-  for ((i=0; i<count; i++)); do
-    grp="${fs_devs[$i]}|${fs_types[$i]}"
-    if [ "${fs_roots[$i]}" = "/" ]; then
-      group_has_root_slash[$grp]="1"
-    fi
-  done
-
-  # Pass 2: pick canonical per group.
-  #   With root="/": shortest mp among entries where root="/".
-  #   Without root="/": every entry is its own canonical (subvolume case).
-  for ((i=0; i<count; i++)); do
-    grp="${fs_devs[$i]}|${fs_types[$i]}"
-    if [ "${group_has_root_slash[$grp]:-}" = "1" ]; then
-      # Group has a root="/" entry. Only consider root="/" candidates.
-      [ "${fs_roots[$i]}" != "/" ] && continue
-      if [ -z "${group_canonical[$grp]:-}" ]; then
-        group_canonical[$grp]="$i"
-      else
-        local cur="${group_canonical[$grp]}"
-        if [ "${#fs_mps[$i]}" -lt "${#fs_mps[$cur]}" ]; then
-          group_canonical[$grp]="$i"
-        fi
-      fi
-    else
-      # No root="/" in group -- every entry is canonical.
-      is_canonical[$i]="1"
-    fi
-  done
-
-  # Pass 3: mark canonicals from group_canonical map; mark non-canonicals
-  # in root="/"-bearing groups as hidden.
-  for grp in "${!group_canonical[@]}"; do
-    local cidx="${group_canonical[$grp]}"
-    is_canonical[$cidx]="1"
-  done
-  for ((i=0; i<count; i++)); do
-    grp="${fs_devs[$i]}|${fs_types[$i]}"
-    if [ "${group_has_root_slash[$grp]:-}" = "1" ] && [ "${is_canonical[$i]}" = "0" ]; then
-      is_hidden[$i]="1"
-      group_hidden_count[$grp]=$((${group_hidden_count[$grp]:-0} + 1))
-    fi
-  done
-
-  # Annotate canonicals with their group's hidden count for display.
   local total_hidden=0
   local groups_with_hidden=0
-  for grp in "${!group_hidden_count[@]}"; do
-    local n="${group_hidden_count[$grp]}"
-    [ "$n" -ge 1 ] && groups_with_hidden=$((groups_with_hidden + 1))
-    total_hidden=$((total_hidden + n))
-    local cidx="${group_canonical[$grp]}"
-    hidden_count_for[$cidx]="$n"
-  done
+  local i grp
+
+  if [ "$mount_source" = "mountinfo" ]; then
+    # Linux: full bind-mount grouping with associative arrays (bash 4+).
+    local -A group_canonical=()  # group_key -> canonical idx
+    local -A group_has_root_slash=()  # group_key -> "1" if any root="/" exists
+    local -A group_hidden_count=()  # group_key -> N
+
+    # Initialize flag arrays.
+    for ((i=0; i<count; i++)); do
+      is_canonical+=("0")
+      is_hidden+=("0")
+      hidden_count_for+=("0")
+    done
+
+    # Pass 1: detect which (source, fstype) groups have a root="/" entry.
+    for ((i=0; i<count; i++)); do
+      grp="${fs_devs[$i]}|${fs_types[$i]}"
+      if [ "${fs_roots[$i]}" = "/" ]; then
+        group_has_root_slash[$grp]="1"
+      fi
+    done
+
+    # Pass 2: pick canonical per group.
+    #   With root="/": shortest mp among entries where root="/".
+    #   Without root="/": every entry is its own canonical (subvolume case).
+    for ((i=0; i<count; i++)); do
+      grp="${fs_devs[$i]}|${fs_types[$i]}"
+      if [ "${group_has_root_slash[$grp]:-}" = "1" ]; then
+        # Group has a root="/" entry. Only consider root="/" candidates.
+        [ "${fs_roots[$i]}" != "/" ] && continue
+        if [ -z "${group_canonical[$grp]:-}" ]; then
+          group_canonical[$grp]="$i"
+        else
+          local cur="${group_canonical[$grp]}"
+          if [ "${#fs_mps[$i]}" -lt "${#fs_mps[$cur]}" ]; then
+            group_canonical[$grp]="$i"
+          fi
+        fi
+      else
+        # No root="/" in group -- every entry is canonical.
+        is_canonical[$i]="1"
+      fi
+    done
+
+    # Pass 3: mark canonicals from group_canonical map; mark non-canonicals
+    # in root="/"-bearing groups as hidden.
+    for grp in "${!group_canonical[@]}"; do
+      local cidx="${group_canonical[$grp]}"
+      is_canonical[$cidx]="1"
+    done
+    for ((i=0; i<count; i++)); do
+      grp="${fs_devs[$i]}|${fs_types[$i]}"
+      if [ "${group_has_root_slash[$grp]:-}" = "1" ] && [ "${is_canonical[$i]}" = "0" ]; then
+        is_hidden[$i]="1"
+        group_hidden_count[$grp]=$((${group_hidden_count[$grp]:-0} + 1))
+      fi
+    done
+
+    # Annotate canonicals with their group's hidden count for display.
+    for grp in "${!group_hidden_count[@]}"; do
+      local n="${group_hidden_count[$grp]}"
+      [ "$n" -ge 1 ] && groups_with_hidden=$((groups_with_hidden + 1))
+      total_hidden=$((total_hidden + n))
+      local cidx="${group_canonical[$grp]}"
+      hidden_count_for[$cidx]="$n"
+    done
+  else
+    # Non-Linux (macOS, BSD): no bind mounts. Every entry is canonical.
+    for ((i=0; i<count; i++)); do
+      is_canonical+=("1")
+      is_hidden+=("0")
+      hidden_count_for+=("0")
+    done
+  fi
 
   # ---------------------------------------------------------------
   # Display: default (collapsed) view shows only canonicals, with a
@@ -1330,9 +1347,10 @@ echo ""
 # the summary matches what Home Assistant will actually connect to.
 _AGENT_IP=""
 if [ -n "$ADV_IFACE" ] && [ "$ADV_IFACE" != "all" ]; then
-  _AGENT_IP=$(ip -4 addr show "$ADV_IFACE" 2>/dev/null | grep -oP 'inet \K[0-9.]+' | head -1)
-  # macOS fallback (ip command may not exist)
-  [ -z "$_AGENT_IP" ] && _AGENT_IP=$(ifconfig "$ADV_IFACE" 2>/dev/null | grep -oE 'inet [0-9.]+' | awk '{print $2}' | head -1)
+  # macOS/BSD: ifconfig is reliable and avoids grep -P (Perl regex, Linux-only).
+  _AGENT_IP=$(ifconfig "$ADV_IFACE" 2>/dev/null | grep -oE 'inet [0-9.]+' | awk '{print $2}' | head -1)
+  # Linux fallback: ip command with portable grep.
+  [ -z "$_AGENT_IP" ] && _AGENT_IP=$(ip -4 addr show "$ADV_IFACE" 2>/dev/null | grep -oE 'inet [0-9.]+' | awk '{print $2}' | head -1)
 fi
 [ -z "$_AGENT_IP" ] && _AGENT_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 [ -z "$_AGENT_IP" ] && _AGENT_IP=$(ifconfig 2>/dev/null | grep -oE 'inet [0-9.]+' | grep -v '127.0.0.1' | head -1 | awk '{print $2}')
