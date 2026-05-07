@@ -173,7 +173,7 @@ device_overrides:
 ## Step 5: Restart the agent
 
 ```bash
-sudo systemctl restart smart-sniffer
+sudo systemctl restart smartha-agent
 ```
 
 Check the agent health endpoint to confirm drives are detected:

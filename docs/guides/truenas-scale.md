@@ -35,7 +35,7 @@ The installer detects your OS, installs smartmontools if missing, and sets up th
 Verify:
 
 ```bash
-sudo systemctl status smart-sniffer
+sudo systemctl status smartha-agent
 curl http://localhost:9099/api/health
 ```
 
@@ -77,7 +77,7 @@ Make sure `btrfs-progs` is installed. The agent needs it for the fallback filesy
 
 ```bash
 sudo apt install btrfs-progs
-sudo systemctl restart smart-sniffer
+sudo systemctl restart smartha-agent
 ```
 
 ### HA can't discover the agent

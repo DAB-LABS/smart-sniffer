@@ -84,7 +84,7 @@ Say yes. The tool writes `device_overrides` entries to your `config.yaml` so the
 Restart the agent to pick up the new config:
 
 ```bash
-sudo systemctl restart smart-sniffer
+sudo systemctl restart smartha-agent
 ```
 
 ## Step 4: Add the integration to Home Assistant
@@ -122,7 +122,7 @@ smartctl_path: /usr/local/bin/smartctl
 
 ### No drives detected
 
-Run `smartha-agent --discover` to see what the agent finds. If it shows drives but the running agent doesn't, the config may not have the `device_overrides` entries. Check `/etc/smart-sniffer/config.yaml` (or the install path shown during setup).
+Run `smartha-agent --discover` to see what the agent finds. If it shows drives but the running agent doesn't, the config may not have the `device_overrides` entries. Check `/etc/smartha-agent/config.yaml` (or the install path shown during setup).
 
 ### Drives show as UNSUPPORTED
 

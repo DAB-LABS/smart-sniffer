@@ -71,13 +71,13 @@ This is the `lxcbr0` issue. The agent advertised an internal container bridge IP
 Check what IP the agent is advertising:
 
 ```bash
-journalctl -u smart-sniffer | grep "preferred IP"
+journalctl -u smartha-agent | grep "preferred IP"
 ```
 
 If it shows something like `10.0.3.1` instead of your LAN IP, the agent picked the wrong interface. Fix it:
 
 ```bash
-sudo nano /etc/smart-sniffer/config.yaml
+sudo nano /etc/smartha-agent/config.yaml
 ```
 
 Set `advertise_interface` to your LAN interface:
@@ -89,7 +89,7 @@ advertise_interface: eth0
 Restart:
 
 ```bash
-sudo systemctl restart smart-sniffer
+sudo systemctl restart smartha-agent
 ```
 
 Since v0.5.5.4, the agent's interface filter excludes `lxcbr0` and `lxdbr0` by default. If you're on an older version, upgrading fixes this automatically:
@@ -103,7 +103,7 @@ curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.
 This means the SAT fallback didn't kick in. Check the agent logs:
 
 ```bash
-journalctl -u smart-sniffer | grep -i "sat\|protocol\|scsi"
+journalctl -u smartha-agent | grep -i "sat\|protocol\|scsi"
 ```
 
 If you see "device open failed" errors, add manual overrides:

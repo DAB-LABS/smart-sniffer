@@ -42,7 +42,7 @@ The installer will:
 Verify the agent is running:
 
 ```bash
-sudo systemctl status smart-sniffer
+sudo systemctl status smartha-agent
 curl http://localhost:9099/api/health
 ```
 
@@ -99,7 +99,7 @@ The agent port (TCP 9099) must be open even if you use manual setup -- that's ho
 Check what the agent is doing:
 
 ```bash
-journalctl -u smart-sniffer | grep mDNS
+journalctl -u smartha-agent | grep mDNS
 ```
 
 You should see something like:
@@ -112,7 +112,7 @@ mDNS: advertising proxmox._smartha._tcp.local. on port 9099
 If it says a different interface (like `eno1` or `docker0`), edit the config:
 
 ```bash
-sudo nano /etc/smart-sniffer/config.yaml
+sudo nano /etc/smartha-agent/config.yaml
 ```
 
 Set:
@@ -124,7 +124,7 @@ advertise_interface: vmbr0
 Then restart:
 
 ```bash
-sudo systemctl restart smart-sniffer
+sudo systemctl restart smartha-agent
 ```
 
 ### Agent health check works locally but HA can't connect
@@ -147,7 +147,7 @@ Yes. If you pass the physical SATA or NVMe controller through to the VM via Prox
 
 ## Example config
 
-A typical Proxmox host `config.yaml` at `/etc/smart-sniffer/config.yaml`:
+A typical Proxmox host `config.yaml` at `/etc/smartha-agent/config.yaml`:
 
 ```yaml
 port: 9099
