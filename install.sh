@@ -310,7 +310,10 @@ pick_filesystems() {
   # those mounts is a separate scope decision -- see follow-up note
   # in docs/internal/research/filesystem-reporting-edge-cases.md.
   # ---------------------------------------------------------------
-  if [ "$mount_source" = "mountinfo" ] && [ "${#fs_mps[@]}" -gt 0 ]; then
+  if [ "$mount_source" = "mountinfo" ] && [ "${BASH_VERSINFO[0]:-0}" -ge 4 ] && [ "${#fs_mps[@]}" -gt 0 ]; then
+    # Associative arrays (local -A) require bash 4+. On older bash (QNAP QTS
+    # ships 3.2), skip dedup -- the user may see duplicate bind mounts in the
+    # picker but everything still works.
     local -a dd_mps=() dd_devs=() dd_types=() dd_roots=() dd_uuids=() dd_labels=()
     local -A seen_key=()  # key -> index into dd_* arrays
     local i key existing_idx existing_mp
@@ -374,8 +377,10 @@ pick_filesystems() {
   local groups_with_hidden=0
   local i grp
 
-  if [ "$mount_source" = "mountinfo" ]; then
+  if [ "$mount_source" = "mountinfo" ] && [ "${BASH_VERSINFO[0]:-0}" -ge 4 ]; then
     # Linux: full bind-mount grouping with associative arrays (bash 4+).
+    # Skipped on bash 3.2 (QNAP QTS) -- falls through to the else branch
+    # where every entry is treated as canonical (no hiding).
     local -A group_canonical=()  # group_key -> canonical idx
     local -A group_has_root_slash=()  # group_key -> "1" if any root="/" exists
     local -A group_hidden_count=()  # group_key -> N
@@ -731,8 +736,9 @@ do_uninstall() {
 
   # Stop and remove service
   if [ "$OS" = "linux" ]; then
+    # systemd service
     if systemctl is-active --quiet smartha-agent 2>/dev/null; then
-      info "Stopping service..."
+      info "Stopping systemd service..."
       systemctl stop smartha-agent
     fi
     if [ -f /etc/systemd/system/smartha-agent.service ]; then
@@ -740,8 +746,23 @@ do_uninstall() {
       systemctl disable smartha-agent 2>/dev/null || true
       rm -f /etc/systemd/system/smartha-agent.service
       systemctl daemon-reload
-      success "Service removed."
+      success "systemd service removed."
     fi
+    # init.d service (QNAP, non-systemd Linux)
+    if [ -f /etc/init.d/smartha-agent ]; then
+      info "Stopping init.d service..."
+      /etc/init.d/smartha-agent stop 2>/dev/null || true
+      if command -v update-rc.d >/dev/null 2>&1; then
+        update-rc.d -f smartha-agent remove 2>/dev/null || true
+      elif command -v rc-update >/dev/null 2>&1; then
+        rc-update del smartha-agent 2>/dev/null || true
+      fi
+      rm -f /etc/init.d/smartha-agent
+      success "init.d service removed."
+    fi
+    # Clean up PID file and log
+    rm -f /var/run/smartha-agent.pid
+    rm -f /var/log/smartha-agent.log /var/log/smartha-agent.log.1
   elif [ "$OS" = "darwin" ]; then
     PLIST="/Library/LaunchDaemons/com.dablabs.smartha-agent.plist"
     if launchctl list | grep -q com.dablabs.smartha-agent 2>/dev/null; then
@@ -818,7 +839,7 @@ fi
 # ---------------------------------------------------------------------------
 
 # ===== LINUX: systemd service =====
-install_linux_service() {
+install_systemd_service() {
   SERVICE_NAME="smartha-agent"
   SERVICE_DEST="/etc/systemd/system/${SERVICE_NAME}.service"
 
@@ -868,6 +889,128 @@ SVCEOF
   echo "    Restart:   systemctl restart $SERVICE_NAME"
   echo "    Uninstall: curl -sSL https://raw.githubusercontent.com/$REPO/main/install.sh | sudo UNINSTALL=1 bash"
   echo ""
+}
+
+# ===== LINUX: init.d service (non-systemd fallback) =====
+# Used on QNAP QTS, older NAS firmware, and minimal Linux without systemd.
+install_initd_service() {
+  SERVICE_NAME="smartha-agent"
+  INITD_DEST="/etc/init.d/$SERVICE_NAME"
+  PIDFILE="/var/run/${SERVICE_NAME}.pid"
+  LOGFILE="/var/log/${SERVICE_NAME}.log"
+  MAX_LOG_BYTES=10485760  # 10 MB
+
+  info "No systemd detected -- installing init.d service..."
+
+  # Stop existing init.d service if running.
+  if [ -f "$INITD_DEST" ] && [ -x "$INITD_DEST" ]; then
+    warn "Stopping existing init.d service..."
+    "$INITD_DEST" stop 2>/dev/null || true
+  fi
+
+  cat > "$INITD_DEST" <<INITEOF
+#!/bin/sh
+# SMART Sniffer Agent -- init.d service script
+# Installed by install.sh. Re-run the installer to update.
+
+DAEMON=$INSTALL_BIN
+WORKDIR=$INSTALL_CFG
+PIDFILE=/var/run/smartha-agent.pid
+LOGFILE=/var/log/smartha-agent.log
+NAME=smartha-agent
+MAX_LOG_BYTES=10485760
+
+# Rotate log if it exceeds MAX_LOG_BYTES.
+rotate_log() {
+  if [ -f "\$LOGFILE" ]; then
+    log_size=\$(wc -c < "\$LOGFILE" 2>/dev/null || echo 0)
+    if [ "\$log_size" -gt "\$MAX_LOG_BYTES" ]; then
+      mv "\$LOGFILE" "\$LOGFILE.1"
+    fi
+  fi
+}
+
+case "\$1" in
+  start)
+    echo "Starting \$NAME..."
+    rotate_log
+    if command -v start-stop-daemon >/dev/null 2>&1; then
+      start-stop-daemon -S -b -m -p "\$PIDFILE" -x "\$DAEMON" -d "\$WORKDIR"
+    else
+      cd "\$WORKDIR"
+      nohup "\$DAEMON" >> "\$LOGFILE" 2>&1 &
+      echo \$! > "\$PIDFILE"
+    fi
+    ;;
+  stop)
+    echo "Stopping \$NAME..."
+    if command -v start-stop-daemon >/dev/null 2>&1; then
+      start-stop-daemon -K -p "\$PIDFILE" 2>/dev/null
+    else
+      [ -f "\$PIDFILE" ] && kill "\$(cat "\$PIDFILE")" 2>/dev/null
+    fi
+    rm -f "\$PIDFILE"
+    ;;
+  restart)
+    \$0 stop
+    sleep 1
+    \$0 start
+    ;;
+  status)
+    if [ -f "\$PIDFILE" ] && kill -0 "\$(cat "\$PIDFILE")" 2>/dev/null; then
+      echo "\$NAME is running (PID \$(cat "\$PIDFILE"))"
+    else
+      echo "\$NAME is not running"
+      exit 1
+    fi
+    ;;
+  *)
+    echo "Usage: \$0 {start|stop|restart|status}"
+    exit 1
+    ;;
+esac
+INITEOF
+
+  chmod +x "$INITD_DEST"
+
+  # Register for boot where possible.
+  if command -v update-rc.d >/dev/null 2>&1; then
+    update-rc.d "$SERVICE_NAME" defaults 2>/dev/null || true
+  elif command -v rc-update >/dev/null 2>&1; then
+    rc-update add "$SERVICE_NAME" default 2>/dev/null || true
+  fi
+
+  # Start the service now.
+  "$INITD_DEST" start
+  success "init.d service installed and started."
+
+  echo ""
+  echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════╗${NC}"
+  echo -e "${GREEN}${BOLD}║   SMART Sniffer Agent installed successfully  ║${NC}"
+  echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════╝${NC}"
+  echo ""
+  echo "  Config   : $INSTALL_CFG/config.yaml"
+  echo "  Log      : $LOGFILE"
+  echo ""
+  echo "  Commands:"
+  echo "    Status:    $INITD_DEST status"
+  echo "    Logs:      tail -f $LOGFILE"
+  echo "    Restart:   $INITD_DEST restart"
+  echo "    Uninstall: curl -sSL https://raw.githubusercontent.com/$REPO/main/install.sh | sudo UNINSTALL=1 bash"
+  echo ""
+  warn "Note: On some NAS platforms (QNAP), firmware updates may remove"
+  warn "the init.d script. If the agent stops working after a firmware"
+  warn "update, re-run this installer to restore it."
+  echo ""
+}
+
+# ===== LINUX: service install router =====
+install_linux_service() {
+  if [ -d /run/systemd/system ]; then
+    install_systemd_service
+  else
+    install_initd_service
+  fi
 }
 
 # ===== MACOS: launchd plist =====
@@ -1248,9 +1391,14 @@ fi
 # Install binary (stop service first to avoid "Text file busy")
 # ---------------------------------------------------------------------------
 echo ""
-if [ "$PLATFORM" = "linux" ] && systemctl is-active --quiet smartha-agent 2>/dev/null; then
-  info "Stopping running agent before upgrade..."
-  systemctl stop smartha-agent
+if [ "$PLATFORM" = "linux" ]; then
+  if systemctl is-active --quiet smartha-agent 2>/dev/null; then
+    info "Stopping running agent before upgrade..."
+    systemctl stop smartha-agent
+  elif [ -f /etc/init.d/smartha-agent ] && [ -f /var/run/smartha-agent.pid ]; then
+    info "Stopping running agent before upgrade..."
+    /etc/init.d/smartha-agent stop 2>/dev/null || true
+  fi
 fi
 if [ "$PLATFORM" = "darwin" ] && launchctl list | grep -q com.dablabs.smartha-agent 2>/dev/null; then
   info "Stopping running agent before upgrade..."
