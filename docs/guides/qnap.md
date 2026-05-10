@@ -16,6 +16,22 @@ Three things to know:
 
 3. **Standard device paths.** Unlike Synology, QNAP uses standard `/dev/sdX` paths. `smartctl --scan` finds them normally.
 
+## Prerequisites
+
+QNAP QTS ships bash 3.2 and does not include systemd. The installer handles both automatically since v0.5.7 -- no manual workarounds needed.
+
+You will need `smartmontools` installed so the agent can query SMART data. If you have Entware:
+
+```bash
+opkg install smartmontools
+```
+
+Verify it's available:
+
+```bash
+smartctl --version
+```
+
 ## Step 1: Install the agent
 
 SSH into your QNAP and run:
@@ -23,6 +39,8 @@ SSH into your QNAP and run:
 ```bash
 curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo bash
 ```
+
+The installer detects that QTS lacks systemd and installs an init.d service script instead. You'll see confirmation in the post-install banner.
 
 **Important: pick the right network interface during install.** The installer will show an interface picker. Choose your LAN interface (usually `eth0` or similar) -- **not** `lxcbr0`, `lxdbr0`, `docker0`, or any bridge interface. This ensures mDNS advertises your real LAN IP.
 
@@ -71,7 +89,7 @@ This is the `lxcbr0` issue. The agent advertised an internal container bridge IP
 Check what IP the agent is advertising:
 
 ```bash
-journalctl -u smartha-agent | grep "preferred IP"
+tail -100 /var/log/smartha-agent.log | grep "preferred IP"
 ```
 
 If it shows something like `10.0.3.1` instead of your LAN IP, the agent picked the wrong interface. Fix it:
@@ -89,7 +107,7 @@ advertise_interface: eth0
 Restart:
 
 ```bash
-sudo systemctl restart smartha-agent
+sudo /etc/init.d/smartha-agent restart
 ```
 
 Since v0.5.5.4, the agent's interface filter excludes `lxcbr0` and `lxdbr0` by default. If you're on an older version, upgrading fixes this automatically:
@@ -103,7 +121,7 @@ curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.
 This means the SAT fallback didn't kick in. Check the agent logs:
 
 ```bash
-journalctl -u smartha-agent | grep -i "sat\|protocol\|scsi"
+grep -i "sat\|protocol\|scsi" /var/log/smartha-agent.log
 ```
 
 If you see "device open failed" errors, add manual overrides:
@@ -116,13 +134,42 @@ device_overrides:
     protocol: sat
 ```
 
-Restart the agent after editing config.
+Restart the agent after editing config:
+
+```bash
+sudo /etc/init.d/smartha-agent restart
+```
 
 ### I have a hardware RAID controller
 
 Some QNAP models (higher-end rackmount units) have hardware RAID controllers. In that case, drives are hidden behind the RAID layer and need explicit protocol flags. See the [Hardware RAID Controllers guide](raid-controllers.md) for `device_overrides` with RAID-specific protocols like `megaraid,0`.
 
 Most consumer QNAP models use a standard HBA (not hardware RAID), so this doesn't apply to the typical setup.
+
+## Service management
+
+QNAP uses init.d instead of systemd. Common commands:
+
+```bash
+sudo /etc/init.d/smartha-agent start
+sudo /etc/init.d/smartha-agent stop
+sudo /etc/init.d/smartha-agent restart
+sudo /etc/init.d/smartha-agent status
+```
+
+Logs go to `/var/log/smartha-agent.log` (auto-rotated at 10MB):
+
+```bash
+tail -f /var/log/smartha-agent.log
+```
+
+## Firmware updates
+
+QTS firmware updates can reset `/usr/local/bin` and `/etc/init.d/`. If the agent stops working after a firmware update, re-run the installer to restore it -- your config in `/etc/smartha-agent/config.yaml` is preserved:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo bash
+```
 
 ## Example config
 

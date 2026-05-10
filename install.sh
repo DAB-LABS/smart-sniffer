@@ -935,10 +935,12 @@ case "\$1" in
     echo "Starting \$NAME..."
     rotate_log
     if command -v start-stop-daemon >/dev/null 2>&1; then
+      echo "  (via start-stop-daemon)" >> "\$LOGFILE"
       start-stop-daemon -S -b -m -p "\$PIDFILE" -x "\$DAEMON" -d "\$WORKDIR"
     else
+      echo "  (via POSIX backgrounding)" >> "\$LOGFILE"
       cd "\$WORKDIR"
-      nohup "\$DAEMON" >> "\$LOGFILE" 2>&1 &
+      ( trap '' HUP; exec "\$DAEMON" >> "\$LOGFILE" 2>&1 ) &
       echo \$! > "\$PIDFILE"
     fi
     ;;
@@ -947,7 +949,16 @@ case "\$1" in
     if command -v start-stop-daemon >/dev/null 2>&1; then
       start-stop-daemon -K -p "\$PIDFILE" 2>/dev/null
     else
-      [ -f "\$PIDFILE" ] && kill "\$(cat "\$PIDFILE")" 2>/dev/null
+      if [ -f "\$PIDFILE" ]; then
+        _pid=\$(cat "\$PIDFILE")
+        # Verify PID belongs to our daemon before killing
+        if kill -0 "\$_pid" 2>/dev/null; then
+          _cmd=\$(cat /proc/\$_pid/comm 2>/dev/null || ps -p \$_pid -o comm= 2>/dev/null)
+          if [ "\$_cmd" = "\$NAME" ]; then
+            kill "\$_pid" 2>/dev/null
+          fi
+        fi
+      fi
     fi
     rm -f "\$PIDFILE"
     ;;
@@ -1190,6 +1201,8 @@ if ! command -v smartctl &>/dev/null; then
       dnf install -y smartmontools
     elif command -v yum &>/dev/null; then
       yum install -y smartmontools
+    elif command -v opkg &>/dev/null; then
+      opkg update && opkg install smartmontools
     else
       fail "Could not detect package manager. Install smartmontools manually."
     fi
@@ -1250,7 +1263,7 @@ if [ -f "$EXISTING_CONFIG" ]; then
       echo "    Interface:  auto-filter"
     fi
     if [ -n "$_EXISTING_FS" ]; then
-      _FS_LIST=$(echo "$_EXISTING_FS" | paste -sd ', ' -)
+      _FS_LIST=$(echo "$_EXISTING_FS" | awk '{printf "%s%s", sep, $0; sep=", "} END{print ""}')
       echo "    Disk usage: $_FS_LIST"
     else
       echo "    Disk usage: (not configured)"
@@ -1277,7 +1290,7 @@ if [ -f "$EXISTING_CONFIG" ]; then
       # Carry forward filesystem config for the Agent Summary display.
       if [ -n "$_EXISTING_FS" ]; then
         FS_YAML="existing"   # non-empty sentinel — config already has the block
-        FS_DISPLAY=$(echo "$_EXISTING_FS" | paste -sd ', ' -)
+        FS_DISPLAY=$(echo "$_EXISTING_FS" | awk '{printf "%s%s", sep, $0; sep=", "} END{print ""}')
       fi
       success "Keeping existing configuration."
 
@@ -1476,7 +1489,7 @@ for i in 1 2 3 4 5; do
   fi
   if [ "$i" -eq 5 ]; then
     warn "Health check didn't respond after 10s."
-    if [ "$PLATFORM" = "linux" ]; then
+    if [ "$PLATFORM" = "linux" ] && [ -d /run/systemd/system ]; then
       warn "Check logs: journalctl -u smartha-agent -f"
     else
       warn "Check logs: tail -f /var/log/smartha-agent.log"
@@ -1542,7 +1555,7 @@ fi
 _DRIVE_JSON=$(eval "$_DRIVE_CURL" 2>/dev/null || true)
 if [ -n "$_DRIVE_JSON" ]; then
   _DRIVE_COUNT=$(echo "$_DRIVE_JSON" | grep -o '"id"' | wc -l)
-  _DRIVE_NAMES=$(echo "$_DRIVE_JSON" | sed -n 's/.*"model" *: *"\([^"]*\)".*/\1/p' | paste -sd ', ' -)
+  _DRIVE_NAMES=$(echo "$_DRIVE_JSON" | sed -n 's/.*"model" *: *"\([^"]*\)".*/\1/p' | awk '{printf "%s%s", sep, $0; sep=", "} END{print ""}')
   if [ "$_DRIVE_COUNT" -gt 0 ]; then
     echo -e "  ${GREEN}✓${NC} SMART drives:   ${_DRIVE_COUNT} detected"
     if [ -n "$_DRIVE_NAMES" ]; then
