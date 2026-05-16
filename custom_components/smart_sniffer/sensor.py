@@ -193,54 +193,15 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
 
 
 # ---------------------------------------------------------------------------
-# SMART attribute extraction
+# ATA attribute name map (module-level for reuse in entity registration)
 # ---------------------------------------------------------------------------
+# Maps our internal sensor keys to the smartctl attribute names that
+# correspond to each key.  Used by _extract_attribute() for value lookup
+# and by async_setup_entry() to identify which attributes already have
+# dedicated sensors (so diagnostic entities skip them).
 
-def _extract_attribute(drive_data: dict[str, Any], key: str) -> Any | None:
-    """Extract a SMART attribute value from the drive's full JSON payload.
-
-    Handles both ATA-style attribute tables and NVMe health info logs.
-    Returns None if the attribute is not present.
-    """
-    smart_data = drive_data.get("smart_data", {})
-
-    if isinstance(smart_data, str):
-        import json
-        try:
-            smart_data = json.loads(smart_data)
-        except (json.JSONDecodeError, TypeError):
-            return None
-
-    # --- SMART overall status ---
-    if key == "smart_status":
-        status = smart_data.get("smart_status", {})
-        if isinstance(status, dict):
-            return "PASSED" if status.get("passed", False) else "FAILED"
-        return None
-
-    # --- NVMe path ---
-    nvme_log = smart_data.get("nvme_smart_health_information_log", {})
-    if nvme_log:
-        nvme_map = {
-            "temperature":                  lambda: nvme_log.get("temperature"),
-            "power_on_hours":               lambda: nvme_log.get("power_on_hours"),
-            "power_cycle_count":            lambda: nvme_log.get("power_cycles"),
-            "wear_leveling_count":          lambda: nvme_log.get("percentage_used"),
-            "reported_uncorrectable_errors":lambda: nvme_log.get("media_errors"),
-            "critical_warning":             lambda: nvme_log.get("critical_warning"),
-            "media_errors":                 lambda: nvme_log.get("media_errors"),
-            "available_spare":              lambda: nvme_log.get("available_spare"),
-            "available_spare_threshold":    lambda: nvme_log.get("available_spare_threshold"),
-        }
-        extractor = nvme_map.get(key)
-        if extractor:
-            return extractor()
-
-    # --- ATA path ---
-    ata_attrs = smart_data.get("ata_smart_attributes", {}).get("table", [])
-
-    ata_name_map: dict[str, list[str]] = {
-        "temperature": [
+ATA_NAME_MAP: dict[str, list[str]] = {
+    "temperature": [
             "Temperature_Celsius",
             "Temperature_Internal",
             "Airflow_Temperature_Cel",
@@ -292,7 +253,56 @@ def _extract_attribute(drive_data: dict[str, Any], key: str) -> Any | None:
         ],
     }
 
-    names = ata_name_map.get(key, [])
+
+# ---------------------------------------------------------------------------
+# SMART attribute extraction
+# ---------------------------------------------------------------------------
+
+def _extract_attribute(drive_data: dict[str, Any], key: str) -> Any | None:
+    """Extract a SMART attribute value from the drive's full JSON payload.
+
+    Handles ATA-style attribute tables, NVMe health info logs, and
+    provides a universal top-level fallback for SCSI/SAS drives.
+    Returns None if the attribute is not present.
+    """
+    smart_data = drive_data.get("smart_data", {})
+
+    if isinstance(smart_data, str):
+        import json
+        try:
+            smart_data = json.loads(smart_data)
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+    # --- SMART overall status ---
+    if key == "smart_status":
+        status = smart_data.get("smart_status", {})
+        if isinstance(status, dict):
+            return "PASSED" if status.get("passed", False) else "FAILED"
+        return None
+
+    # --- NVMe path ---
+    nvme_log = smart_data.get("nvme_smart_health_information_log", {})
+    if nvme_log:
+        nvme_map = {
+            "temperature":                  lambda: nvme_log.get("temperature"),
+            "power_on_hours":               lambda: nvme_log.get("power_on_hours"),
+            "power_cycle_count":            lambda: nvme_log.get("power_cycles"),
+            "wear_leveling_count":          lambda: nvme_log.get("percentage_used"),
+            "reported_uncorrectable_errors":lambda: nvme_log.get("media_errors"),
+            "critical_warning":             lambda: nvme_log.get("critical_warning"),
+            "media_errors":                 lambda: nvme_log.get("media_errors"),
+            "available_spare":              lambda: nvme_log.get("available_spare"),
+            "available_spare_threshold":    lambda: nvme_log.get("available_spare_threshold"),
+        }
+        extractor = nvme_map.get(key)
+        if extractor:
+            return extractor()
+
+    # --- ATA path ---
+    ata_attrs = smart_data.get("ata_smart_attributes", {}).get("table", [])
+
+    names = ATA_NAME_MAP.get(key, [])
     for attr in ata_attrs:
         if attr.get("name") in names:
             raw = attr.get("raw", {})
@@ -362,6 +372,22 @@ def _extract_attribute(drive_data: dict[str, Any], key: str) -> Any | None:
                 return raw_value
             return raw
 
+    # --- Universal fallback (top-level fields, all protocols) -----------
+    # smartctl places temperature, power_on_time, and power_cycle_count at
+    # the JSON top level for ATA, NVMe, and SCSI alike.  This catches
+    # SAS/SCSI drives that have no protocol-specific path above, and acts
+    # as a safety net for malformed ATA/NVMe payloads.
+    _top_level_map = {
+        "temperature":      lambda: smart_data.get("temperature", {}).get("current"),
+        "power_on_hours":   lambda: smart_data.get("power_on_time", {}).get("hours"),
+        "power_cycle_count": lambda: smart_data.get("power_cycle_count"),
+    }
+    _fallback = _top_level_map.get(key)
+    if _fallback:
+        _val = _fallback()
+        if _val is not None:
+            return _val
+
     return None
 
 
@@ -429,6 +455,50 @@ async def async_setup_entry(
         entities.append(
             SmartSnifferAttentionReasonsSensor(coordinator, drive_id, drive_data)
         )
+
+        # --- Dynamic diagnostic entities for remaining SMART attributes ---
+        # For ATA drives in the smartctl database, expose all named
+        # attributes that aren't already covered by a dedicated sensor.
+        # Created disabled by default -- power users enable what they need.
+        ata_table = smart_data.get("ata_smart_attributes", {}).get("table", [])
+        if is_ata and ata_table:
+            # Collect attribute names already covered by curated sensors
+            _covered_names: set[str] = set()
+            for _desc in SENSOR_DESCRIPTIONS:
+                _covered_names.update(ATA_NAME_MAP.get(_desc.key, []))
+
+            _seen_ids: set[int] = set()
+            for attr in ata_table:
+                attr_name = attr.get("name", "")
+                attr_id = attr.get("id", 0)
+                # Skip unnamed, unknown, already-covered, or duplicate IDs
+                if (
+                    not attr_name
+                    or attr_name.startswith("Unknown")
+                    or attr_name in _covered_names
+                    or attr_id in _seen_ids
+                ):
+                    continue
+                _seen_ids.add(attr_id)
+
+                # Convert smartctl name to friendly name:
+                # "Total_SLC_Erase_Ct" -> "Total SLC Erase Ct"
+                friendly_name = attr_name.replace("_", " ")
+
+                diag_description = SensorEntityDescription(
+                    key=f"smart_attr_{attr_id}",
+                    name=friendly_name,
+                    icon="mdi:database-search-outline",
+                    entity_category=EntityCategory.DIAGNOSTIC,
+                    entity_registry_enabled_default=False,
+                )
+
+                entities.append(
+                    SmartSnifferDiagnosticAttrSensor(
+                        coordinator, drive_id, drive_data,
+                        diag_description, attr_id, attr_name,
+                    )
+                )
 
     # --- Filesystem usage sensors (one per monitored mountpoint) ---
     for fs_info in coordinator.data.get(FILESYSTEMS_KEY, []):
@@ -559,6 +629,53 @@ class SmartSnifferSensor(CoordinatorEntity[SmartSnifferCoordinator], SensorEntit
                 "data_as_of": drive_data.get("last_updated", "unknown"),
             }
         return {}
+
+
+# ---------------------------------------------------------------------------
+# Dynamic diagnostic attribute sensor
+# ---------------------------------------------------------------------------
+
+class SmartSnifferDiagnosticAttrSensor(SmartSnifferSensor):
+    """A SMART attribute sensor created dynamically from the attribute table.
+
+    These are disabled by default.  When enabled, they show the raw value
+    of a vendor-specific SMART attribute identified by its numeric ID.
+    """
+
+    def __init__(
+        self,
+        coordinator: SmartSnifferCoordinator,
+        drive_id: str,
+        drive_data: dict[str, Any],
+        description: SensorEntityDescription,
+        attr_id: int,
+        attr_name: str,
+    ) -> None:
+        super().__init__(coordinator, drive_id, drive_data, description)
+        self._attr_id = attr_id
+        self._attr_name_raw = attr_name
+
+    @property
+    def native_value(self) -> Any | None:
+        drive_data = self.coordinator.data.get(self._drive_id)
+        if drive_data is None:
+            return None
+        smart_data = drive_data.get("smart_data", {})
+        if isinstance(smart_data, str):
+            import json
+            try:
+                smart_data = json.loads(smart_data)
+            except (json.JSONDecodeError, TypeError):
+                return None
+
+        ata_attrs = smart_data.get("ata_smart_attributes", {}).get("table", [])
+        for attr in ata_attrs:
+            if attr.get("id") == self._attr_id:
+                raw = attr.get("raw", {})
+                if isinstance(raw, dict):
+                    return raw.get("value")
+                return raw
+        return None
 
 
 # ---------------------------------------------------------------------------
