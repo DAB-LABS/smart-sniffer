@@ -2,6 +2,22 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.5.7 -- 2026-05-16
+
+Integration-only release. No agent or installer changes.
+
+### Added
+- **SAS/SCSI drives now get basic monitoring** -- temperature, power-on hours, and power cycle count now work for SAS drives (protocol "SCSI"). Previously these sensors returned nothing because the integration only had ATA and NVMe extraction paths. The data was already in the smartctl JSON output at the top level -- we just weren't reading it. SAS drives still report SMART health status as before; full SCSI attribute parsing (grown defect list, error counters, endurance indicators) is future work.
+- **Vendor-specific SMART attributes as diagnostic entities** -- for ATA/SATA drives in the smartctl database, every named SMART attribute that isn't already a dedicated sensor now appears as a disabled-by-default diagnostic entity. Enable the ones you care about from your drive's device page. Covers attributes like erase counts, host writes, program/erase failures, available reserved space, and anything else your drive reports with a recognized name. Drives not in the smartctl database (where attribute names show as "Unknown") don't get junk entities.
+
+### Changed
+- **Internal refactor:** ATA attribute name mapping moved to module level for reuse. No behavior change.
+
+### Upgrade Notes
+- **Integration-only update.** Update via HACS or manually replace `custom_components/smart_sniffer/`. No agent update needed.
+- **SAS users:** reload the integration after updating to pick up the new sensors. Your SAS drives should immediately show temperature and power-on hours.
+- **ATA/SATA users:** check your drive's device page after updating -- you'll see new disabled diagnostic entities in the entity list. Nothing changes on your dashboard unless you choose to enable them.
+
 ## v0.5.6.1 -- 2026-05-04
 
 Installer-only patch. No agent, integration, or config changes.

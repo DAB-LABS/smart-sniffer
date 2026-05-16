@@ -24,7 +24,7 @@ SMART Sniffer follows the trail, sniffing out the [early warning signs](https://
 
 ## Features
 
-**Early warning alerts** — The Attention Needed sensor monitors leading indicators of failure across ATA, SATA, and NVMe drives. Four clear states: `NO` · `MAYBE` · `YES` · `UNSUPPORTED`.
+**Early warning alerts** — The Attention Needed sensor monitors leading indicators of failure across ATA, SATA, NVMe, and SAS drives. Four clear states: `NO` · `MAYBE` · `YES` · `UNSUPPORTED`.
 
 **Zero-config notifications** — Persistent notifications fire automatically when drive health changes. No automations or blueprints to set up. Alerts escalate, de-escalate, and auto-dismiss.
 
@@ -86,6 +86,10 @@ Attributes: `mountpoint`, `device`, `fstype`, `total_gb`, `used_gb`, `available_
 | Available Spare | NVMe reserve block pool (%) |
 | Available Spare Threshold | Manufacturer-set minimum spare (%) |
 | Current Pending Sector Count | Sectors waiting for reallocation (ATA) |
+
+**Vendor-specific SMART attributes** (ATA/SATA drives in smartctl database, disabled by default):
+
+For drives recognized by smartctl's database (`drivedb.h`), every named SMART attribute not already covered by the sensors above is created as a diagnostic entity. These are disabled by default -- enable what you need from the device page. Examples: erase counts, host writes/reads, program/erase fail counts, available reserved space, remaining lifetime percentage. The exact attributes vary by drive manufacturer and model.
 
 </details>
 
@@ -483,9 +487,12 @@ Drive-specific `smartctl -a --json` output samples are especially welcome — th
 - [ ] Configurable alert thresholds via options flow
 - [ ] Per-drive scan intervals
 - [ ] YAML-based SMART attribute definitions (vendor field mapping, transforms, units)
-- [ ] SAS/SCSI drive support
+- [x] SAS/SCSI basic monitoring (health, temperature, power-on hours, power cycles) -- shipped v0.5.7
+- [x] Vendor-specific SMART diagnostic entities (disabled-by-default, all named ATA attributes) -- shipped v0.5.7
+- [ ] SAS/SCSI full attribute parsing (grown defect list, error counters, endurance indicators)
 - [ ] Agent: container-aware filesystem reporting (MNT_PREFIX path mapping for Docker deployments)
 - [ ] Agent: runtime interface detection (replace static prefix list with OS-level physical NIC detection)
+- [ ] Integration: parent-agent device hierarchy + optional area-on-setup (drives nest under agent via `via_device`, area inherits via HA prompt)
 
 ---
 
