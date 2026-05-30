@@ -462,10 +462,33 @@ async def async_setup_entry(
         # Created disabled by default -- power users enable what they need.
         ata_table = smart_data.get("ata_smart_attributes", {}).get("table", [])
         if is_ata and ata_table:
-            # Collect attribute names already covered by curated sensors
+            # Build a per-drive "covered names" set: for each curated
+            # sensor, only suppress the single name variant that actually
+            # wins the lookup in _extract_attribute (which iterates the
+            # drive's attribute table in order and returns the first
+            # match).  Other variants from the same consolidation list
+            # stay eligible to become diagnostic entities.
+            #
+            # This matters for multi-variant drives like the Transcend
+            # MTS952T (Silicon Motion) which reports BOTH attribute 177
+            # (Wear_Leveling_Count) AND 169 (Remaining_Lifetime_Perc).
+            # Without per-drive detection, the global union of all
+            # variant names would suppress 169 even though only 177
+            # won the consolidated sensor.
+            _attr_position = {
+                attr.get("name", ""): i
+                for i, attr in enumerate(ata_table)
+                if attr.get("name")
+            }
             _covered_names: set[str] = set()
             for _desc in SENSOR_DESCRIPTIONS:
-                _covered_names.update(ATA_NAME_MAP.get(_desc.key, []))
+                candidates = ATA_NAME_MAP.get(_desc.key, [])
+                present = [n for n in candidates if n in _attr_position]
+                if present:
+                    # Match _extract_attribute's "first in drive-table
+                    # order" rule so the same variant wins in both paths.
+                    winner = min(present, key=lambda n: _attr_position[n])
+                    _covered_names.add(winner)
 
             _seen_ids: set[int] = set()
             for attr in ata_table:

@@ -2,6 +2,17 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.5.14 -- 2026-05-30
+
+Integration-only release. No agent or installer changes.
+
+### Fixed
+- **Multi-variant SMART attributes no longer silently hidden** -- drives that report multiple attributes from the same consolidated sensor group (e.g. both Wear_Leveling_Count and Remaining_Lifetime_Perc) previously only showed the first match. The other variants were suppressed by the diagnostic entity loop because they were considered "already covered." Now only the winning variant is suppressed -- the rest surface as disabled-by-default diagnostic entities like any other uncovered attribute. Most drives report a single variant and see no change. Drives with multiple variants (common on Silicon Motion controller SSDs, some WD/HGST enterprise drives) now expose the full picture.
+
+### Upgrade Notes
+- **Integration-only update.** Update via HACS or manually replace `custom_components/smart_sniffer/`. No agent update needed.
+- **Multi-variant drive users:** after updating, check your drive's device page -- you may see new disabled diagnostic entities for attributes that were previously hidden. Enable the ones you care about.
+
 ## v0.5.13 -- 2026-05-20
 
 Agent-only release. No integration or installer changes.
