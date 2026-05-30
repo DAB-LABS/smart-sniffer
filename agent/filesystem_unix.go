@@ -66,6 +66,29 @@ func (fc *FilesystemCache) Refresh() {
 			}
 		}
 
+		// Phase 1B: ZFS — always use zfs list.
+		//
+		// Unlike btrfs, ZFS statfs only counts space referenced directly
+		// by the dataset root, not child datasets. A pool with 1 TB in
+		// children reports ~0 used via statfs even though zfs list shows
+		// the correct aggregate. We skip statfs entirely for zfs and
+		// always derive values from zfs list.
+		if cfg.FSType == "zfs" {
+			usage, err := tryZFSFallback(cfg.Path)
+			switch {
+			case err == nil:
+				info.TotalBytes = usage.Total
+				info.UsedBytes = usage.Used
+				info.AvailableBytes = usage.Available
+			case errors.Is(err, errZFSMissing):
+				log.Printf("filesystem: zfs not installed, returning statvfs zeros for %s", cfg.Path)
+			case errors.Is(err, errZFSTimeout):
+				log.Printf("filesystem: zfs list timed out after 5s for %s", cfg.Path)
+			default:
+				log.Printf("filesystem: zfs list parse error for %s: %v", cfg.Path, err)
+			}
+		}
+
 		if info.TotalBytes > 0 {
 			info.UsePercent = float64(info.UsedBytes) / float64(info.TotalBytes) * 100.0
 			// Round to one decimal place.

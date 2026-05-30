@@ -277,6 +277,9 @@ pick_filesystems() {
     if command -v blkid &>/dev/null && [ -b "$dev" ]; then
       uuid=$(blkid -s UUID -o value "$dev" 2>/dev/null || true)
     fi
+    if [ -z "$uuid" ] && [ "$fstype" = "zfs" ] && command -v zfs &>/dev/null; then
+      uuid=$(zfs get -H guid "$dev" 2>/dev/null | awk '{print $3}' || true)
+    fi
     if [ -z "$uuid" ] && command -v diskutil &>/dev/null; then
       uuid=$(diskutil info "$dev" 2>/dev/null | grep "Volume UUID" | awk '{print $NF}' || true)
     fi
