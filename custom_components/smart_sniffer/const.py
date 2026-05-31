@@ -21,3 +21,6 @@ AGENT_RELEASES_URL = "https://github.com/DAB-LABS/smart-sniffer/releases"
 # Key used in coordinator data dict to store filesystem info.
 # Underscore prefix avoids collision with drive ID keys.
 FILESYSTEMS_KEY = "_filesystems"
+
+# Service name for the get_drive_data action.
+SERVICE_GET_DRIVE_DATA = "get_drive_data"

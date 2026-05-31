@@ -1,0 +1,13 @@
+get_drive_data:
+  name: Get Drive Data
+  description: >
+    Returns the full cached SMART data for all drives monitored by a SMART Sniffer
+    agent. Useful for passing raw drive health data to an AI for analysis.
+  fields:
+    config_entry_id:
+      name: Config Entry
+      description: The SMART Sniffer agent to query.
+      required: true
+      selector:
+        config_entry:
+          integration: smart_sniffer
