@@ -61,6 +61,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             return {
                 "agent": {
+                    "name": health.entry.title,
                     "host": health.host,
                     "port": health.port,
                     "version": health.data.get("version"),
