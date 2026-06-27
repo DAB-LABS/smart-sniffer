@@ -36,7 +36,7 @@ from .attention import (
     STATE_YES,
     evaluate_attention,
 )
-from .const import DOMAIN, FILESYSTEMS_KEY
+from .const import CONF_FORCE_UPDATE, DEFAULT_FORCE_UPDATE, DOMAIN, FILESYSTEMS_KEY
 from .coordinator import AgentHealthCoordinator, SmartSnifferCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -536,6 +536,25 @@ async def async_setup_entry(
     entities.append(AgentPortSensor(health_coordinator, entry))
     entities.append(AgentOSSensor(health_coordinator, entry))
     entities.append(AgentPollIntervalSensor(health_coordinator, entry))
+
+    # --- Optional force_update (issue #40) ---
+    # When enabled in options, write a state on every poll even when the value
+    # is unchanged, so external time-series stores (InfluxDB, Prometheus) get a
+    # datapoint each cycle and Grafana charts have no gaps. Off by default to
+    # keep the default recorder lean. Applies to the SMART data, attention, and
+    # filesystem sensors; the agent metadata sensors are excluded since forced
+    # writes add nothing there. Read from entry.data because this integration's
+    # options flow persists into entry.data, not entry.options.
+    if entry.data.get(CONF_FORCE_UPDATE, DEFAULT_FORCE_UPDATE):
+        forced_classes = (
+            SmartSnifferSensor,
+            SmartSnifferAttentionSensor,
+            SmartSnifferAttentionReasonsSensor,
+            SmartSnifferFilesystemSensor,
+        )
+        for entity in entities:
+            if isinstance(entity, forced_classes):
+                entity._attr_force_update = True
 
     async_add_entities(entities, update_before_add=False)
 

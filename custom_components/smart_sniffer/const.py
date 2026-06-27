@@ -7,10 +7,12 @@ CONF_HOST = "host"
 CONF_PORT = "port"
 CONF_TOKEN = "token"
 CONF_SCAN_INTERVAL = "scan_interval"
+CONF_FORCE_UPDATE = "force_update"
 
 # Defaults
 DEFAULT_PORT = 9099
 DEFAULT_SCAN_INTERVAL = 60  # seconds
+DEFAULT_FORCE_UPDATE = False
 
 # Agent version enforcement — bump MIN_AGENT_VERSION when a release requires
 # agent-side changes.  The coordinator checks this every poll cycle and raises

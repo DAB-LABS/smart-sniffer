@@ -45,12 +45,14 @@
         "data": {
           "port": "Port",
           "token": "Bearer Token",
-          "scan_interval": "Polling Interval (seconds)"
+          "scan_interval": "Polling Interval (seconds)",
+          "force_update": "Write a value on every poll"
         },
         "data_description": {
           "port": "HTTP port the agent is listening on.",
           "token": "Leave blank if the agent has no auth configured.",
-          "scan_interval": "How often to poll for updated SMART data (in seconds)."
+          "scan_interval": "How often to poll for updated SMART data (in seconds).",
+          "force_update": "Enable for InfluxDB, Prometheus, or Grafana. Records a data point on every poll even when the value has not changed. Leave off otherwise to keep the recorder database smaller."
         }
       }
     },

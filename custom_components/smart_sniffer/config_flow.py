@@ -26,7 +26,9 @@ from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
+    CONF_FORCE_UPDATE,
     CONF_TOKEN,
+    DEFAULT_FORCE_UPDATE,
     DEFAULT_PORT,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
@@ -363,6 +365,10 @@ class SmartSnifferOptionsFlow(OptionsFlowWithConfigEntry):
                     CONF_SCAN_INTERVAL,
                     default=current.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
                 ): vol.Coerce(int),
+                vol.Optional(
+                    CONF_FORCE_UPDATE,
+                    default=current.get(CONF_FORCE_UPDATE, DEFAULT_FORCE_UPDATE),
+                ): bool,
             }
         )
 
