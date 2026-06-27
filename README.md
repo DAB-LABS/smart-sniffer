@@ -255,6 +255,8 @@ irm https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.ps1 | 
 
 > **Note:** Requires v0.5.1 or later. Earlier Windows builds had a service startup bug tracked as [#13](https://github.com/DAB-LABS/smart-sniffer/issues/13). Service events appear in Event Viewer under Windows Logs → Application with source `SmartHA-Agent`.
 
+> **Firewall:** The installer adds an inbound Windows Firewall rule for the agent's TCP port (default 9099) so Home Assistant can reach it from another machine. If you run the agent binary manually instead of using the installer, allow inbound TCP 9099 yourself.
+
 </details>
 
 <details>

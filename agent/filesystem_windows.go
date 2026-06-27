@@ -43,8 +43,12 @@ func (fc *FilesystemCache) Refresh() {
 		info.TotalBytes = totalBytes
 		info.UsedBytes = totalBytes - totalFreeBytes
 		info.AvailableBytes = freeBytesAvailable
-		if info.TotalBytes > 0 {
-			info.UsePercent = float64(info.UsedBytes) / float64(info.TotalBytes) * 100.0
+		// Use df semantics for parity with the unix path: used /
+		// (used + available). Windows has no ext4-style reserved blocks, so
+		// this is normally equal to used/total, but keeping one formula
+		// across platforms avoids divergence. See issue #39.
+		if denom := info.UsedBytes + info.AvailableBytes; denom > 0 {
+			info.UsePercent = float64(info.UsedBytes) / float64(denom) * 100.0
 			// Round to one decimal place.
 			info.UsePercent = float64(int(info.UsePercent*10+0.5)) / 10.0
 		}

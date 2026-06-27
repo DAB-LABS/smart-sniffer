@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"sync"
 )
 
@@ -31,13 +32,28 @@ type FilesystemCache struct {
 	mu          sync.RWMutex
 	filesystems []FilesystemInfo
 	configs     []FilesystemConfig
+	mountPrefix string // host mount root when running in a container; "" = none
 }
 
 // NewFilesystemCache creates a cache for the given filesystem configurations.
-func NewFilesystemCache(configs []FilesystemConfig) *FilesystemCache {
+// mountPrefix is the host mount root when the agent runs in a container (e.g.
+// "/host"); pass "" when running directly on the host.
+func NewFilesystemCache(configs []FilesystemConfig, mountPrefix string) *FilesystemCache {
 	return &FilesystemCache{
-		configs: configs,
+		configs:     configs,
+		mountPrefix: mountPrefix,
 	}
+}
+
+// resolvePath maps a configured (host) mountpoint to the path the agent must
+// stat. When the agent runs in a container with the host filesystem mounted
+// under mountPrefix (e.g. "/host"), the real path is prefix+path. The reported
+// mountpoint stays the host path. An empty prefix returns the path unchanged.
+func (fc *FilesystemCache) resolvePath(p string) string {
+	if fc.mountPrefix == "" {
+		return p
+	}
+	return filepath.Join(fc.mountPrefix, p)
 }
 
 // HandleFilesystems serves GET /api/filesystems.

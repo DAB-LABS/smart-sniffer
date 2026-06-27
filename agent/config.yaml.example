@@ -45,3 +45,13 @@ mdns: true
 #     uuid: e5f6a7b8-9012-cdef-3456-7890abcdef12
 #     device: rpool/data
 #     fstype: zfs
+
+# Host mount prefix for containerized deployments (optional).
+# When the agent runs in a container with the host filesystem bind-mounted
+# under a prefix (for example "-v /:/host:ro"), set this to that prefix so
+# filesystem usage is read from the host instead of the container's own
+# rootfs. The paths above stay as the host sees them; the agent prepends the
+# prefix only when reading usage. Leave unset when running directly on a host.
+# The SMARTHA_MOUNT_PREFIX environment variable overrides this value.
+#
+# mount_prefix: /host

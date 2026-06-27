@@ -862,6 +862,31 @@ try {
     }
 
     # ---------------------------------------------------------------------------
+    # Windows Firewall rule (inbound TCP on the agent port)
+    # ---------------------------------------------------------------------------
+    # Home Assistant reaches the agent from another machine, so the port must
+    # accept inbound TCP. Without this, the HA config flow reports "Unable to
+    # connect" even though the agent is running (see issue #30). Idempotent:
+    # any prior rule with this name is removed first so a changed port is
+    # picked up, then the rule is recreated. Firewall failures are non-fatal --
+    # the agent is already installed and running at this point.
+    Write-Step "Configuring Windows Firewall (inbound TCP $Port)..."
+    $FirewallRuleName = "SMART Sniffer Agent"
+    try {
+        Get-NetFirewallRule -DisplayName $FirewallRuleName -ErrorAction SilentlyContinue `
+            | Remove-NetFirewallRule -ErrorAction SilentlyContinue
+        New-NetFirewallRule -DisplayName $FirewallRuleName `
+            -Direction Inbound -Action Allow -Protocol TCP -LocalPort $Port `
+            -Profile Any `
+            -Description "Allow inbound connections to the SMART Sniffer Agent REST API." `
+            -ErrorAction Stop | Out-Null
+        Write-Ok "Firewall rule configured (inbound TCP $Port)."
+    } catch {
+        Write-Warn "Could not configure the firewall rule automatically: $($_.Exception.Message)"
+        Write-Host "    If Home Assistant cannot connect, allow inbound TCP $Port manually." -ForegroundColor Yellow
+    }
+
+    # ---------------------------------------------------------------------------
     # Success banner
     # ---------------------------------------------------------------------------
     Write-Host ""

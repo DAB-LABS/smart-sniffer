@@ -39,6 +39,7 @@ type Config struct {
 	AdvertiseInterface string             `yaml:"advertise_interface"` // restrict mDNS to this interface (e.g. "eth0")
 	MDNSName           string             `yaml:"mdns_name"`           // custom mDNS instance name (default: smartha-<hostname>)
 	Filesystems        []FilesystemConfig `yaml:"filesystems"`         // empty = disk usage monitoring disabled
+	MountPrefix        string             `yaml:"mount_prefix"`        // host mount root when the agent runs in a container (e.g. "/host"); env SMARTHA_MOUNT_PREFIX overrides
 	StandbyMode        string             `yaml:"standby_mode"`        // never, standby, sleep, idle (default: never)
 	DeviceOverrides    []DeviceOverride   `yaml:"device_overrides"`    // manual protocol overrides per device path
 	ExcludeDevices     []string           `yaml:"exclude_devices"`     // device paths to skip during scan
@@ -211,6 +212,13 @@ func LoadConfig() (*Config, error) {
 	}
 	if *noWrite {
 		cfg.NoWrite = true
+	}
+
+	// Environment override for the container mount prefix. Takes precedence
+	// over the config file so containerized deployments can set it without
+	// editing config.yaml. Used by container-aware filesystem reporting.
+	if v := os.Getenv("SMARTHA_MOUNT_PREFIX"); v != "" {
+		cfg.MountPrefix = v
 	}
 
 	// Sanity checks

@@ -114,10 +114,13 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 	// --- Filesystem cache (if configured) ---
 	var fsCache *FilesystemCache
 	if len(cfg.Filesystems) > 0 {
-		fsCache = NewFilesystemCache(cfg.Filesystems)
+		fsCache = NewFilesystemCache(cfg.Filesystems, cfg.MountPrefix)
 		fsCache.Refresh() // initial population
 		cache.fsCache = fsCache
 		log.Printf("Filesystem monitoring: %d mount(s)", len(cfg.Filesystems))
+		if cfg.MountPrefix != "" {
+			log.Printf("Filesystem mount prefix: %s (container mode)", cfg.MountPrefix)
+		}
 	}
 
 	// --- HTTP server ---
@@ -560,6 +563,19 @@ func handleHealth(cache *DriveCache) http.HandlerFunc {
 // Drive cache — periodically refreshes SMART data in the background
 // ---------------------------------------------------------------------------
 
+// exitCodeReminder is how long a persistent smartctl exit code stays
+// suppressed before it is logged again as a reminder. Any non-zero exit
+// code tends to repeat on every poll for the life of the drive, so we log
+// once on first occurrence (or on change) and then at most this often.
+const exitCodeReminder = time.Hour
+
+// exitLogEntry records the last smartctl exit code logged for a device and
+// when, so repeats are suppressed between hourly reminders.
+type exitLogEntry struct {
+	code int
+	at   time.Time
+}
+
 // DriveCache holds cached SMART data for all discovered drives.
 type DriveCache struct {
 	mu             sync.RWMutex
@@ -567,7 +583,7 @@ type DriveCache struct {
 	drives         map[string]DriveInfo // keyed by slug id
 	driveOrder     []string             // preserve discovery order
 	fsCache        *FilesystemCache     // refreshed alongside drive data (nil = disabled)
-	lastHealthBits map[string]int       // per-device last-seen health bits (suppress repeat logs)
+	exitLog        map[string]exitLogEntry // per-device last-logged exit code + time (suppress repeat logs)
 	standbyMode    string               // never, standby, sleep, idle
 	firstPoll      bool                 // true until first Refresh() completes; uses --scan-open on first poll
 	protocolCache  map[string]string    // per-device-path detected or overridden protocol
@@ -599,7 +615,7 @@ func NewDriveCache(cfg *Config) *DriveCache {
 	return &DriveCache{
 		interval:       cfg.ScanInterval,
 		drives:         make(map[string]DriveInfo),
-		lastHealthBits: make(map[string]int),
+		exitLog:        make(map[string]exitLogEntry),
 		standbyMode:    cfg.StandbyMode,
 		firstPoll:      true,
 		protocolCache:  make(map[string]string),
@@ -745,44 +761,39 @@ func (dc *DriveCache) Refresh() {
 	}
 }
 
-// decodeExecBits returns human-readable labels for smartctl execution
-// failure bits (0-2). These indicate the command itself failed.
-func decodeExecBits(code int) string {
-	bits := code & 0x07
-	var reasons []string
-	if bits&1 != 0 {
-		reasons = append(reasons, "command line parse error")
+// describeExitCode returns human-readable labels for every smartctl exit
+// status bit that is set. smartctl exit codes are a bitmask, so multiple
+// conditions can be reported at once. Bits 0-1 are execution errors (the
+// agent could not read the drive), bits 3-4 are drive health concerns, and
+// bits 2,5,6,7 are informational (the drive was read successfully; these
+// are historical or wear-indicator flags).
+func describeExitCode(code int) string {
+	var parts []string
+	if code&1 != 0 {
+		parts = append(parts, "command line parse error")
 	}
-	if bits&2 != 0 {
-		reasons = append(reasons, "device open failed")
+	if code&2 != 0 {
+		parts = append(parts, "device open failed")
 	}
-	if bits&4 != 0 {
-		reasons = append(reasons, "command failed or checksum error")
+	if code&4 != 0 {
+		parts = append(parts, "some SMART commands failed")
 	}
-	return strings.Join(reasons, ", ")
-}
-
-// decodeHealthBits returns human-readable labels for smartctl drive
-// health flag bits (3-7). These indicate drive status, not command failure.
-func decodeHealthBits(code int) string {
-	bits := code & 0xF8
-	var flags []string
-	if bits&8 != 0 {
-		flags = append(flags, "DISK FAILING")
+	if code&8 != 0 {
+		parts = append(parts, "SMART status: disk failing")
 	}
-	if bits&16 != 0 {
-		flags = append(flags, "prefail attributes <= threshold")
+	if code&16 != 0 {
+		parts = append(parts, "prefail attributes past threshold")
 	}
-	if bits&32 != 0 {
-		flags = append(flags, "usage attributes <= threshold")
+	if code&32 != 0 {
+		parts = append(parts, "usage attributes past threshold")
 	}
-	if bits&64 != 0 {
-		flags = append(flags, "error log has records")
+	if code&64 != 0 {
+		parts = append(parts, "error log has entries")
 	}
-	if bits&128 != 0 {
-		flags = append(flags, "self-test log has errors")
+	if code&128 != 0 {
+		parts = append(parts, "self-test log has errors")
 	}
-	return strings.Join(flags, ", ")
+	return strings.Join(parts, ", ")
 }
 
 // isAutoDetectedProtocol returns true for protocols that smartctl assigns during
@@ -798,10 +809,22 @@ func isAutoDetectedProtocol(p string) bool {
 	return false
 }
 
+// smartctlTimeout bounds a single smartctl invocation. A wedged device or a
+// hung USB/RAID bridge can otherwise make smartctl block indefinitely, which
+// would stall the sequential Refresh() loop forever. If exceeded, the call is
+// killed and returns an error (logged once per device, like other failures).
+const smartctlTimeout = 30 * time.Second
+
 // runSmartctl runs smartctl with the given args and returns (output, exitCode, error).
-// error is non-nil only for non-ExitError failures (missing binary, permissions, etc.).
+// error is non-nil only for non-ExitError failures (missing binary, permissions,
+// or a timeout). A non-zero smartctl exit status is returned via exitCode, not error.
 func runSmartctl(smartctlPath string, args []string) ([]byte, int, error) {
-	out, err := exec.Command(smartctlPath, args...).CombinedOutput()
+	ctx, cancel := context.WithTimeout(context.Background(), smartctlTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, smartctlPath, args...).CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		return out, -1, fmt.Errorf("timed out after %s (device may be unresponsive)", smartctlTimeout)
+	}
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return out, exitErr.ExitCode(), nil
@@ -835,8 +858,20 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bo
 
 	out, code, execErr := runSmartctl(dc.cfg.SmartctlPath, args)
 	if execErr != nil {
-		// Non-ExitError (binary missing, permissions, etc.)
-		log.Printf("WARNING: smartctl -a %s: %v", devicePath, execErr)
+		// Non-ExitError (binary missing, permissions, timeout, etc.). Dedup
+		// like exit codes (sentinel code -1) so a persistent failure -- e.g. a
+		// hung device timing out every poll -- logs once per device and then at
+		// most hourly instead of every cycle.
+		dc.mu.Lock()
+		prev, seen := dc.exitLog[devicePath]
+		due := !seen || prev.code != -1 || time.Since(prev.at) >= exitCodeReminder
+		if due {
+			dc.exitLog[devicePath] = exitLogEntry{code: -1, at: time.Now()}
+		}
+		dc.mu.Unlock()
+		if due {
+			log.Printf("WARNING: smartctl -a %s: %v", devicePath, execErr)
+		}
 	} else if code != 0 {
 		// Bit 1 (value 2) with standby mode = drive is sleeping.
 		if dc.standbyMode != "never" && code == 2 {
@@ -868,26 +903,36 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bo
 		}
 
 		if code != 0 {
-			execBits := code & 0x07
-			healthBits := code & 0xF8
-
-			// Bits 0-2: execution failures -- always log as WARNING.
-			if execBits != 0 {
-				log.Printf("WARNING: smartctl -a %s failed (exit code %d: %s)",
-					devicePath, code, decodeExecBits(code))
+			// smartctl exit codes are a bitmask decoded into three severity
+			// tiers (see describeExitCode):
+			//   bits 0-1: the agent could not read the drive (ERROR).
+			//   bits 3-4: a drive health concern the user must act on (WARNING).
+			//   bits 2,5,6,7: the drive WAS read; historical/wear flags (INFO).
+			// Any non-zero code tends to repeat on every poll for the life of
+			// the drive (a failing disk stays failing; a USB bridge keeps
+			// returning exit code 4). Logging every cycle is spam regardless
+			// of severity, so each device logs on first occurrence, re-logs
+			// immediately when the code changes, and otherwise reminds at most
+			// once per hour (exitCodeReminder) while the condition persists.
+			dc.mu.Lock()
+			prev, seen := dc.exitLog[devicePath]
+			due := !seen || prev.code != code || time.Since(prev.at) >= exitCodeReminder
+			if due {
+				dc.exitLog[devicePath] = exitLogEntry{code: code, at: time.Now()}
 			}
+			dc.mu.Unlock()
 
-			// Bits 3-7: drive health flags -- log once, suppress repeats.
-			if healthBits != 0 {
-				dc.mu.RLock()
-				prev := dc.lastHealthBits[devicePath]
-				dc.mu.RUnlock()
-				if healthBits != prev {
-					log.Printf("smartctl -a %s: drive health flags (exit code %d: %s)",
-						devicePath, code, decodeHealthBits(code))
-					dc.mu.Lock()
-					dc.lastHealthBits[devicePath] = healthBits
-					dc.mu.Unlock()
+			if due {
+				switch {
+				case code&0x03 != 0:
+					log.Printf("ERROR: smartctl -a %s failed (exit code %d: %s)",
+						devicePath, code, describeExitCode(code))
+				case code&0x18 != 0:
+					log.Printf("WARNING: smartctl -a %s reports drive health concern (exit code %d: %s)",
+						devicePath, code, describeExitCode(code))
+				default:
+					log.Printf("smartctl -a %s exited with informational flags (exit code %d: %s)",
+						devicePath, code, describeExitCode(code))
 				}
 			}
 		}

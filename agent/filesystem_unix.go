@@ -21,9 +21,14 @@ func (fc *FilesystemCache) Refresh() {
 			FSType:     cfg.FSType,
 		}
 
+		// statPath is the path the agent actually stats. It equals cfg.Path
+		// on a host install, or mountPrefix+cfg.Path when running in a
+		// container (e.g. /host/DATA). The reported Mountpoint stays cfg.Path.
+		statPath := fc.resolvePath(cfg.Path)
+
 		var stat syscall.Statfs_t
-		if err := syscall.Statfs(cfg.Path, &stat); err != nil {
-			log.Printf("filesystem: statfs %s failed: %v", cfg.Path, err)
+		if err := syscall.Statfs(statPath, &stat); err != nil {
+			log.Printf("filesystem: statfs %s failed: %v", statPath, err)
 			info.Status = "unavailable"
 			results = append(results, info)
 			continue
@@ -49,25 +54,30 @@ func (fc *FilesystemCache) Refresh() {
 		// performance/reliability tradeoff. See plan-btrfs-filesystem-
 		// reporting.md for the full reasoning.
 		if info.TotalBytes == 0 && cfg.FSType == "btrfs" {
-			usage, err := tryBtrfsFallback(cfg.Path)
+			usage, err := tryBtrfsFallback(statPath)
 			switch {
 			case err == nil:
 				info.TotalBytes = usage.Total
 				info.UsedBytes = usage.Used
 				info.AvailableBytes = usage.Available
-				log.Printf("filesystem: using btrfs-progs for %s (statvfs returned zero)", cfg.Path)
+				log.Printf("filesystem: using btrfs-progs for %s (statvfs returned zero)", statPath)
 			case errors.Is(err, errBtrfsProgsMissing):
-				log.Printf("filesystem: btrfs-progs not installed, returning statvfs zeros for %s", cfg.Path)
+				log.Printf("filesystem: btrfs-progs not installed, returning statvfs zeros for %s", statPath)
 			case errors.Is(err, errBtrfsTimeout):
-				log.Printf("filesystem: btrfs filesystem usage timed out after 5s for %s", cfg.Path)
+				log.Printf("filesystem: btrfs filesystem usage timed out after 5s for %s", statPath)
 			default:
 				// Wraps errBtrfsParse or an exec error treated as parse-class.
-				log.Printf("filesystem: btrfs filesystem usage parse error for %s: %v", cfg.Path, err)
+				log.Printf("filesystem: btrfs filesystem usage parse error for %s: %v", statPath, err)
 			}
 		}
 
-		if info.TotalBytes > 0 {
-			info.UsePercent = float64(info.UsedBytes) / float64(info.TotalBytes) * 100.0
+		// Use df semantics: used / (used + available). AvailableBytes is
+		// Bavail, which already excludes reserved blocks (ext4 default 5%),
+		// so this matches what `df` reports and what users actually
+		// experience. Computing used/total understates usage by the
+		// reserved fraction. See issue #39.
+		if denom := info.UsedBytes + info.AvailableBytes; denom > 0 {
+			info.UsePercent = float64(info.UsedBytes) / float64(denom) * 100.0
 			// Round to one decimal place.
 			info.UsePercent = float64(int(info.UsePercent*10+0.5)) / 10.0
 		}

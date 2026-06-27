@@ -2,6 +2,35 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.5.18 -- 2026-06-27
+
+Integration-only release. No agent or installer changes. Community-reported by @xxxarmitagexxx.
+
+### Added
+- **Optional `force_update` for time-series users** -- a new opt-in option (Settings > Devices & Services > SMART Sniffer > Configure) makes the SMART, attention, and filesystem sensors write a value on every poll, even when the reading has not changed. Home Assistant normally suppresses unchanged states, which leaves gaps in external stores like InfluxDB and Prometheus and breaks continuity in Grafana charts. The option is off by default to keep the recorder database small for everyone else. Agent metadata sensors (version, IP, port, OS, poll interval) are not affected. Implements #40.
+
+### Upgrade Notes
+- **Integration-only update.** Update via HACS or replace `custom_components/smart_sniffer/`. No agent update needed.
+- **Time-series users:** after updating, open the integration's options and enable "Write a value on every poll." The integration reloads and starts writing a datapoint each cycle.
+
+## v0.5.17 -- 2026-06-27
+
+Agent and Windows installer release. No integration changes.
+
+### Fixed
+- **Filesystem usage percentage now matches `df`** -- the agent reported usage as used/total, which ignores reserved blocks (ext4 reserves 5% by default). It now reports used/(used+available), the same basis as `df`, so the percentage reflects what is actually usable. On a typical ext4 drive this raises the reported figure by roughly the reserved fraction (for example 93% becomes about 98%). Fixes #39, reported by @xxxarmitagexxx.
+- **smartctl exit code logging no longer spams the log** -- non-zero smartctl exit codes are a bitmask, and most bits are informational (historical error-log entries, wear indicators, or commands a USB or RAID bridge does not support). The agent previously logged a WARNING for these on every poll cycle. Exit codes are now decoded into three tiers (execution errors, drive-health warnings, and informational flags) with accurate descriptions, and each device logs a given code once on first occurrence, again immediately if the code changes, and otherwise at most once per hour while it persists. A healthy drive returning exit code 4 from a USB bridge goes from one warning per minute to a single informational line. Addresses [smart-sniffer-app#3](https://github.com/DAB-LABS/smart-sniffer-app/issues/3).
+- **A hung smartctl can no longer stall the agent** -- each smartctl call is now bounded by a 30-second timeout. A wedged device or an unresponsive USB or RAID bridge previously made smartctl block indefinitely, freezing the sequential poll loop for every drive. The call is now cancelled when it exceeds the limit and logged like any other failure (once per device, then at most hourly).
+
+### Added
+- **Windows installer opens the agent's firewall port** -- `install.ps1` now adds an inbound Windows Firewall rule for the agent's TCP port (default 9099) so Home Assistant can connect from another machine. This prevents the most common "Unable to connect" setup failure on Windows. The rule is recreated on each install so a changed port is picked up, and a failure to set it does not abort the install. Related to #30.
+- **Container-aware filesystem reporting** -- when the agent runs in a container with the host filesystem bind-mounted under a prefix (for example `-v /:/host:ro`), set `mount_prefix` in config.yaml, or the `SMARTHA_MOUNT_PREFIX` environment variable, to that prefix. The agent then reads disk usage from the host filesystem instead of the container's own rootfs, while still reporting each mountpoint as the host sees it. Unset by default, so host installs are unaffected. Applies to Linux container deployments such as Docker.
+
+### Upgrade Notes
+- **Agent update.** Rebuild or re-download the agent binary, or re-run the installer. No integration changes needed.
+- **Windows users:** re-running the installer adds the firewall rule. If you previously added one by hand, the installer replaces it with a managed rule named "SMART Sniffer Agent."
+- **Containerized agents:** set `mount_prefix` (or `SMARTHA_MOUNT_PREFIX`) to your host mount root to get correct disk usage. Host installs need no change.
+
 ## v0.5.16 -- 2026-06-10
 
 Agent-only release. No integration or installer changes. Fixes [smart-sniffer-app#6](https://github.com/DAB-LABS/smart-sniffer-app/issues/6).
