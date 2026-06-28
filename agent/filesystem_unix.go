@@ -3,7 +3,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"syscall"
@@ -46,37 +45,13 @@ func (fc *FilesystemCache) Refresh() {
 		info.UsedBytes = info.TotalBytes - freeBytes
 		info.AvailableBytes = stat.Bavail * uint64(stat.Bsize)
 
-		// Phase 1A: btrfs statvfs fallback.
-		//
-		// We trigger fallback only when TotalBytes == 0 on a btrfs mount.
-		// We do NOT broaden the trigger to "implausible non-zero" cases
-		// (e.g. btrfs single-disk near-full overstating free). That would
-		// fork a subprocess on every poll cycle for every btrfs mount,
-		// which is wasteful. The CTO's panel point that btrfs CLI is the
-		// more reliable source still stands -- this is a deliberate
-		// performance/reliability tradeoff. See plan-btrfs-filesystem-
-		// reporting.md for the full reasoning.
-		if info.TotalBytes == 0 && cfg.FSType == "btrfs" {
-			usage, err := tryBtrfsFallback(statPath)
-			var msg string
-			switch {
-			case err == nil:
-				info.TotalBytes = usage.Total
-				info.UsedBytes = usage.Used
-				info.AvailableBytes = usage.Available
-				msg = fmt.Sprintf("filesystem: using btrfs-progs for %s (statvfs returned zero)", statPath)
-			case errors.Is(err, errBtrfsProgsMissing):
-				msg = fmt.Sprintf("filesystem: btrfs-progs not installed, returning statvfs zeros for %s", statPath)
-			case errors.Is(err, errBtrfsTimeout):
-				msg = fmt.Sprintf("filesystem: btrfs filesystem usage timed out after 5s for %s", statPath)
-			default:
-				// Wraps errBtrfsParse or an exec error treated as parse-class.
-				msg = fmt.Sprintf("filesystem: btrfs filesystem usage parse error for %s: %v", statPath, err)
-			}
-			if fc.logs.shouldLog(statPath, msg) {
-				log.Print(msg)
-			}
-		}
+		// Advanced filesystem fallbacks. statfs misreports usage for some
+		// filesystems (btrfs multi-device reports a zero total; ZFS reports
+		// dataset-scoped usage instead of the pool). The registry in
+		// filesystem_fallback.go corrects the byte fields in place for the
+		// matching fstype; the percent block below then runs on the corrected
+		// values. Fallback logging is throttled inside this call.
+		fc.applyFilesystemFallback(&info, cfg.FSType, statPath)
 
 		// Use df semantics: used / (used + available). AvailableBytes is
 		// Bavail, which already excludes reserved blocks (ext4 default 5%),

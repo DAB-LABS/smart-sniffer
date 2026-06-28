@@ -65,6 +65,26 @@ var (
 	reBtrfsFreeEst = regexp.MustCompile(`(?m)^\s*Free \(estimated\):\s+(\d+)`)
 )
 
+// btrfsResolve adapts the btrfs fallback to the shared fsFallback contract.
+// It translates the btrfs-specific sentinels into the framework's shared ones
+// so the dispatcher logs consistent messages, while leaving tryBtrfsFallback,
+// parseBtrfsUsageRaw, and their tests untouched.
+func btrfsResolve(path string) (fsUsage, error) {
+	u, err := tryBtrfsFallback(path)
+	if err != nil {
+		switch {
+		case errors.Is(err, errBtrfsProgsMissing):
+			return fsUsage{}, errFSToolMissing
+		case errors.Is(err, errBtrfsTimeout):
+			return fsUsage{}, errFSTimeout
+		default:
+			// errBtrfsParse or an exec error treated as parse-class.
+			return fsUsage{}, fmt.Errorf("%w: %v", errFSParse, err)
+		}
+	}
+	return fsUsage{Total: u.Total, Used: u.Used, Available: u.Available}, nil
+}
+
 // tryBtrfsFallback runs `btrfs filesystem usage --raw <path>` and
 // parses the result. Returns the typed error sentinels documented
 // above so the caller can log the three distinct messages.

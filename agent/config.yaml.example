@@ -36,6 +36,13 @@ mdns: true
 # Each entry monitors one mountpoint. The UUID ensures stable entity
 # identity in Home Assistant across reboots and device-path changes.
 #
+# The "fstype" field drives advanced reporting. For filesystems where the
+# statfs syscall misreports usage, the agent shells out to the native tool to
+# get correct numbers: btrfs multi-device (which can report a zero total) uses
+# btrfs-progs, and ZFS uses "zfs list" so a pool path reports real pool-level
+# usage instead of the near-zero figure statfs returns for the parent dataset.
+# These corrections are automatic; no extra configuration is required.
+#
 # filesystems:
 #   - path: /
 #     uuid: a1b2c3d4-5678-90ab-cdef-1234567890ab

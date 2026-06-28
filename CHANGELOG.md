@@ -2,6 +2,20 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.5.20 -- 2026-06-27
+
+Agent-only release. No integration or installer changes. Community-reported by @nsleigh.
+
+### Fixed
+- **ZFS pools now report real pool usage instead of 0%** -- on ZFS, the statfs syscall returns usage scoped to the mounted dataset, not the pool, so a monitored pool path (for example `/rpool`) showed near-zero usage even when the pool was full, because the parent dataset holds almost no data directly. The agent now queries `zfs list` for ZFS mounts and reports real used and available bytes, the same basis `df` and `pvesm status` use for a dataset. Fixes #31.
+
+### Changed
+- **Filesystem corrections now run through a shared fallback framework** -- the existing btrfs correction (which handles multi-device mounts that report a zero total) and the new ZFS correction are dispatched through one registry instead of a hand-written branch, so future filesystems can be added as isolated, unit-tested entries. The btrfs behavior is unchanged. Filesystem entity IDs are unchanged, so existing Home Assistant entities are not affected.
+
+### Upgrade Notes
+- **Agent update.** Rebuild or re-download the agent binary, or re-run the installer. No integration changes needed.
+- **ZFS users:** after updating, pool usage reflects real consumption automatically. The `zfs` command must be available on the host (it always is on a real ZFS system).
+
 ## v0.5.19 -- 2026-06-27
 
 Agent-only release. No integration or installer changes.
