@@ -55,3 +55,12 @@ mdns: true
 # The SMARTHA_MOUNT_PREFIX environment variable overrides this value.
 #
 # mount_prefix: /host
+
+# Verbose logging (default: false).
+# When false, the agent suppresses repeated log lines: a recurring condition
+# (a failing drive, a broken mount, a persistent smartctl exit code) is logged
+# once, again whenever its detail changes, and otherwise at most once per hour.
+# Set to true to log every poll cycle instead, which is useful when diagnosing
+# an issue. The --verbose flag also enables this; the flag can turn verbose on
+# but does not turn off a "verbose: true" set here.
+# verbose: false

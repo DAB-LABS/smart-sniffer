@@ -32,16 +32,19 @@ type FilesystemCache struct {
 	mu          sync.RWMutex
 	filesystems []FilesystemInfo
 	configs     []FilesystemConfig
-	mountPrefix string // host mount root when running in a container; "" = none
+	mountPrefix string       // host mount root when running in a container; "" = none
+	logs        *logThrottle // suppresses repeated per-mount log lines (key = stat path)
 }
 
 // NewFilesystemCache creates a cache for the given filesystem configurations.
 // mountPrefix is the host mount root when the agent runs in a container (e.g.
-// "/host"); pass "" when running directly on the host.
-func NewFilesystemCache(configs []FilesystemConfig, mountPrefix string) *FilesystemCache {
+// "/host"); pass "" when running directly on the host. verbose disables log
+// suppression so every poll logs.
+func NewFilesystemCache(configs []FilesystemConfig, mountPrefix string, verbose bool) *FilesystemCache {
 	return &FilesystemCache{
 		configs:     configs,
 		mountPrefix: mountPrefix,
+		logs:        newLogThrottle(logReminderInterval, verbose),
 	}
 }
 

@@ -4,6 +4,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"syscall"
 )
@@ -28,7 +29,9 @@ func (fc *FilesystemCache) Refresh() {
 
 		var stat syscall.Statfs_t
 		if err := syscall.Statfs(statPath, &stat); err != nil {
-			log.Printf("filesystem: statfs %s failed: %v", statPath, err)
+			if msg := fmt.Sprintf("filesystem: statfs %s failed: %v", statPath, err); fc.logs.shouldLog(statPath, msg) {
+				log.Print(msg)
+			}
 			info.Status = "unavailable"
 			results = append(results, info)
 			continue
@@ -55,19 +58,23 @@ func (fc *FilesystemCache) Refresh() {
 		// reporting.md for the full reasoning.
 		if info.TotalBytes == 0 && cfg.FSType == "btrfs" {
 			usage, err := tryBtrfsFallback(statPath)
+			var msg string
 			switch {
 			case err == nil:
 				info.TotalBytes = usage.Total
 				info.UsedBytes = usage.Used
 				info.AvailableBytes = usage.Available
-				log.Printf("filesystem: using btrfs-progs for %s (statvfs returned zero)", statPath)
+				msg = fmt.Sprintf("filesystem: using btrfs-progs for %s (statvfs returned zero)", statPath)
 			case errors.Is(err, errBtrfsProgsMissing):
-				log.Printf("filesystem: btrfs-progs not installed, returning statvfs zeros for %s", statPath)
+				msg = fmt.Sprintf("filesystem: btrfs-progs not installed, returning statvfs zeros for %s", statPath)
 			case errors.Is(err, errBtrfsTimeout):
-				log.Printf("filesystem: btrfs filesystem usage timed out after 5s for %s", statPath)
+				msg = fmt.Sprintf("filesystem: btrfs filesystem usage timed out after 5s for %s", statPath)
 			default:
 				// Wraps errBtrfsParse or an exec error treated as parse-class.
-				log.Printf("filesystem: btrfs filesystem usage parse error for %s: %v", statPath, err)
+				msg = fmt.Sprintf("filesystem: btrfs filesystem usage parse error for %s: %v", statPath, err)
+			}
+			if fc.logs.shouldLog(statPath, msg) {
+				log.Print(msg)
 			}
 		}
 

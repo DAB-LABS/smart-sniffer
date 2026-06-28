@@ -2,6 +2,20 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.5.19 -- 2026-06-27
+
+Agent-only release. No integration or installer changes.
+
+### Changed
+- **Quieter agent logs by default** -- recurring log lines are now suppressed so a steady condition does not repeat on every poll cycle. Each message (a drive scan error, a failed mount, a btrfs fallback notice, the per-cycle "cache refreshed" line, and others) is logged once on first occurrence, again whenever its detail changes, and otherwise at most once per hour while it persists. The smartctl exit-code logging added in v0.5.17 moved onto this shared mechanism with no change to its behavior. On a healthy system the steady-state log goes from one line per poll to effectively silent between real changes.
+
+### Added
+- **`--verbose` flag and `verbose` config option** -- set `verbose: true` in config.yaml (or pass `--verbose`) to disable log suppression and log every poll cycle, which helps when diagnosing an issue. Off by default. The flag can turn verbose logging on but does not turn off a `verbose: true` set in the config file.
+
+### Upgrade Notes
+- **Agent update.** Rebuild or re-download the agent binary, or re-run the installer. No integration changes needed.
+- Default behavior is now quieter. If you rely on per-cycle log lines for monitoring, set `verbose: true` (or `--verbose`) to restore the previous output.
+
 ## v0.5.18 -- 2026-06-27
 
 Integration-only release. No agent or installer changes. Community-reported by @xxxarmitagexxx.

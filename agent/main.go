@@ -114,7 +114,7 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 	// --- Filesystem cache (if configured) ---
 	var fsCache *FilesystemCache
 	if len(cfg.Filesystems) > 0 {
-		fsCache = NewFilesystemCache(cfg.Filesystems, cfg.MountPrefix)
+		fsCache = NewFilesystemCache(cfg.Filesystems, cfg.MountPrefix, cfg.Verbose)
 		fsCache.Refresh() // initial population
 		cache.fsCache = fsCache
 		log.Printf("Filesystem monitoring: %d mount(s)", len(cfg.Filesystems))
@@ -563,17 +563,58 @@ func handleHealth(cache *DriveCache) http.HandlerFunc {
 // Drive cache — periodically refreshes SMART data in the background
 // ---------------------------------------------------------------------------
 
-// exitCodeReminder is how long a persistent smartctl exit code stays
-// suppressed before it is logged again as a reminder. Any non-zero exit
-// code tends to repeat on every poll for the life of the drive, so we log
-// once on first occurrence (or on change) and then at most this often.
-const exitCodeReminder = time.Hour
+// logReminderInterval is how long a repeated log line stays suppressed
+// before it is logged again as a reminder. Many agent conditions (a failing
+// drive, a broken mount, a persistent smartctl exit code) repeat on every
+// poll for the life of the deployment, so each logs once on first occurrence,
+// again whenever its text changes, and otherwise at most this often.
+const logReminderInterval = time.Hour
 
-// exitLogEntry records the last smartctl exit code logged for a device and
-// when, so repeats are suppressed between hourly reminders.
-type exitLogEntry struct {
-	code int
-	at   time.Time
+// logEntry records the last message logged for a key and when, so repeats
+// are suppressed between reminders.
+type logEntry struct {
+	msg string
+	at  time.Time
+}
+
+// logThrottle suppresses repeated log lines. For a given key, a message logs
+// on first occurrence, again whenever its text changes, and otherwise at most
+// once per interval. A verbose throttle bypasses suppression entirely. It is
+// safe for concurrent use.
+type logThrottle struct {
+	mu       sync.Mutex
+	states   map[string]logEntry
+	interval time.Duration
+	verbose  bool
+}
+
+// newLogThrottle builds a throttle with the given reminder interval. When
+// verbose is true, shouldLog always returns true (per-cycle logging).
+func newLogThrottle(interval time.Duration, verbose bool) *logThrottle {
+	return &logThrottle{
+		states:   make(map[string]logEntry),
+		interval: interval,
+		verbose:  verbose,
+	}
+}
+
+// shouldLog reports whether disc should be logged now for key, and records
+// the decision. disc is the discriminator compared between calls: pass the
+// rendered message to re-log whenever the text changes, or a stable token to
+// suppress repeats regardless of variable detail in the logged line. The
+// caller performs the actual log.Print when this returns true.
+func (lt *logThrottle) shouldLog(key, disc string) bool {
+	if lt.verbose {
+		return true
+	}
+	lt.mu.Lock()
+	defer lt.mu.Unlock()
+	prev, seen := lt.states[key]
+	if !seen || prev.msg != disc || time.Since(prev.at) >= lt.interval {
+		lt.states[key] = logEntry{msg: disc, at: time.Now()}
+		return true
+	}
+	return false
 }
 
 // DriveCache holds cached SMART data for all discovered drives.
@@ -583,7 +624,7 @@ type DriveCache struct {
 	drives         map[string]DriveInfo // keyed by slug id
 	driveOrder     []string             // preserve discovery order
 	fsCache        *FilesystemCache     // refreshed alongside drive data (nil = disabled)
-	exitLog        map[string]exitLogEntry // per-device last-logged exit code + time (suppress repeat logs)
+	logs           *logThrottle         // suppresses repeated log lines (per-device and per scan-step keys)
 	standbyMode    string               // never, standby, sleep, idle
 	firstPoll      bool                 // true until first Refresh() completes; uses --scan-open on first poll
 	protocolCache  map[string]string    // per-device-path detected or overridden protocol
@@ -615,7 +656,7 @@ func NewDriveCache(cfg *Config) *DriveCache {
 	return &DriveCache{
 		interval:       cfg.ScanInterval,
 		drives:         make(map[string]DriveInfo),
-		exitLog:        make(map[string]exitLogEntry),
+		logs:           newLogThrottle(logReminderInterval, cfg.Verbose),
 		standbyMode:    cfg.StandbyMode,
 		firstPoll:      true,
 		protocolCache:  make(map[string]string),
@@ -652,7 +693,9 @@ func (dc *DriveCache) Refresh() {
 		scanOut, err = exec.Command(dc.cfg.SmartctlPath, "--json", "--scan").CombinedOutput()
 	}
 	if err != nil {
-		log.Printf("drive scan error: %v", err)
+		if msg := fmt.Sprintf("drive scan error: %v", err); dc.logs.shouldLog("scan", msg) {
+			log.Print(msg)
+		}
 		return
 	}
 
@@ -660,7 +703,9 @@ func (dc *DriveCache) Refresh() {
 		Devices []scanDevice `json:"devices"`
 	}
 	if err := json.Unmarshal(scanOut, &scanResult); err != nil {
-		log.Printf("failed to parse scan JSON: %v", err)
+		if msg := fmt.Sprintf("failed to parse scan JSON: %v", err); dc.logs.shouldLog("scan-json", msg) {
+			log.Print(msg)
+		}
 		return
 	}
 
@@ -693,7 +738,10 @@ func (dc *DriveCache) Refresh() {
 					Name:     ov.Device,
 					Protocol: ov.Protocol,
 				})
-				log.Printf("added override device: %s (protocol: %s)", ov.Device, ov.Protocol)
+				msg := fmt.Sprintf("added override device: %s (protocol: %s)", ov.Device, ov.Protocol)
+				if dc.logs.shouldLog("override:"+ov.Device, msg) {
+					log.Print(msg)
+				}
 			}
 		}
 	}
@@ -753,7 +801,11 @@ func (dc *DriveCache) Refresh() {
 	dc.driveOrder = order
 	dc.mu.Unlock()
 
-	log.Printf("cache refreshed: %d drive(s)", len(newDrives))
+	// Only log when the drive count changes (the message embeds the count, so
+	// a change re-logs). With --verbose, the throttle logs every cycle.
+	if msg := fmt.Sprintf("cache refreshed: %d drive(s)", len(newDrives)); dc.logs.shouldLog("cache-refreshed", msg) {
+		log.Print(msg)
+	}
 
 	// Refresh filesystem data on the same cycle.
 	if dc.fsCache != nil {
@@ -858,18 +910,14 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bo
 
 	out, code, execErr := runSmartctl(dc.cfg.SmartctlPath, args)
 	if execErr != nil {
-		// Non-ExitError (binary missing, permissions, timeout, etc.). Dedup
-		// like exit codes (sentinel code -1) so a persistent failure -- e.g. a
-		// hung device timing out every poll -- logs once per device and then at
-		// most hourly instead of every cycle.
-		dc.mu.Lock()
-		prev, seen := dc.exitLog[devicePath]
-		due := !seen || prev.code != -1 || time.Since(prev.at) >= exitCodeReminder
-		if due {
-			dc.exitLog[devicePath] = exitLogEntry{code: -1, at: time.Now()}
-		}
-		dc.mu.Unlock()
-		if due {
+		// Non-ExitError (binary missing, permissions, timeout, etc.). Dedup on
+		// the device key with a stable discriminator so a persistent failure --
+		// e.g. a hung device timing out every poll -- logs once per device and
+		// then at most hourly, even if the underlying error text varies between
+		// polls. The discriminator differs from the exit-code path below, so a
+		// device flipping between an exec failure and a non-zero exit code still
+		// re-logs on the transition.
+		if dc.logs.shouldLog(devicePath, "exec-error") {
 			log.Printf("WARNING: smartctl -a %s: %v", devicePath, execErr)
 		}
 	} else if code != 0 {
@@ -913,27 +961,24 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bo
 			// returning exit code 4). Logging every cycle is spam regardless
 			// of severity, so each device logs on first occurrence, re-logs
 			// immediately when the code changes, and otherwise reminds at most
-			// once per hour (exitCodeReminder) while the condition persists.
-			dc.mu.Lock()
-			prev, seen := dc.exitLog[devicePath]
-			due := !seen || prev.code != code || time.Since(prev.at) >= exitCodeReminder
-			if due {
-				dc.exitLog[devicePath] = exitLogEntry{code: code, at: time.Now()}
+			// once per logReminderInterval while the condition persists.
+			// Build the severity-tiered message, then dedup on the device key.
+			// The rendered message embeds the code, so a changed code re-logs
+			// immediately; an unchanged code reminds at most hourly.
+			var msg string
+			switch {
+			case code&0x03 != 0:
+				msg = fmt.Sprintf("ERROR: smartctl -a %s failed (exit code %d: %s)",
+					devicePath, code, describeExitCode(code))
+			case code&0x18 != 0:
+				msg = fmt.Sprintf("WARNING: smartctl -a %s reports drive health concern (exit code %d: %s)",
+					devicePath, code, describeExitCode(code))
+			default:
+				msg = fmt.Sprintf("smartctl -a %s exited with informational flags (exit code %d: %s)",
+					devicePath, code, describeExitCode(code))
 			}
-			dc.mu.Unlock()
-
-			if due {
-				switch {
-				case code&0x03 != 0:
-					log.Printf("ERROR: smartctl -a %s failed (exit code %d: %s)",
-						devicePath, code, describeExitCode(code))
-				case code&0x18 != 0:
-					log.Printf("WARNING: smartctl -a %s reports drive health concern (exit code %d: %s)",
-						devicePath, code, describeExitCode(code))
-				default:
-					log.Printf("smartctl -a %s exited with informational flags (exit code %d: %s)",
-						devicePath, code, describeExitCode(code))
-				}
+			if dc.logs.shouldLog(devicePath, msg) {
+				log.Print(msg)
 			}
 		}
 	}

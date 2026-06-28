@@ -41,6 +41,7 @@ type Config struct {
 	Filesystems        []FilesystemConfig `yaml:"filesystems"`         // empty = disk usage monitoring disabled
 	MountPrefix        string             `yaml:"mount_prefix"`        // host mount root when the agent runs in a container (e.g. "/host"); env SMARTHA_MOUNT_PREFIX overrides
 	StandbyMode        string             `yaml:"standby_mode"`        // never, standby, sleep, idle (default: never)
+	Verbose            bool               `yaml:"verbose"`             // log every poll cycle instead of suppressing repeats; --verbose enables (never disables a file setting)
 	DeviceOverrides    []DeviceOverride   `yaml:"device_overrides"`    // manual protocol overrides per device path
 	ExcludeDevices     []string           `yaml:"exclude_devices"`     // device paths to skip during scan
 	Discover           bool               `yaml:"-"`                   // set by --discover flag; not read from config file
@@ -161,6 +162,7 @@ func LoadConfig() (*Config, error) {
 	mdnsName := flag.String("mdns-name", "", "Custom mDNS instance name (default: smartha-<hostname>)")
 	discover := flag.Bool("discover", false, "Probe drives and detect protocols (diagnostic tool)")
 	noWrite := flag.Bool("no-write", false, "With --discover: print proposed overrides but do not write config")
+	verbose := flag.Bool("verbose", false, "Log every poll cycle instead of suppressing repeated lines")
 	flag.Parse()
 
 	// --- Attempt to load config.yaml ---
@@ -212,6 +214,13 @@ func LoadConfig() (*Config, error) {
 	}
 	if *noWrite {
 		cfg.NoWrite = true
+	}
+	// --verbose is enable-only: the flag can turn verbose logging on, but its
+	// absence must not clobber a "verbose: true" config-file setting back to
+	// false. A plain bool flag cannot distinguish "unset" from "set false", so
+	// we only ever OR it in.
+	if *verbose {
+		cfg.Verbose = true
 	}
 
 	// Environment override for the container mount prefix. Takes precedence

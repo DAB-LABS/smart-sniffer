@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"golang.org/x/sys/windows"
@@ -25,7 +26,9 @@ func (fc *FilesystemCache) Refresh() {
 
 		pathPtr, err := windows.UTF16PtrFromString(cfg.Path)
 		if err != nil {
-			log.Printf("filesystem: invalid path %s: %v", cfg.Path, err)
+			if msg := fmt.Sprintf("filesystem: invalid path %s: %v", cfg.Path, err); fc.logs.shouldLog(cfg.Path, msg) {
+				log.Print(msg)
+			}
 			info.Status = "unavailable"
 			results = append(results, info)
 			continue
@@ -34,7 +37,9 @@ func (fc *FilesystemCache) Refresh() {
 		var freeBytesAvailable, totalBytes, totalFreeBytes uint64
 		err = windows.GetDiskFreeSpaceEx(pathPtr, &freeBytesAvailable, &totalBytes, &totalFreeBytes)
 		if err != nil {
-			log.Printf("filesystem: GetDiskFreeSpaceEx %s failed: %v", cfg.Path, err)
+			if msg := fmt.Sprintf("filesystem: GetDiskFreeSpaceEx %s failed: %v", cfg.Path, err); fc.logs.shouldLog(cfg.Path, msg) {
+				log.Print(msg)
+			}
 			info.Status = "unavailable"
 			results = append(results, info)
 			continue
