@@ -878,7 +878,10 @@ class SmartSnifferCard extends HTMLElement {
 
   _friendlyMount(mp) {
     if (mp === "/") return "Root (/)";
-    return mp;
+    // Append a zero-width LTR mark so trailing neutral chars (e.g. "\" in "C:\")
+    // are anchored LTR inside the direction:rtl container used for left-truncation,
+    // preventing the BiDi algorithm from reversing them (which displays "C:\" as "\:C").
+    return mp + "‎";
   }
 
   _buildDrive(hass, dev, devId, entityIds, agentDevicesByEntry, agentNameByEntry) {
