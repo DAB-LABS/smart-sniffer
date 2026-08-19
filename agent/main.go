@@ -570,8 +570,9 @@ type DriveCache struct {
 	lastHealthBits map[string]int       // per-device last-seen health bits (suppress repeat logs)
 	standbyMode    string               // never, standby, sleep, idle
 	firstPoll      bool                 // true until first Refresh() completes; uses --scan-open on first poll
-	protocolCache  map[string]string    // per-device-path detected or overridden protocol
-	cfg            *Config              // full agent config (for device_overrides access)
+	protocolCache    map[string]string    // per-device-path detected or overridden protocol
+	overrideProtocols map[string]bool      // true when protocol came from device_overrides
+	cfg              *Config              // full agent config (for device_overrides access)
 }
 
 // DriveInfo is the per-drive cached payload.
@@ -602,8 +603,9 @@ func NewDriveCache(cfg *Config) *DriveCache {
 		lastHealthBits: make(map[string]int),
 		standbyMode:    cfg.StandbyMode,
 		firstPoll:      true,
-		protocolCache:  make(map[string]string),
-		cfg:            cfg,
+		protocolCache:    make(map[string]string),
+		overrideProtocols: make(map[string]bool),
+		cfg:              cfg,
 	}
 }
 
@@ -663,6 +665,7 @@ func (dc *DriveCache) Refresh() {
 		for _, ov := range dc.cfg.DeviceOverrides {
 			dc.mu.Lock()
 			dc.protocolCache[ov.Device] = ov.Protocol
+			dc.overrideProtocols[ov.Device] = true
 			dc.mu.Unlock()
 
 			found := false
@@ -822,13 +825,14 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bo
 	if cached, ok := dc.protocolCache[devicePath]; ok {
 		protocol = cached
 	}
+	isOverride := dc.overrideProtocols[devicePath]
 	dc.mu.RUnlock()
 
 	args := []string{"--json", "-a"}
 	if dc.standbyMode != "never" && !skipStandby {
 		args = append(args, "-n", dc.standbyMode)
 	}
-	if protocol != "" && !isAutoDetectedProtocol(protocol) {
+	if protocol != "" && (isOverride || !isAutoDetectedProtocol(protocol)) {
 		args = append(args, "-d", protocol)
 	}
 	args = append(args, devicePath)
@@ -905,6 +909,9 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bo
 	var parsed map[string]interface{}
 	if err := json.Unmarshal(out, &parsed); err == nil {
 		info.Model = extractString(parsed, "model_name")
+		if info.Model == "" {
+			info.Model = extractString(parsed, "scsi_model_name")
+		}
 		info.Serial = extractString(parsed, "serial_number")
 
 		// Prefer the protocol from the SMART data itself — more accurate than
