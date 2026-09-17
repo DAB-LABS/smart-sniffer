@@ -1,83 +1,39 @@
-+# Changelog
+# Changelog
 
 All notable changes to SMART Sniffer are documented here.
 
-## v0.5.21 -- 2026-09-16
+## v0.6.0 -- 2026-09-16
 
-Agent, integration, installer and card fixes, closing several community reports.
+**Update both the agent and the integration.** Several fixes below need both sides current.
+
+The first release since June, covering three months of work. Disk usage figures are now correct (they read low before, and ZFS pools showed 0%), the agent's logs are quiet instead of repeating every minute, and the installer works on TrueNAS.
+
+Some figures will visibly change after you update. That is expected -- see Upgrade notes.
+
+### Added
+- **ZFS pools show real usage** -- a pool path such as `/rpool` reported near 0% no matter how full it actually was. Fixes #31, reported by @nsleigh.
+- **Disk usage from inside a container** -- set `mount_prefix` in config.yaml, or `SMARTHA_MOUNT_PREFIX`, and the agent reads the host's filesystems instead of the container's own.
+- **Unbroken graphs for time-series users** -- a new option writes a value on every poll, so InfluxDB, Prometheus and Grafana stop showing gaps. Off by default. Implements #40, requested by @xxxarmitagexxx.
+- **Diagnostic attributes are numbers now** -- CRC errors, LBAs written, start/stop counts and similar keep statistics and can be graphed. Fixes #47, reported by @spry-salt.
+- **The installer works on TrueNAS** -- plus a new `--install-dir` option for any system with a read-only filesystem. Fixes #46, reported by @cgtechuk.
+- **The Windows installer opens the firewall port** -- this was the most common cause of "Unable to connect" on Windows.
+- **A `--verbose` flag** -- brings back per-cycle logging when you are diagnosing something.
 
 ### Fixed
-- **`device_overrides` protocols are honored again** -- a protocol set explicitly in `device_overrides` was silently dropped when it was `scsi`, `ata` or `nvme`, because those three are normally implied by scan detection. smartctl never received the `-d` flag, so a drive that needs an explicit protocol (for example a Samsung T7 USB SSD forced to `scsi`) kept failing to report. An explicit override is now always passed through. Fixes #43. Fix contributed by @KruseLuds in PR #48.
-- **Drives that report only `scsi_model_name` now show a model** -- SAS drives and some USB bridges report their model under `scsi_model_name` rather than `model_name`. Those drives showed a blank model and fell back to a path-based entity id. Also from @KruseLuds in PR #48.
-- **Vendor-packed SMART raw values are decoded everywhere** -- several drive families pack multiple counters into the single 48-bit raw value, so Home Assistant received a figure like 244813987870 in place of a temperature of 30. Dedicated fixes already existed for power-on hours, command timeout and wear leveling; that decoding now applies to every attribute, including the disabled-by-default diagnostic entities, which previously passed the packed value straight through. Legitimately large counters such as total LBAs written are left untouched. Fixes #44, reported by @mark4068-dotcom with additional diagnostics from @Vict20.
-- **Windows drive paths render correctly in the card** -- a path such as `C:\` displayed reversed as `\:C`, because the left-truncation container uses right-to-left text direction and a trailing backslash is a directionally neutral character. Contributed by @nsleigh in PR #41.
+- **Disk usage percentage read too low** -- it counted reserved space as usable, so it disagreed with `df`. It now matches. Fixes #39, reported by @xxxarmitagexxx.
+- **`device_overrides` was ignored for scsi, ata and nvme** -- the setting was accepted but never actually applied, so drives that needed it kept failing to report. Fixes #43, fixed by @KruseLuds in PR #48.
+- **Blank model names on SAS and USB drives** -- also from @KruseLuds in PR #48.
+- **Wrong values on some SSDs** -- certain drives pack several counters into one field, so a temperature could arrive as 244813987870. These are now decoded everywhere, including diagnostic entities. Fixes #44, reported by @mark4068-dotcom with diagnostics from @Vict20.
+- **The agent logged the same line every minute** -- thousands of identical warnings a day, even on healthy drives. A message now logs once, again if it changes, and otherwise hourly at most. Addresses [smart-sniffer-app#3](https://github.com/DAB-LABS/smart-sniffer-app/issues/3), reported by @gbravery.
+- **One stuck drive could freeze all monitoring** -- each check now gives up after 30 seconds.
+- **Windows drive paths displayed backwards in the card** -- `C:\` appeared as `\:C`. Fixed by @nsleigh in PR #41.
 
-### Added
-- **Diagnostic SMART attributes are numeric where we understand them** -- attributes such as start/stop count, load cycle count, offline uncorrectable and UDMA CRC errors are now recorded as counters, and wear and temperature style attributes as measurements, so Home Assistant keeps statistics for them and they can be graphed. Attributes whose meaning is vendor-specific and unknown are deliberately left unclassified rather than given statistics that could be wrong. Fixes #47, reported by @spry-salt.
-- **Installer works on read-only platforms such as TrueNAS** -- the installer now detects TrueNAS, whose system dataset is read-only, and installs to a writable location instead of failing. A new `--install-dir` option (or the `SMARTHA_INSTALL_DIR` environment variable) lets you choose an explicit location on any locked-down system. Fixes #46, reported by @cgtechuk.
-
-### Upgrade Notes
-- **Agent update.** Rebuild or re-download the agent binary, or re-run the installer.
-- **Integration update.** Update via HACS or replace `custom_components/smart_sniffer/`, then reload the integration.
-- **`device_overrides` users:** if you had worked around #43, your override now actually takes effect. Confirm the protocol you set is the one you want.
-- **TrueNAS users:** re-run the installer and it will choose a writable path automatically. For a location that survives a major TrueNAS upgrade, pass `--install-dir=/mnt/<pool>/<dataset>`.
-
-## v0.5.20 -- 2026-06-27
-
-Agent-only release. No integration or installer changes. Community-reported by @nsleigh.
-
-### Fixed
-- **ZFS pools now report real pool usage instead of 0%** -- on ZFS, the statfs syscall returns usage scoped to the mounted dataset, not the pool, so a monitored pool path (for example `/rpool`) showed near-zero usage even when the pool was full, because the parent dataset holds almost no data directly. The agent now queries `zfs list` for ZFS mounts and reports real used and available bytes, the same basis `df` and `pvesm status` use for a dataset. Fixes #31.
-
-### Changed
-- **Filesystem corrections now run through a shared fallback framework** -- the existing btrfs correction (which handles multi-device mounts that report a zero total) and the new ZFS correction are dispatched through one registry instead of a hand-written branch, so future filesystems can be added as isolated, unit-tested entries. The btrfs behavior is unchanged. Filesystem entity IDs are unchanged, so existing Home Assistant entities are not affected.
-
-### Upgrade Notes
-- **Agent update.** Rebuild or re-download the agent binary, or re-run the installer. No integration changes needed.
-- **ZFS users:** after updating, pool usage reflects real consumption automatically. The `zfs` command must be available on the host (it always is on a real ZFS system).
-
-## v0.5.19 -- 2026-06-27
-
-Agent-only release. No integration or installer changes.
-
-### Changed
-- **Quieter agent logs by default** -- recurring log lines are now suppressed so a steady condition does not repeat on every poll cycle. Each message (a drive scan error, a failed mount, a btrfs fallback notice, the per-cycle "cache refreshed" line, and others) is logged once on first occurrence, again whenever its detail changes, and otherwise at most once per hour while it persists. The smartctl exit-code logging added in v0.5.17 moved onto this shared mechanism with no change to its behavior. On a healthy system the steady-state log goes from one line per poll to effectively silent between real changes.
-
-### Added
-- **`--verbose` flag and `verbose` config option** -- set `verbose: true` in config.yaml (or pass `--verbose`) to disable log suppression and log every poll cycle, which helps when diagnosing an issue. Off by default. The flag can turn verbose logging on but does not turn off a `verbose: true` set in the config file.
-
-### Upgrade Notes
-- **Agent update.** Rebuild or re-download the agent binary, or re-run the installer. No integration changes needed.
-- Default behavior is now quieter. If you rely on per-cycle log lines for monitoring, set `verbose: true` (or `--verbose`) to restore the previous output.
-
-## v0.5.18 -- 2026-06-27
-
-Integration-only release. No agent or installer changes. Community-reported by @xxxarmitagexxx.
-
-### Added
-- **Optional `force_update` for time-series users** -- a new opt-in option (Settings > Devices & Services > SMART Sniffer > Configure) makes the SMART, attention, and filesystem sensors write a value on every poll, even when the reading has not changed. Home Assistant normally suppresses unchanged states, which leaves gaps in external stores like InfluxDB and Prometheus and breaks continuity in Grafana charts. The option is off by default to keep the recorder database small for everyone else. Agent metadata sensors (version, IP, port, OS, poll interval) are not affected. Implements #40.
-
-### Upgrade Notes
-- **Integration-only update.** Update via HACS or replace `custom_components/smart_sniffer/`. No agent update needed.
-- **Time-series users:** after updating, open the integration's options and enable "Write a value on every poll." The integration reloads and starts writing a datapoint each cycle.
-
-## v0.5.17 -- 2026-06-27
-
-Agent and Windows installer release. No integration changes.
-
-### Fixed
-- **Filesystem usage percentage now matches `df`** -- the agent reported usage as used/total, which ignores reserved blocks (ext4 reserves 5% by default). It now reports used/(used+available), the same basis as `df`, so the percentage reflects what is actually usable. On a typical ext4 drive this raises the reported figure by roughly the reserved fraction (for example 93% becomes about 98%). Fixes #39, reported by @xxxarmitagexxx.
-- **smartctl exit code logging no longer spams the log** -- non-zero smartctl exit codes are a bitmask, and most bits are informational (historical error-log entries, wear indicators, or commands a USB or RAID bridge does not support). The agent previously logged a WARNING for these on every poll cycle. Exit codes are now decoded into three tiers (execution errors, drive-health warnings, and informational flags) with accurate descriptions, and each device logs a given code once on first occurrence, again immediately if the code changes, and otherwise at most once per hour while it persists. A healthy drive returning exit code 4 from a USB bridge goes from one warning per minute to a single informational line. Addresses [smart-sniffer-app#3](https://github.com/DAB-LABS/smart-sniffer-app/issues/3).
-- **A hung smartctl can no longer stall the agent** -- each smartctl call is now bounded by a 30-second timeout. A wedged device or an unresponsive USB or RAID bridge previously made smartctl block indefinitely, freezing the sequential poll loop for every drive. The call is now cancelled when it exceeds the limit and logged like any other failure (once per device, then at most hourly).
-
-### Added
-- **Windows installer opens the agent's firewall port** -- `install.ps1` now adds an inbound Windows Firewall rule for the agent's TCP port (default 9099) so Home Assistant can connect from another machine. This prevents the most common "Unable to connect" setup failure on Windows. The rule is recreated on each install so a changed port is picked up, and a failure to set it does not abort the install. Related to #30.
-- **Container-aware filesystem reporting** -- when the agent runs in a container with the host filesystem bind-mounted under a prefix (for example `-v /:/host:ro`), set `mount_prefix` in config.yaml, or the `SMARTHA_MOUNT_PREFIX` environment variable, to that prefix. The agent then reads disk usage from the host filesystem instead of the container's own rootfs, while still reporting each mountpoint as the host sees it. Unset by default, so host installs are unaffected. Applies to Linux container deployments such as Docker.
-
-### Upgrade Notes
-- **Agent update.** Rebuild or re-download the agent binary, or re-run the installer. No integration changes needed.
-- **Windows users:** re-running the installer adds the firewall rule. If you previously added one by hand, the installer replaces it with a managed rule named "SMART Sniffer Agent."
-- **Containerized agents:** set `mount_prefix` (or `SMARTHA_MOUNT_PREFIX`) to your host mount root to get correct disk usage. Host installs need no change.
+### Upgrade notes
+- Update the agent (re-run the installer) **and** the integration (via HACS), then reload the integration.
+- **Figures will move.** Disk usage reads slightly higher on Linux, and ZFS pools jump from near 0% to their real value. Both are corrections, not faults.
+- **TrueNAS users:** re-run the installer and it will find a writable location. To survive a major TrueNAS upgrade, use `--install-dir=/mnt/<pool>/<dataset>`.
+- **If you use `device_overrides`:** it now takes effect. Check the protocol you set is the one you want.
+- **For InfluxDB, Prometheus or Grafana:** turn on "Write a value on every poll" in the integration's options.
 
 ## v0.5.16 -- 2026-06-10
 
