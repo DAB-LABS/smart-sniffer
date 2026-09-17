@@ -13,7 +13,7 @@ A small follow-up to v0.6.0: a monitoring gap on some SK Hynix SSDs, and tidier 
 - **Used reserved block count is recorded as a number on SK Hynix drives too** -- the same attribute is spelled differently by different vendors, and one spelling was missed.
 
 ### Added
-- **Drives now nest under their agent** -- set the area on the agent device and Home Assistant offers to apply it to every drive beneath it, instead of setting each one by hand. Requested by @wkearney99 in [#24](https://github.com/DAB-LABS/smart-sniffer/issues/24).
+- **Drives now nest under their agent** -- each drive and the Disk Usage device show "Connected via" their agent, and the agent's page lists them under Connected devices, so a NAS with six drives reads as one machine instead of seven loose devices. Requested by @wkearney99 in [#24](https://github.com/DAB-LABS/smart-sniffer/issues/24). Note this groups the devices; it does not set their area. To assign an area to all drives at once, tick them on the Devices page and use Move to area.
 - **`--help` for the installer**, documenting `--install-dir` and the uninstall options.
 
 ### Upgrade notes

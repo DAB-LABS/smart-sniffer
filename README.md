@@ -564,7 +564,7 @@ Drive-specific `smartctl -a --json` output samples are especially welcome — th
 - [x] Agent: log hygiene -- repeated lines log once then hourly at most, with `--verbose` to restore per-cycle output -- shipped v0.6.0
 - [x] Integration: opt-in `force_update` so InfluxDB, Prometheus and Grafana get a datapoint every poll -- shipped v0.6.0
 - [ ] Agent: runtime interface detection (replace static prefix list with OS-level physical NIC detection)
-- [ ] Integration: parent-agent device hierarchy (drives and filesystems nest under their agent via `via_device`)
+- [x] Integration: parent-agent device hierarchy (drives and filesystems nest under their agent via `via_device`) -- shipped v0.6.1
 - [ ] Integration: optional area-on-setup (area inherits to child devices via HA prompt)
 - [x] Integration: split consolidated wear-leveling / uncorrectable / pending-sector sensors into separate diagnostic entities when a drive reports multiple variants -- shipped v0.5.14
 - [x] Integration: `smart_sniffer.get_drive_data` service call for AI/automation access to full SMART data -- shipped v0.5.15, community PR by @nsleigh
