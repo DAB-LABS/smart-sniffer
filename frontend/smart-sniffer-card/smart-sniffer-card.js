@@ -878,7 +878,12 @@ class SmartSnifferCard extends HTMLElement {
 
   _friendlyMount(mp) {
     if (mp === "/") return "Root (/)";
-    return mp;
+    // Append a zero-width LEFT-TO-RIGHT MARK (U+200E) so trailing neutral
+    // characters -- the backslash in a Windows path like "C:\" -- stay
+    // anchored LTR inside the direction:rtl container we use for
+    // left-truncation. Without it the BiDi algorithm renders "C:\" as "\:C".
+    // Contributed by @nsleigh in PR #41.
+    return mp + "\u200E";
   }
 
   _buildDrive(hass, dev, devId, entityIds, agentDevicesByEntry, agentNameByEntry) {

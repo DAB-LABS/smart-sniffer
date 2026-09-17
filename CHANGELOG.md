@@ -2,6 +2,26 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.5.21 -- 2026-09-16
+
+Agent, integration, installer and card fixes, closing several community reports.
+
+### Fixed
+- **`device_overrides` protocols are honored again** -- a protocol set explicitly in `device_overrides` was silently dropped when it was `scsi`, `ata` or `nvme`, because those three are normally implied by scan detection. smartctl never received the `-d` flag, so a drive that needs an explicit protocol (for example a Samsung T7 USB SSD forced to `scsi`) kept failing to report. An explicit override is now always passed through. Fixes #43. Fix contributed by @KruseLuds in PR #48.
+- **Drives that report only `scsi_model_name` now show a model** -- SAS drives and some USB bridges report their model under `scsi_model_name` rather than `model_name`. Those drives showed a blank model and fell back to a path-based entity id. Also from @KruseLuds in PR #48.
+- **Vendor-packed SMART raw values are decoded everywhere** -- several drive families pack multiple counters into the single 48-bit raw value, so Home Assistant received a figure like 244813987870 in place of a temperature of 30. Dedicated fixes already existed for power-on hours, command timeout and wear leveling; that decoding now applies to every attribute, including the disabled-by-default diagnostic entities, which previously passed the packed value straight through. Legitimately large counters such as total LBAs written are left untouched. Fixes #44, reported by @mark4068-dotcom with additional diagnostics from @Vict20.
+- **Windows drive paths render correctly in the card** -- a path such as `C:\` displayed reversed as `\:C`, because the left-truncation container uses right-to-left text direction and a trailing backslash is a directionally neutral character. Contributed by @nsleigh in PR #41.
+
+### Added
+- **Diagnostic SMART attributes are numeric where we understand them** -- attributes such as start/stop count, load cycle count, offline uncorrectable and UDMA CRC errors are now recorded as counters, and wear and temperature style attributes as measurements, so Home Assistant keeps statistics for them and they can be graphed. Attributes whose meaning is vendor-specific and unknown are deliberately left unclassified rather than given statistics that could be wrong. Fixes #47, reported by @spry-salt.
+- **Installer works on read-only platforms such as TrueNAS** -- the installer now detects TrueNAS, whose system dataset is read-only, and installs to a writable location instead of failing. A new `--install-dir` option (or the `SMARTHA_INSTALL_DIR` environment variable) lets you choose an explicit location on any locked-down system. Fixes #46, reported by @cgtechuk.
+
+### Upgrade Notes
+- **Agent update.** Rebuild or re-download the agent binary, or re-run the installer.
+- **Integration update.** Update via HACS or replace `custom_components/smart_sniffer/`, then reload the integration.
+- **`device_overrides` users:** if you had worked around #43, your override now actually takes effect. Confirm the protocol you set is the one you want.
+- **TrueNAS users:** re-run the installer and it will choose a writable path automatically. For a location that survives a major TrueNAS upgrade, pass `--install-dir=/mnt/<pool>/<dataset>`.
+
 ## v0.5.20 -- 2026-06-27
 
 Agent-only release. No integration or installer changes. Community-reported by @nsleigh.

@@ -938,7 +938,32 @@ INSTALL_CFG="/etc/smartha-agent"
 # The probe runs as root (installer requires sudo), so a writability failure
 # genuinely means the filesystem is read-only, not a permissions issue.
 # ---------------------------------------------------------------------------
+# TrueNAS (SCALE and CORE) ships a read-only system dataset, so /usr/local,
+# /opt and / are all locked. midclt is the middleware client and is present on
+# both editions; os-release is the belt-and-braces check.
+is_truenas() {
+  [ -x /usr/bin/midclt ] && return 0
+  grep -qi truenas /etc/os-release 2>/dev/null && return 0
+  return 1
+}
+
 resolve_install_paths() {
+  # Candidate 0: explicit override, highest priority. This is the escape hatch
+  # for any locked-down platform, so a new read-only distro never needs a code
+  # change here:
+  #   curl -sSL ... | sudo bash -s -- --install-dir=/mnt/tank/apps/smartha-agent
+  #   SMARTHA_INSTALL_DIR=/mnt/tank/apps/smartha-agent sudo -E bash install.sh
+  _override="${INSTALL_DIR_OVERRIDE:-${SMARTHA_INSTALL_DIR:-}}"
+  if [ -n "$_override" ]; then
+    if mkdir -p "$_override" 2>/dev/null && [ -w "$_override" ]; then
+      INSTALL_BIN="$_override/$BINARY_NAME"
+      INSTALL_CFG="$_override"
+      info "Installing to $_override (--install-dir)"
+      return
+    fi
+    fail "Requested install directory is not writable: $_override"
+  fi
+
   # Candidate 1: standard paths (works on most Linux, macOS, Proxmox, etc.)
   if mkdir -p /usr/local/bin 2>/dev/null && [ -w /usr/local/bin ]; then
     INSTALL_BIN="/usr/local/bin/$BINARY_NAME"
@@ -954,7 +979,18 @@ resolve_install_paths() {
     return
   fi
 
-  # Candidate 3: /opt (generic fallback)
+  # Candidate 3: TrueNAS. /root sits on a writable dataset and survives
+  # reboots. Gated behind detection so a normal Linux box with an unwritable
+  # /usr/local does not silently end up installing into /root. See issue #46.
+  if is_truenas && mkdir -p /root/smartha-agent 2>/dev/null && [ -w /root/smartha-agent ]; then
+    INSTALL_BIN="/root/smartha-agent/$BINARY_NAME"
+    INSTALL_CFG="/root/smartha-agent"
+    warn "TrueNAS detected (read-only system dataset) — installing to /root/smartha-agent/"
+    warn "To survive a major TrueNAS upgrade, re-run with --install-dir=/mnt/<pool>/<dataset>"
+    return
+  fi
+
+  # Candidate 4: /opt (generic fallback)
   if mkdir -p /opt/smartha-agent 2>/dev/null && [ -w /opt/smartha-agent ]; then
     INSTALL_BIN="/opt/smartha-agent/$BINARY_NAME"
     INSTALL_CFG="/opt/smartha-agent"
@@ -962,7 +998,9 @@ resolve_install_paths() {
     return
   fi
 
-  fail "No writable install location found. Tried /usr/local/bin, /DATA/smartha-agent, /opt/smartha-agent."
+  fail "No writable install location found. Tried /usr/local/bin, /DATA/smartha-agent, /root/smartha-agent, /opt/smartha-agent.
+     Re-run with an explicit location, e.g.:
+       curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo bash -s -- --install-dir=/mnt/tank/smartha-agent"
 }
 
 # ---------------------------------------------------------------------------
@@ -1024,6 +1062,7 @@ do_uninstall() {
   for BIN_PATH in \
     "/usr/local/bin/$BINARY_NAME" \
     "/DATA/smartha-agent/$BINARY_NAME" \
+    "/root/smartha-agent/$BINARY_NAME" \
     "/opt/smartha-agent/$BINARY_NAME"; do
     if [ -f "$BIN_PATH" ]; then
       info "Removing binary ($BIN_PATH)..."
@@ -1036,6 +1075,7 @@ do_uninstall() {
   for CFG_PATH in \
     "/etc/smartha-agent" \
     "/DATA/smartha-agent" \
+    "/root/smartha-agent" \
     "/opt/smartha-agent"; do
     if [ -d "$CFG_PATH" ]; then
       info "Removing config directory ($CFG_PATH)..."
@@ -1068,6 +1108,9 @@ UNINSTALL_REQUESTED=false
 for arg in "$@"; do
   case "$arg" in
     --uninstall|-u|uninstall) UNINSTALL_REQUESTED=true ;;
+    # Explicit install location for read-only platforms (TrueNAS, etc.).
+    # Consumed by resolve_install_paths. See issue #46.
+    --install-dir=*) INSTALL_DIR_OVERRIDE="${arg#*=}" ;;
   esac
 done
 if [ "$_UNINSTALL_ENV" = "1" ] || [ "$_UNINSTALL_ENV" = "true" ] || [ "$UNINSTALL_REQUESTED" = "true" ]; then

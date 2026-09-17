@@ -628,6 +628,7 @@ type DriveCache struct {
 	standbyMode    string               // never, standby, sleep, idle
 	firstPoll      bool                 // true until first Refresh() completes; uses --scan-open on first poll
 	protocolCache  map[string]string    // per-device-path detected or overridden protocol
+	overrideProto  map[string]bool      // true when the protocol came from device_overrides (always pass -d)
 	cfg            *Config              // full agent config (for device_overrides access)
 }
 
@@ -660,6 +661,7 @@ func NewDriveCache(cfg *Config) *DriveCache {
 		standbyMode:    cfg.StandbyMode,
 		firstPoll:      true,
 		protocolCache:  make(map[string]string),
+		overrideProto:  make(map[string]bool),
 		cfg:            cfg,
 	}
 }
@@ -724,6 +726,10 @@ func (dc *DriveCache) Refresh() {
 		for _, ov := range dc.cfg.DeviceOverrides {
 			dc.mu.Lock()
 			dc.protocolCache[ov.Device] = ov.Protocol
+			// Mark this as user-specified so fetchDriveInfo always passes -d,
+			// even for scsi/ata/nvme which scan-detection would normally
+			// handle implicitly. See issue #43.
+			dc.overrideProto[ov.Device] = true
 			dc.mu.Unlock()
 
 			found := false
@@ -897,13 +903,18 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bo
 	if cached, ok := dc.protocolCache[devicePath]; ok {
 		protocol = cached
 	}
+	isOverride := dc.overrideProto[devicePath]
 	dc.mu.RUnlock()
 
 	args := []string{"--json", "-a"}
 	if dc.standbyMode != "never" && !skipStandby {
 		args = append(args, "-n", dc.standbyMode)
 	}
-	if protocol != "" && !isAutoDetectedProtocol(protocol) {
+	// A protocol the user set in device_overrides is always passed through,
+	// including scsi/ata/nvme. Those three are normally left off because scan
+	// detection already implies them, but an explicit override means the scan
+	// got it wrong -- dropping it silently is issue #43.
+	if protocol != "" && (isOverride || !isAutoDetectedProtocol(protocol)) {
 		args = append(args, "-d", protocol)
 	}
 	args = append(args, devicePath)
@@ -995,6 +1006,12 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bo
 	var parsed map[string]interface{}
 	if err := json.Unmarshal(out, &parsed); err == nil {
 		info.Model = extractString(parsed, "model_name")
+		if info.Model == "" {
+			// SCSI/SAS and some USB bridges report the model under
+			// scsi_model_name instead. Without this the drive shows a blank
+			// model and falls back to a path-based slug. See issue #43.
+			info.Model = extractString(parsed, "scsi_model_name")
+		}
 		info.Serial = extractString(parsed, "serial_number")
 
 		// Prefer the protocol from the SMART data itself — more accurate than

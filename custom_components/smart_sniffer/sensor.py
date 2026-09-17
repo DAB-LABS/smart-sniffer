@@ -13,6 +13,7 @@ Creates two kinds of sensors per drive:
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -258,6 +259,104 @@ ATA_NAME_MAP: dict[str, list[str]] = {
 # SMART attribute extraction
 # ---------------------------------------------------------------------------
 
+# Diagnostic attributes we understand well enough to assign a state class.
+# Monotonic counters get TOTAL_INCREASING; gauges that move both ways get
+# MEASUREMENT.  Anything not listed gets no state class at all, which is the
+# deliberate default: no statistics is better than wrong statistics for a
+# vendor-specific attribute whose semantics we do not know.  See issue #47.
+_DIAG_COUNTER_ATTRS = frozenset(
+    {
+        "Start_Stop_Count",
+        "Load_Cycle_Count",
+        "Offline_Uncorrectable",
+        "UDMA_CRC_Error_Count",
+        "Power_Cycle_Count",
+        "Power-Off_Retract_Count",
+        "Reallocated_Sector_Ct",
+        "Reallocated_Event_Count",
+        "Current_Pending_Sector",
+        "Reported_Uncorrect",
+        "Command_Timeout",
+        "Spin_Retry_Count",
+        "G-Sense_Error_Rate",
+        "Erase_Fail_Count",
+        "Erase_Fail_Count_Total",
+        "Program_Fail_Count",
+        "Program_Fail_Cnt_Total",
+        "Total_LBAs_Written",
+        "Total_LBAs_Read",
+        "Host_Writes_32MiB",
+        "Host_Reads_32MiB",
+        "Head_Flying_Hours",
+        "Power_On_Hours",
+    }
+)
+
+_DIAG_GAUGE_ATTRS = frozenset(
+    {
+        "Temperature_Celsius",
+        "Airflow_Temperature_Cel",
+        "Available_Reservd_Space",
+        "Media_Wearout_Indicator",
+        "Percent_Lifetime_Remain",
+        "Remaining_Lifetime_Perc",
+        "SSD_Life_Left",
+        "Wear_Leveling_Count",
+    }
+)
+
+
+def _diagnostic_state_class(attr_name: str) -> SensorStateClass | None:
+    """Return a state class for a dynamic diagnostic attribute, or None.
+
+    Without a state class Home Assistant treats the value as a string, so
+    these entities get no statistics and cannot be graphed (issue #47).  We
+    only classify attributes whose semantics are well understood.
+    """
+    if attr_name in _DIAG_COUNTER_ATTRS:
+        return SensorStateClass.TOTAL_INCREASING
+    if attr_name in _DIAG_GAUGE_ATTRS:
+        return SensorStateClass.MEASUREMENT
+    return None
+
+
+def _decode_raw_value(raw: Any) -> Any | None:
+    """Decode a SMART attribute raw value, unpacking vendor-compound values.
+
+    Several drive families pack multiple sub-counters into the single 48-bit
+    raw value, so `raw.value` comes back as a huge integer while `raw.string`
+    holds the decoded figure:
+
+        Temperature_Celsius     value 244813987870   string "30 (Min/Max 13/57)"
+        Media_Wearout_Indicator value 1284200464683  string "299 80 299"
+
+    smartctl's `raw.string` is the vendor-decoded human form and its leading
+    integer is the real value.  We prefer it only when the numeric value looks
+    packed (above 0xFFFF) and the string actually disagrees, so legitimately
+    large counters such as Total_LBAs_Written are left untouched.
+
+    See issue #44, and the per-attribute fixes this generalises: #10
+    (Power_On_Hours), Command_Timeout in v0.4.26, Wear_Leveling in v0.4.30.
+    """
+    if not isinstance(raw, dict):
+        return raw
+
+    raw_value = raw.get("value")
+    if not isinstance(raw_value, int):
+        return raw_value
+
+    if raw_value > 0xFFFF:
+        raw_string = raw.get("string")
+        if raw_string:
+            m = re.match(r"\s*(\d+)", str(raw_string))
+            if m:
+                decoded = int(m.group(1))
+                if decoded != raw_value:
+                    return decoded
+
+    return raw_value
+
+
 def _extract_attribute(drive_data: dict[str, Any], key: str) -> Any | None:
     """Extract a SMART attribute value from the drive's full JSON payload.
 
@@ -369,7 +468,10 @@ def _extract_attribute(drive_data: dict[str, Any], key: str) -> Any | None:
                         return None
                     return max(0, 100 - normalized)
 
-                return raw_value
+                # Everything else: unpack vendor-compound raw values rather
+                # than handing Home Assistant a packed 48-bit integer.  See
+                # issue #44.
+                return _decode_raw_value(raw)
             return raw
 
     # --- Universal fallback (top-level fields, all protocols) -----------
@@ -514,6 +616,10 @@ async def async_setup_entry(
                     icon="mdi:database-search-outline",
                     entity_category=EntityCategory.DIAGNOSTIC,
                     entity_registry_enabled_default=False,
+                    # Known counters/gauges get a state class so HA treats them
+                    # as numeric and records statistics.  Unknown attributes
+                    # stay unclassified on purpose.  See issue #47.
+                    state_class=_diagnostic_state_class(attr_name),
                 )
 
                 entities.append(
@@ -713,10 +819,10 @@ class SmartSnifferDiagnosticAttrSensor(SmartSnifferSensor):
         ata_attrs = smart_data.get("ata_smart_attributes", {}).get("table", [])
         for attr in ata_attrs:
             if attr.get("id") == self._attr_id:
-                raw = attr.get("raw", {})
-                if isinstance(raw, dict):
-                    return raw.get("value")
-                return raw
+                # Unpack vendor-compound raw values here too -- diagnostic
+                # entities previously returned raw.value untouched, which
+                # showed packed integers on drives that pack.  See issue #44.
+                return _decode_raw_value(attr.get("raw", {}))
         return None
 
 
