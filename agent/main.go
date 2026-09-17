@@ -338,11 +338,11 @@ func isSmartctlVersionOK(ver, minVer string) bool {
 // See docs/internal/research/smartctl-install-paths.md for full research.
 var smartctlSearchPaths = []string{
 	// NAS platforms (most likely to need fallback)
-	"/var/packages/synocli-disk/target/sbin/smartctl", // SynoCommunity on Synology
-	"/opt/sbin/smartctl",                               // Entware (Synology/QNAP)
-	"/opt/bin/smartctl",                                // Entware alternate
-	"/boot/extra/sbin/smartctl",                        // Unraid NerdTools
-	"/boot/extra/bin/smartctl",                         // Unraid NerdTools alternate
+	"/var/packages/synocli-disk/target/sbin/smartctl",        // SynoCommunity on Synology
+	"/opt/sbin/smartctl",                                     // Entware (Synology/QNAP)
+	"/opt/bin/smartctl",                                      // Entware alternate
+	"/boot/extra/sbin/smartctl",                              // Unraid NerdTools
+	"/boot/extra/bin/smartctl",                               // Unraid NerdTools alternate
 	"/share/CACHEDEV1_DATA/.qpkg/smartmontools/bin/smartctl", // QNAP QPKG
 
 	// Standard Linux
@@ -352,9 +352,9 @@ var smartctlSearchPaths = []string{
 	"/usr/local/sbin/smartctl", // FreeBSD, OpenBSD
 
 	// macOS
-	"/usr/local/bin/smartctl",  // Homebrew (Intel)
+	"/usr/local/bin/smartctl",    // Homebrew (Intel)
 	"/opt/homebrew/bin/smartctl", // Homebrew (Apple Silicon)
-	"/opt/local/sbin/smartctl", // MacPorts
+	"/opt/local/sbin/smartctl",   // MacPorts
 
 	// NixOS
 	"/run/current-system/sw/sbin/smartctl", // NixOS system profile
@@ -619,17 +619,17 @@ func (lt *logThrottle) shouldLog(key, disc string) bool {
 
 // DriveCache holds cached SMART data for all discovered drives.
 type DriveCache struct {
-	mu             sync.RWMutex
-	interval       time.Duration
-	drives         map[string]DriveInfo // keyed by slug id
-	driveOrder     []string             // preserve discovery order
-	fsCache        *FilesystemCache     // refreshed alongside drive data (nil = disabled)
-	logs           *logThrottle         // suppresses repeated log lines (per-device and per scan-step keys)
-	standbyMode    string               // never, standby, sleep, idle
-	firstPoll      bool                 // true until first Refresh() completes; uses --scan-open on first poll
-	protocolCache  map[string]string    // per-device-path detected or overridden protocol
-	overrideProto  map[string]bool      // true when the protocol came from device_overrides (always pass -d)
-	cfg            *Config              // full agent config (for device_overrides access)
+	mu            sync.RWMutex
+	interval      time.Duration
+	drives        map[string]DriveInfo // keyed by slug id
+	driveOrder    []string             // preserve discovery order
+	fsCache       *FilesystemCache     // refreshed alongside drive data (nil = disabled)
+	logs          *logThrottle         // suppresses repeated log lines (per-device and per scan-step keys)
+	standbyMode   string               // never, standby, sleep, idle
+	firstPoll     bool                 // true until first Refresh() completes; uses --scan-open on first poll
+	protocolCache map[string]string    // per-device-path detected or overridden protocol
+	overrideProto map[string]bool      // true when the protocol came from device_overrides (always pass -d)
+	cfg           *Config              // full agent config (for device_overrides access)
 }
 
 // DriveInfo is the per-drive cached payload.
@@ -638,9 +638,9 @@ type DriveInfo struct {
 	DevicePath  string          `json:"device_path"`
 	Model       string          `json:"model"`
 	Serial      string          `json:"serial"`
-	Protocol    string          `json:"protocol"`                      // ATA, NVMe, SCSI, ...
-	InStandby   bool            `json:"in_standby,omitempty"`          // true when drive was skipped due to standby
-	LastUpdated string          `json:"last_updated,omitempty"`        // ISO 8601 timestamp of last successful SMART fetch
+	Protocol    string          `json:"protocol"`               // ATA, NVMe, SCSI, ...
+	InStandby   bool            `json:"in_standby,omitempty"`   // true when drive was skipped due to standby
+	LastUpdated string          `json:"last_updated,omitempty"` // ISO 8601 timestamp of last successful SMART fetch
 	RawJSON     json.RawMessage `json:"smart_data"`
 }
 
@@ -655,14 +655,14 @@ type DriveSummary struct {
 
 func NewDriveCache(cfg *Config) *DriveCache {
 	return &DriveCache{
-		interval:       cfg.ScanInterval,
-		drives:         make(map[string]DriveInfo),
-		logs:           newLogThrottle(logReminderInterval, cfg.Verbose),
-		standbyMode:    cfg.StandbyMode,
-		firstPoll:      true,
-		protocolCache:  make(map[string]string),
-		overrideProto:  make(map[string]bool),
-		cfg:            cfg,
+		interval:      cfg.ScanInterval,
+		drives:        make(map[string]DriveInfo),
+		logs:          newLogThrottle(logReminderInterval, cfg.Verbose),
+		standbyMode:   cfg.StandbyMode,
+		firstPoll:     true,
+		protocolCache: make(map[string]string),
+		overrideProto: make(map[string]bool),
+		cfg:           cfg,
 	}
 }
 

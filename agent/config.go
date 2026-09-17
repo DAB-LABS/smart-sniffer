@@ -63,13 +63,14 @@ func defaultConfig() Config {
 // real LAN interface and cause duplicate/unreachable mDNS discoveries.
 //
 // Intentionally EXCLUDED (ambiguous -- can be primary LAN on some platforms):
-//   bond*  -- Synology bonded NICs, NAS LACP
-//   br     -- (bare, no dash) Unraid br0 is the host bridge
-//   vlan*  -- may carry the only routable IP
-//   qvs*   -- QNAP virtual switch AND primary management interface
-//   qbr*   -- QNAP/OpenStack, ambiguous
-//   qvo*   -- QNAP/OpenStack, ambiguous
-//   qvb*   -- QNAP/OpenStack, ambiguous
+//
+//	bond*  -- Synology bonded NICs, NAS LACP
+//	br     -- (bare, no dash) Unraid br0 is the host bridge
+//	vlan*  -- may carry the only routable IP
+//	qvs*   -- QNAP virtual switch AND primary management interface
+//	qbr*   -- QNAP/OpenStack, ambiguous
+//	qvo*   -- QNAP/OpenStack, ambiguous
+//	qvb*   -- QNAP/OpenStack, ambiguous
 //
 // See docs/internal/research/mdns-interface-prefixes.md for full rationale.
 var defaultSkipPrefixes = []string{
