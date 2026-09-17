@@ -112,6 +112,11 @@ async def async_setup_entry(
     for drive_id, drive_data in coordinator.data.items():
         if drive_id.startswith("_"):
             continue  # skip internal keys like _filesystems
+        if drive_data.get("readable") is False:
+            # Matches sensor.py: never build a device for a drive the agent
+            # could not read. See smart-sniffer-app#7.
+            _LOGGER.debug("Skipping unreadable drive %s at setup", drive_id)
+            continue
         entities.append(SmartSnifferHealthSensor(coordinator, drive_id, drive_data))
         entities.append(DriveStandbySensor(coordinator, drive_id, drive_data))
 
@@ -156,6 +161,9 @@ class SmartSnifferHealthSensor(
             "manufacturer":  model.split()[0] if model else "Unknown",
             "model":         model,
             "serial_number": serial,
+            # Nest this drive under its agent so HA can cascade an area
+            # assignment from the agent to every drive it reports (#24).
+            "via_device":    (DOMAIN, f"{coordinator.config_entry.entry_id}_agent"),
         }
 
     @property
@@ -229,6 +237,9 @@ class DriveStandbySensor(
             "manufacturer":  model.split()[0] if model else "Unknown",
             "model":         model,
             "serial_number": serial,
+            # Nest this drive under its agent so HA can cascade an area
+            # assignment from the agent to every drive it reports (#24).
+            "via_device":    (DOMAIN, f"{coordinator.config_entry.entry_id}_agent"),
         }
 
     @property

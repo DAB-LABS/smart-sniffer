@@ -166,7 +166,17 @@ filesystems:                   # optional -- set by installer's disk usage picke
     fstype: ext4
 ```
 
-All options can also be set via CLI flags: `--port`, `--token`, `--scan-interval`, `--interface`, `--config`.
+All options can also be set via CLI flags: `--port`, `--token`, `--scan-interval`, `--interface`, `--config`, `--verbose`.
+
+**Verbose logging:** By default the agent logs a repeated message once, again if its text changes, and otherwise at most hourly, so a drive with a persistent condition does not fill the log with identical lines every poll. Pass `--verbose` (or set `verbose: true` in `config.yaml`) to restore per-cycle logging while diagnosing something. The flag can only enable verbose mode; it never disables a setting from the config file.
+
+**Running in a container:** If the agent runs in a container and you want it to report the *host's* disk usage rather than the container's own filesystem, mount the host root read-only and tell the agent where it is:
+
+```bash
+docker run -v /:/host:ro -e SMARTHA_MOUNT_PREFIX=/host ...
+```
+
+The equivalent config file setting is `mount_prefix: /host`. Configured mountpoints are then read through that prefix, while the paths reported to Home Assistant stay as the host sees them. This affects disk usage reporting only; reading SMART data from host drives additionally requires passing the devices through to the container.
 
 **Exclude devices:** Device paths listed in `exclude_devices` are skipped during every scan. The agent resolves symlinks at startup, so `/dev/disk/by-id/...` paths and their `/dev/sdX` equivalents both match. The installer's drive picker (Linux) shows all detected drives and lets you choose which ones to monitor -- useful for excluding iSCSI LUNs, USB backup drives, or anything you don't want polled. Drives with remote-storage transports (iSCSI, Fibre Channel) are flagged in yellow and excluded from the default selection. You can also add paths manually and restart the service. If a device appears in both `exclude_devices` and `device_overrides`, the exclusion wins and a warning is logged.
 
@@ -243,6 +253,29 @@ Run on each machine you want to monitor:
 ```bash
 curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo bash
 ```
+
+<details>
+<summary>Installer options</summary>
+
+The installer picks a sensible location on its own. These options are for systems where that is not possible, or for troubleshooting.
+
+| Option | Environment variable | What it does |
+|---|---|---|
+| `--install-dir=PATH` | `SMARTHA_INSTALL_DIR` | Install to an explicit directory instead of the default. Required on platforms with a read-only system area. |
+| `--help` | | Print all options and exit. |
+
+```bash
+# Install somewhere writable, for example on TrueNAS or another
+# appliance OS where the system dataset is read-only:
+curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo bash -s -- --install-dir=/mnt/tank/apps/smartha-agent
+
+# Same thing via the environment:
+SMARTHA_INSTALL_DIR=/mnt/tank/apps/smartha-agent sudo -E bash install.sh
+```
+
+**TrueNAS:** the installer detects TrueNAS and falls back to `/root/smartha-agent` automatically. That works, but `/root` does not survive a major TrueNAS upgrade. To keep the agent across upgrades, install onto a pool dataset with `--install-dir=/mnt/<pool>/<dataset>`. See [#46](https://github.com/DAB-LABS/smart-sniffer/issues/46).
+
+</details>
 
 <details>
 <summary>Windows (PowerShell as Admin)</summary>
@@ -526,9 +559,13 @@ Drive-specific `smartctl -a --json` output samples are especially welcome — th
 - [x] SAS/SCSI basic monitoring (health, temperature, power-on hours, power cycles) -- shipped v0.5.7
 - [x] Vendor-specific SMART diagnostic entities (disabled-by-default, all named ATA attributes) -- shipped v0.5.7
 - [ ] SAS/SCSI full attribute parsing (grown defect list, error counters, endurance indicators)
-- [ ] Agent: container-aware filesystem reporting (MNT_PREFIX path mapping for Docker deployments)
+- [x] Agent: container-aware filesystem reporting (`mount_prefix` / `SMARTHA_MOUNT_PREFIX` path mapping for Docker deployments) -- shipped v0.6.0
+- [x] Agent: ZFS pool usage reporting (pool paths report real usage instead of near-zero dataset figures) -- shipped v0.6.0
+- [x] Agent: log hygiene -- repeated lines log once then hourly at most, with `--verbose` to restore per-cycle output -- shipped v0.6.0
+- [x] Integration: opt-in `force_update` so InfluxDB, Prometheus and Grafana get a datapoint every poll -- shipped v0.6.0
 - [ ] Agent: runtime interface detection (replace static prefix list with OS-level physical NIC detection)
-- [ ] Integration: parent-agent device hierarchy + optional area-on-setup (drives nest under agent via `via_device`, area inherits via HA prompt)
+- [ ] Integration: parent-agent device hierarchy (drives and filesystems nest under their agent via `via_device`)
+- [ ] Integration: optional area-on-setup (area inherits to child devices via HA prompt)
 - [x] Integration: split consolidated wear-leveling / uncorrectable / pending-sector sensors into separate diagnostic entities when a drive reports multiple variants -- shipped v0.5.14
 - [x] Integration: `smart_sniffer.get_drive_data` service call for AI/automation access to full SMART data -- shipped v0.5.15, community PR by @nsleigh
 

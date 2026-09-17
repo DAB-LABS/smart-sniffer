@@ -220,6 +220,8 @@ ATA_NAME_MAP: dict[str, list[str]] = {
         ],
         "reallocated_sector_count": [
             "Reallocated_Sector_Ct",
+            # SK Hynix SATA SSD name for attribute 5 (#27).
+            "Retired_Block_Count",
         ],
         "current_pending_sector_count": [
             "Current_Pending_Sector",
@@ -279,6 +281,8 @@ _DIAG_COUNTER_ATTRS = frozenset(
         "POR_Recovery_Count",
         "Runtime_Bad_Block",
         "Used_Rsvd_Blk_Cnt_Tot",
+        # SK Hynix spells the same counter with an extra r (#27).
+        "Used_Rsrvd_Blk_Cnt_Tot",
         "Power_Cycle_Count",
         "Power-Off_Retract_Count",
         "Reallocated_Sector_Ct",
@@ -523,6 +527,13 @@ async def async_setup_entry(
     for drive_id, drive_data in coordinator.data.items():
         if drive_id.startswith("_"):
             continue  # skip internal keys like _filesystems
+        if drive_data.get("readable") is False:
+            # The agent could not read this drive, so its identity may not be
+            # trustworthy. Do not build a device for it. Agents before v0.6.1
+            # omit the field entirely, which reads as None here rather than
+            # False, so they are unaffected. See smart-sniffer-app#7.
+            _LOGGER.debug("Skipping unreadable drive %s at setup", drive_id)
+            continue
         protocol = drive_data.get("protocol", "").upper()
         smart_data = drive_data.get("smart_data", {})
         has_ata_attrs = bool(smart_data.get("ata_smart_attributes"))
@@ -589,12 +600,23 @@ async def async_setup_entry(
             # Without per-drive detection, the global union of all
             # variant names would suppress 169 even though only 177
             # won the consolidated sensor.
-            _attr_position = {
-                attr.get("name", ""): i
-                for i, attr in enumerate(ata_table)
-                if attr.get("name")
-            }
-            _covered_names: set[str] = set()
+            # First position only: _extract_attribute returns on the first
+            # row whose name matches, so a name appearing twice must resolve
+            # to the earlier row.  A plain dict comprehension would record
+            # the last one.
+            _attr_position: dict[str, int] = {}
+            for _i, _attr in enumerate(ata_table):
+                _name = _attr.get("name")
+                if _name and _name not in _attr_position:
+                    _attr_position[_name] = _i
+
+            # Suppress by table row, not by name.  A drive can report the
+            # same attribute name at two different IDs (SK hynix reports
+            # Program_Fail_Count at both 175 and 181, #27).  Suppressing by
+            # name would hide every row sharing that name while the curated
+            # sensor only ever consumed one of them, so the others would
+            # vanish from both paths with nothing to indicate they existed.
+            _covered_rows: set[int] = set()
             for _desc in SENSOR_DESCRIPTIONS:
                 candidates = ATA_NAME_MAP.get(_desc.key, [])
                 present = [n for n in candidates if n in _attr_position]
@@ -602,17 +624,17 @@ async def async_setup_entry(
                     # Match _extract_attribute's "first in drive-table
                     # order" rule so the same variant wins in both paths.
                     winner = min(present, key=lambda n: _attr_position[n])
-                    _covered_names.add(winner)
+                    _covered_rows.add(_attr_position[winner])
 
             _seen_ids: set[int] = set()
-            for attr in ata_table:
+            for _row, attr in enumerate(ata_table):
                 attr_name = attr.get("name", "")
                 attr_id = attr.get("id", 0)
                 # Skip unnamed, unknown, already-covered, or duplicate IDs
                 if (
                     not attr_name
                     or attr_name.startswith("Unknown")
-                    or attr_name in _covered_names
+                    or _row in _covered_rows
                     or attr_id in _seen_ids
                 ):
                     continue
@@ -736,6 +758,9 @@ class SmartSnifferSensor(CoordinatorEntity[SmartSnifferCoordinator], SensorEntit
             "manufacturer": _guess_manufacturer(model),
             "model": model,
             "serial_number": serial,
+            # Nest this drive under its agent so HA can cascade an area
+            # assignment from the agent to every drive it reports (#24).
+            "via_device": (DOMAIN, f"{coordinator.config_entry.entry_id}_agent"),
         }
 
     @property
@@ -893,6 +918,9 @@ class SmartSnifferAttentionSensor(
             "manufacturer": _guess_manufacturer(model),
             "model": model,
             "serial_number": serial,
+            # Nest this drive under its agent so HA can cascade an area
+            # assignment from the agent to every drive it reports (#24).
+            "via_device": (DOMAIN, f"{coordinator.config_entry.entry_id}_agent"),
         }
 
     @property
@@ -970,6 +998,9 @@ class SmartSnifferAttentionReasonsSensor(
             "manufacturer": _guess_manufacturer(model),
             "model": model,
             "serial_number": serial,
+            # Nest this drive under its agent so HA can cascade an area
+            # assignment from the agent to every drive it reports (#24).
+            "via_device": (DOMAIN, f"{coordinator.config_entry.entry_id}_agent"),
         }
 
     @property
@@ -1051,6 +1082,8 @@ class SmartSnifferFilesystemSensor(
             "name": f"Disk Usage ({hostname})",
             "manufacturer": "SMART Sniffer",
             "model": "Filesystem Monitor",
+            # Nest under the agent alongside the drive devices (#24).
+            "via_device": (DOMAIN, f"{coordinator.config_entry.entry_id}_agent"),
         }
 
     def _get_fs_data(self) -> dict[str, Any] | None:

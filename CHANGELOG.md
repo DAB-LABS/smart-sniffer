@@ -2,6 +2,25 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.6.1 -- 2026-09-17
+
+**Integration only. No agent update needed.** Update through HACS and reload.
+
+A small follow-up to v0.6.0: a monitoring gap on some SK Hynix SSDs, and tidier device organisation in Home Assistant.
+
+### Fixed
+- **Reallocated sectors were not detected on some SK Hynix SSDs** -- those drives name the attribute `Retired_Block_Count` rather than the usual name, so the most important health indicator we track reported nothing on them. If you have an SK Hynix SATA SSD, this is worth updating for. Found in a drive dump from @jackeichen in [#27](https://github.com/DAB-LABS/smart-sniffer/issues/27).
+- **Used reserved block count is recorded as a number on SK Hynix drives too** -- the same attribute is spelled differently by different vendors, and one spelling was missed.
+
+### Added
+- **Drives now nest under their agent** -- set the area on the agent device and Home Assistant offers to apply it to every drive beneath it, instead of setting each one by hand. Requested by @wkearney99 in [#24](https://github.com/DAB-LABS/smart-sniffer/issues/24).
+- **`--help` for the installer**, documenting `--install-dir` and the uninstall options.
+
+### Upgrade notes
+- Update through HACS and reload the integration. The agent is unchanged, so there is nothing to re-run.
+- Existing drive devices keep their entity IDs. Nesting them under the agent does not rename anything.
+- **SK Hynix owners:** a drive that previously looked healthy may now report attention if it has retired blocks. That is the fix working, not a new fault.
+
 ## v0.6.0 -- 2026-09-16
 
 **Update both the agent and the integration.** Several fixes below need both sides current.

@@ -14,9 +14,10 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
+from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import device_registry
 
 from .attention import evaluate_attention
 from .const import DOMAIN, FILESYSTEMS_KEY, SERVICE_GET_DRIVE_DATA
@@ -39,6 +40,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "coordinator": coordinator,
         "health_coordinator": health_coordinator,
     }
+
+    # Register the agent device up front, before any platform loads (#24).
+    # Drive and filesystem devices point at it with via_device, and HA only
+    # resolves that link if the parent already exists in the device registry.
+    # Platforms are set up concurrently, so creating it here is the only way
+    # to guarantee the parent is present whichever platform registers first.
+    device_registry.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, f"{entry.entry_id}_agent")},
+        name=entry.title or f"SMART Sniffer ({entry.data.get(CONF_HOST, 'unknown')})",
+        manufacturer="SMART Sniffer",
+        model="Agent",
+    )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 

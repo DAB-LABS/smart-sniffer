@@ -62,6 +62,10 @@ SEVERITY_NONE     = "none"
 # CRITICAL: any non-zero value = data integrity at risk.
 _CRITICAL_ATA: dict[str, str] = {
     "Reallocated_Sector_Ct":     "Reallocated Sector Count",
+    # SK Hynix SATA SSDs name attribute 5 Retired_Block_Count. Same meaning,
+    # same severity. Without this the most predictive attribute we track was
+    # invisible on those drives. Found in a dump from @jackeichen (#27).
+    "Retired_Block_Count":       "Reallocated Sector Count",
     "Current_Pending_Sector":    "Current Pending Sector Count",
     "Current_Pending_Sector_Ct": "Current Pending Sector Count",
     "Total_Pending_Sectors":     "Current Pending Sector Count",

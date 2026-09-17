@@ -1105,9 +1105,44 @@ do_uninstall() {
 # from the caller's environment (e.g. curl ... | sudo UNINSTALL=1 bash)
 _UNINSTALL_ENV="${UNINSTALL:-}"
 UNINSTALL_REQUESTED=false
+usage() {
+  cat <<'USAGE'
+SMART Sniffer agent installer
+
+Usage:
+  curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo bash
+  sudo bash install.sh [options]
+
+Options:
+  --install-dir=PATH   Install to an explicit directory instead of the
+                       default. Use this on platforms where the system
+                       area is read-only, such as TrueNAS.
+  --uninstall, -u      Remove the agent, its service, and its config.
+  --help, -h           Show this message and exit.
+
+Environment variables:
+  SMARTHA_INSTALL_DIR  Same as --install-dir.
+  UNINSTALL=1          Same as --uninstall. Useful when piping to bash.
+
+Examples:
+  # Install to a pool dataset so it survives a major TrueNAS upgrade
+  curl -sSL .../install.sh | sudo bash -s -- --install-dir=/mnt/tank/apps/smartha-agent
+
+  # Same, via the environment
+  SMARTHA_INSTALL_DIR=/mnt/tank/apps/smartha-agent sudo -E bash install.sh
+
+  # Uninstall
+  sudo bash install.sh --uninstall
+
+The installer detects an existing install and offers to keep your current
+configuration. Documentation: https://github.com/DAB-LABS/smart-sniffer
+USAGE
+}
+
 for arg in "$@"; do
   case "$arg" in
     --uninstall|-u|uninstall) UNINSTALL_REQUESTED=true ;;
+    --help|-h) usage; exit 0 ;;
     # Explicit install location for read-only platforms (TrueNAS, etc.).
     # Consumed by resolve_install_paths. See issue #46.
     --install-dir=*) INSTALL_DIR_OVERRIDE="${arg#*=}" ;;
