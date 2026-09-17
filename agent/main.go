@@ -640,9 +640,24 @@ type DriveInfo struct {
 	Serial      string          `json:"serial"`
 	Protocol    string          `json:"protocol"`               // ATA, NVMe, SCSI, ...
 	InStandby   bool            `json:"in_standby,omitempty"`   // true when drive was skipped due to standby
+	Readable    bool            `json:"readable"`               // false when smartctl could not read the drive this cycle; data is stale
 	LastUpdated string          `json:"last_updated,omitempty"` // ISO 8601 timestamp of last successful SMART fetch
 	RawJSON     json.RawMessage `json:"smart_data"`
 }
+
+// fetchOutcome explains why fetchDriveInfo returned without fresh SMART data.
+//
+// Standby and "could not read" both set exit bit 1, so a single bool cannot
+// tell them apart. Conflating them is what produced the ghost device in
+// smart-sniffer-app#7: a permission-blocked drive was published under a
+// fabricated path-based identity instead of being skipped.
+type fetchOutcome int
+
+const (
+	fetchOK         fetchOutcome = iota // SMART data was read and parsed
+	fetchStandby                        // drive is in a low-power mode; serve cached data
+	fetchUnreadable                     // smartctl could not read the drive; serve cached data, never a new identity
+)
 
 // DriveSummary is the abbreviated representation returned by GET /api/drives.
 type DriveSummary struct {
@@ -651,6 +666,7 @@ type DriveSummary struct {
 	Model      string `json:"model"`
 	Serial     string `json:"serial"`
 	Protocol   string `json:"protocol"`
+	Readable   bool   `json:"readable"` // false = stale cached entry, smartctl could not read it
 }
 
 func NewDriveCache(cfg *Config) *DriveCache {
@@ -768,36 +784,63 @@ func (dc *DriveCache) Refresh() {
 	var order []string
 
 	for _, dev := range scanResult.Devices {
-		info, inStandby := dc.fetchDriveInfo(dev.Name, dev.Protocol, isFirstPoll)
-		if inStandby {
-			// Drive is sleeping -- serve last known data with standby flag.
+		info, outcome := dc.fetchDriveInfo(dev.Name, dev.Protocol, isFirstPoll)
+		if outcome != fetchOK {
+			// No fresh data this cycle, for either reason. Recover the cached
+			// entry by device path so the drive keeps its real serial-based ID
+			// and its last-known SMART data. Without this the drive drops out
+			// of /api/drives entirely and its entities go unavailable, which
+			// is the second half of smart-sniffer-app#7.
+			standby := outcome == fetchStandby
 			slug := makeDriveSlug("", dev.Name) // fallback slug from path
+			recovered := false
 			dc.mu.RLock()
 			if existing, ok := dc.drives[slug]; ok {
-				existing.InStandby = true
+				existing.InStandby = standby
+				existing.Readable = standby
 				newDrives[existing.ID] = existing
 				order = append(order, existing.ID)
 				slug = existing.ID // use the real ID for logging
+				recovered = true
 			} else {
 				// Check all cached drives by device path (serial-based slug won't match path-based slug).
 				for id, d := range dc.drives {
 					if d.DevicePath == dev.Name {
-						d.InStandby = true
+						d.InStandby = standby
+						d.Readable = standby
 						newDrives[id] = d
 						order = append(order, id)
 						slug = id
+						recovered = true
 						break
 					}
 				}
 			}
+			prev, hadPrev := dc.drives[slug]
 			dc.mu.RUnlock()
-			// Log standby transition once.
-			if prev, ok := dc.drives[slug]; !ok || !prev.InStandby {
-				log.Printf("drive %s is in standby, serving cached data", dev.Name)
+
+			if standby {
+				// Log standby transition once.
+				if !hadPrev || !prev.InStandby {
+					log.Printf("drive %s is in standby, serving cached data", dev.Name)
+				}
+			} else {
+				// The smartctl failure itself is already logged (and throttled)
+				// by fetchDriveInfo. Only report what it means for the cache.
+				var msg string
+				if recovered {
+					msg = fmt.Sprintf("drive %s unreadable, serving cached data", dev.Name)
+				} else {
+					msg = fmt.Sprintf("drive %s unreadable and not in cache, skipping", dev.Name)
+				}
+				if dc.logs.shouldLog(dev.Name+"-unreadable", msg) {
+					log.Print(msg)
+				}
 			}
 			continue
 		}
 		info.InStandby = false
+		info.Readable = true
 		newDrives[info.ID] = info
 		order = append(order, info.ID)
 	}
@@ -871,7 +914,9 @@ func isAutoDetectedProtocol(p string) bool {
 // hung USB/RAID bridge can otherwise make smartctl block indefinitely, which
 // would stall the sequential Refresh() loop forever. If exceeded, the call is
 // killed and returns an error (logged once per device, like other failures).
-const smartctlTimeout = 30 * time.Second
+// A var rather than a const so tests can shorten it to exercise the timeout
+// path without waiting 30 seconds. Nothing else should assign to it.
+var smartctlTimeout = 30 * time.Second
 
 // runSmartctl runs smartctl with the given args and returns (output, exitCode, error).
 // error is non-nil only for non-ExitError failures (missing binary, permissions,
@@ -879,7 +924,14 @@ const smartctlTimeout = 30 * time.Second
 func runSmartctl(smartctlPath string, args []string) ([]byte, int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), smartctlTimeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, smartctlPath, args...).CombinedOutput()
+	cmd := exec.CommandContext(ctx, smartctlPath, args...)
+	// On deadline the context kills only the direct child. If smartctl is a
+	// wrapper script, or forks a helper that inherits stdout/stderr,
+	// CombinedOutput would keep waiting for those pipes to close and the
+	// timeout would silently not fire. WaitDelay bounds that wait after the
+	// kill so the timeout holds regardless of what smartctl spawned.
+	cmd.WaitDelay = 2 * time.Second
+	out, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {
 		return out, -1, fmt.Errorf("timed out after %s (device may be unresponsive)", smartctlTimeout)
 	}
@@ -893,9 +945,10 @@ func runSmartctl(smartctlPath string, args []string) ([]byte, int, error) {
 }
 
 // fetchDriveInfo calls smartctl -a --json on a single device and parses the
-// key fields we care about. Returns (info, inStandby). When inStandby is true,
-// the drive was sleeping and no SMART data was collected.
-func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bool) (DriveInfo, bool) {
+// key fields we care about. Returns (info, outcome). The info value is only
+// meaningful when outcome is fetchOK; for the other outcomes the caller must
+// serve the cached entry rather than publish what is returned here.
+func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bool) (DriveInfo, fetchOutcome) {
 	// Check the protocol cache: if we have a confirmed working protocol for this
 	// device (e.g. "sat" from a previous SAT fallback, or a device_override),
 	// use it upfront instead of relying on the scan-reported protocol.
@@ -931,10 +984,25 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bo
 		if dc.logs.shouldLog(devicePath, "exec-error") {
 			log.Printf("WARNING: smartctl -a %s: %v", devicePath, execErr)
 		}
+		// smartctl never ran to completion, so there is no output to parse.
+		// Falling through here used to build a DriveInfo with an empty serial
+		// (so makeDriveSlug fabricated a path-based ID like "dev-nvme0"),
+		// Readable set to true, and RawJSON that was either nil (marshals to
+		// null and crashes the integration's attention parser) or an empty
+		// non-nil slice (fails json.Marshal outright, so /api/drives/{id}
+		// returns an empty body and the integration marks EVERY drive on this
+		// agent unavailable). A hung drive hitting the 30s timeout is the
+		// realistic trigger. Same rule as the exit-code path below: never
+		// publish a drive we could not read.
+		return DriveInfo{DevicePath: devicePath, Protocol: protocol}, fetchUnreadable
 	} else if code != 0 {
-		// Bit 1 (value 2) with standby mode = drive is sleeping.
-		if dc.standbyMode != "never" && code == 2 {
-			return DriveInfo{DevicePath: devicePath, Protocol: protocol}, true
+		// Bit 1 (value 2) is set both when the drive is in a low-power mode and
+		// when the device could not be opened at all. Ask smartctl which it was
+		// instead of inferring it from the bit, so a permission-blocked drive is
+		// never reported as sleeping. See smart-sniffer-app#7.
+		if code&0x02 != 0 && dc.standbyMode != "never" && !skipStandby &&
+			smartctlReportsLowPower(out) {
+			return DriveInfo{DevicePath: devicePath, Protocol: protocol}, fetchStandby
 		}
 
 		// SAT fallback: if any execution failure bits (0-2) are set and protocol
@@ -991,12 +1059,24 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bo
 			if dc.logs.shouldLog(devicePath, msg) {
 				log.Print(msg)
 			}
+
+			// Bits 0-1 mean the drive could not be read at all, so there is no
+			// serial in the output. Falling through would hand makeDriveSlug an
+			// empty serial, which falls back to the device path and fabricates
+			// an identity like "dev-nvme0". Home Assistant then registers that
+			// as a new device while the real serial-keyed one disappears from
+			// /api/drives and its entities go unavailable. Never publish a
+			// drive we could not read. See smart-sniffer-app#7.
+			if code&0x03 != 0 {
+				return DriveInfo{DevicePath: devicePath, Protocol: protocol}, fetchUnreadable
+			}
 		}
 	}
 
 	info := DriveInfo{
 		DevicePath:  devicePath,
 		Protocol:    protocol,
+		Readable:    true,
 		LastUpdated: time.Now().UTC().Format(time.RFC3339),
 		RawJSON:     json.RawMessage(out),
 	}
@@ -1032,7 +1112,37 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bo
 	// Build a URL-safe slug from serial (preferred) or device path.
 	info.ID = makeDriveSlug(info.Serial, devicePath)
 
-	return info, false
+	return info, fetchOK
+}
+
+// smartctlReportsLowPower reports whether smartctl's own messages say it
+// skipped the device because it is in a low-power mode.
+//
+// smartctl sets exit bit 1 both for "device is in STANDBY mode" and for
+// "device open failed", so the exit code alone cannot distinguish a sleeping
+// drive from one we have no permission to read. Asking smartctl what it meant
+// is the only reliable discriminator. See smart-sniffer-app#7.
+func smartctlReportsLowPower(out []byte) bool {
+	var parsed struct {
+		Smartctl struct {
+			Messages []struct {
+				String string `json:"string"`
+			} `json:"messages"`
+		} `json:"smartctl"`
+	}
+	if err := json.Unmarshal(out, &parsed); err != nil {
+		return false
+	}
+	for _, m := range parsed.Smartctl.Messages {
+		s := strings.ToUpper(m.String)
+		// smartctl emits e.g. "Device is in STANDBY mode, exit(2)".
+		if strings.Contains(s, "STANDBY MODE") ||
+			strings.Contains(s, "SLEEP MODE") ||
+			strings.Contains(s, "IDLE MODE") {
+			return true
+		}
+	}
+	return false
 }
 
 // extractString does a shallow lookup in a JSON object for a string value.
@@ -1092,6 +1202,7 @@ func (dc *DriveCache) HandleDrives(w http.ResponseWriter, r *http.Request) {
 			Model:      d.Model,
 			Serial:     d.Serial,
 			Protocol:   d.Protocol,
+			Readable:   d.Readable,
 		})
 	}
 
