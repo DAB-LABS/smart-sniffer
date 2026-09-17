@@ -2,6 +2,27 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.6.2 -- 2026-09-18
+
+**Agent update. Re-run the installer on each monitored machine.** The integration is unchanged apart from its version number; take the HACS update so the versions match, but there is nothing new on that side.
+
+Three agent bugs, all about what happens when a drive cannot be read. If you updated to v0.6.1 yesterday, sorry for the quick follow-up. These were found during that release and are worth fixing now rather than holding.
+
+### Fixed
+- **A stuck drive could make every drive on the agent disappear** -- if smartctl timed out or failed to run against one device, the agent published a broken record for it, and Home Assistant treated the whole agent as unreachable. One hung disk blanked all of your drives at exactly the moment you would want to see them. The agent now skips a drive it could not read and keeps serving the others.
+- **A drive the agent could not read appeared as a second, fake drive** -- when smartctl was blocked from opening a device, usually by Protection Mode in the Home Assistant App, the agent invented a name for it such as `dev-nvme0`. Home Assistant registered that as a new device while the real one went unavailable, and cleaning up meant hand-editing the entity registry. Unreadable drives are now skipped and the real drive keeps its identity and last-known data. Reported by @Patrick384600 in [smart-sniffer-app#7](https://github.com/DAB-LABS/smart-sniffer-app/issues/7).
+- **The 30-second hang protection from v0.6.0 could silently not fire** -- it stopped smartctl itself but kept waiting if smartctl was a wrapper script or had started a helper process. The wait is now bounded regardless of what smartctl spawned.
+- **A sleeping drive and an unreadable drive are no longer confused** -- both produce the same smartctl exit code, so the agent now checks what smartctl actually reported instead of guessing.
+
+### Added
+- **`readable` field on `/api/drives` and `/api/drives/{id}`** -- `false` when the entry is last-known data for a drive the agent could not read this cycle.
+
+### Upgrade notes
+- Re-run the installer on each machine running the agent. The Home Assistant App will pick the new agent up on its next rebuild.
+- **If you have a ghost drive device from the second bug**, it will stop being recreated after the update. Delete it in Settings, Devices and Services once the real drive is reporting again.
+- Take the HACS update too so the integration version matches. It is a version bump only.
+- **Running the agent inside a VM?** A virtual disk that reports no SMART data used to appear as a drive with an empty serial and no readings. It no longer appears at all. That is the fix working, not a lost drive; disk usage monitoring for that VM is unaffected. If a stale device is left behind in Home Assistant, delete it.
+
 ## v0.6.1 -- 2026-09-17
 
 **Integration only. No agent update needed.** Update through HACS and reload.
