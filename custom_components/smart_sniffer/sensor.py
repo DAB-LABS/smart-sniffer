@@ -270,6 +270,15 @@ _DIAG_COUNTER_ATTRS = frozenset(
         "Load_Cycle_Count",
         "Offline_Uncorrectable",
         "UDMA_CRC_Error_Count",
+        # Samsung (and several other vendors) name attribute 199
+        # CRC_Error_Count rather than UDMA_CRC_Error_Count.  Without this
+        # variant the fix misses the exact attribute class reported in #47
+        # on Samsung SSDs.  Confirmed against a Samsung 870 EVO.
+        "CRC_Error_Count",
+        # Samsung vendor counters, all monotonic.
+        "POR_Recovery_Count",
+        "Runtime_Bad_Block",
+        "Used_Rsvd_Blk_Cnt_Tot",
         "Power_Cycle_Count",
         "Power-Off_Retract_Count",
         "Reallocated_Sector_Ct",
@@ -302,6 +311,9 @@ _DIAG_GAUGE_ATTRS = frozenset(
         "Remaining_Lifetime_Perc",
         "SSD_Life_Left",
         "Wear_Leveling_Count",
+        # Remaining spare blocks: counts DOWN as blocks are consumed, so it
+        # is a gauge, unlike its Used_ counterpart above.
+        "Unused_Rsvd_Blk_Cnt_Tot",
     }
 )
 
