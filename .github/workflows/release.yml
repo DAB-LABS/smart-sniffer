@@ -38,9 +38,16 @@ jobs:
         working-directory: agent
         run: go vet ./...
 
+      # Ruff is pinned to an exact version on purpose. Its default rule set
+      # changes between releases, so an unpinned install lets an upstream
+      # release fail a tagged build on source that did not change. Bump this
+      # deliberately, and run the same version locally before tagging.
       - name: Lint Python
+        env:
+          RUFF_VERSION: "0.15.20"
         run: |
-          pip install ruff
+          pip install "ruff==${RUFF_VERSION}"
+          ruff --version
           ruff check custom_components/
 
       - name: Extract version from tag
