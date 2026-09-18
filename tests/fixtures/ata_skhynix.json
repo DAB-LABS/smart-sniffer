@@ -1,0 +1,165 @@
+{
+  "json_format_version": [
+    1,
+    0
+  ],
+  "smartctl": {
+    "version": [
+      7,
+      4
+    ],
+    "exit_status": 0
+  },
+  "device": {
+    "name": "/dev/sda",
+    "info_name": "/dev/sda",
+    "type": "sat",
+    "protocol": "ATA"
+  },
+  "model_name": "SK hynix HFS960G3H2X069N",
+  "serial_number": "FI63N00511110374R",
+  "firmware_version": "410A2Z00",
+  "power_on_time": {
+    "hours": 365
+  },
+  "smart_status": {
+    "passed": true
+  },
+  "ata_smart_attributes": {
+    "revision": 16,
+    "table": [
+      {
+        "id": 5,
+        "name": "Retired_Block_Count",
+        "value": 100,
+        "worst": 100,
+        "thresh": 0,
+        "when_failed": "",
+        "raw": {
+          "value": 0,
+          "string": "0"
+        }
+      },
+      {
+        "id": 9,
+        "name": "Power_On_Hours",
+        "value": 100,
+        "worst": 100,
+        "thresh": 0,
+        "when_failed": "",
+        "raw": {
+          "value": 365,
+          "string": "365"
+        }
+      },
+      {
+        "id": 173,
+        "name": "Max_Erase_Count",
+        "value": 100,
+        "worst": 100,
+        "thresh": 0,
+        "when_failed": "",
+        "raw": {
+          "value": 12,
+          "string": "12"
+        }
+      },
+      {
+        "id": 174,
+        "name": "Unexpected_Pwr_Loss_Cnt",
+        "value": 100,
+        "worst": 100,
+        "thresh": 0,
+        "when_failed": "",
+        "raw": {
+          "value": 3,
+          "string": "3"
+        }
+      },
+      {
+        "id": 175,
+        "name": "Program_Fail_Count",
+        "value": 100,
+        "worst": 100,
+        "thresh": 0,
+        "when_failed": "",
+        "raw": {
+          "value": 0,
+          "string": "0"
+        }
+      },
+      {
+        "id": 179,
+        "name": "Used_Rsrvd_Blk_Cnt_Tot",
+        "value": 100,
+        "worst": 100,
+        "thresh": 0,
+        "when_failed": "",
+        "raw": {
+          "value": 0,
+          "string": "0"
+        }
+      },
+      {
+        "id": 181,
+        "name": "Program_Fail_Count",
+        "value": 100,
+        "worst": 100,
+        "thresh": 0,
+        "when_failed": "",
+        "raw": {
+          "value": 0,
+          "string": "0"
+        }
+      },
+      {
+        "id": 195,
+        "name": "ECC_on_the_Fly_Rate",
+        "value": 100,
+        "worst": 100,
+        "thresh": 0,
+        "when_failed": "",
+        "raw": {
+          "value": 0,
+          "string": "0"
+        }
+      },
+      {
+        "id": 231,
+        "name": "SSD_Life_Left",
+        "value": 99,
+        "worst": 99,
+        "thresh": 0,
+        "when_failed": "",
+        "raw": {
+          "value": 99,
+          "string": "99"
+        }
+      },
+      {
+        "id": 241,
+        "name": "Lifetime_NAND_Prg_GiB",
+        "value": 100,
+        "worst": 100,
+        "thresh": 0,
+        "when_failed": "",
+        "raw": {
+          "value": 1842,
+          "string": "1842"
+        }
+      },
+      {
+        "id": 242,
+        "name": "Lifetime_Reads_GiB",
+        "value": 100,
+        "worst": 100,
+        "thresh": 0,
+        "when_failed": "",
+        "raw": {
+          "value": 2971,
+          "string": "2971"
+        }
+      }
+    ]
+  }
+}

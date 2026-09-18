@@ -34,7 +34,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .attention import _has_usable_smart_data
+from .attention import _has_usable_smart_data, coerce_smart_data
 from .const import CONF_TOKEN, DOMAIN
 from .coordinator import AgentHealthCoordinator, SmartSnifferCoordinator
 
@@ -48,13 +48,9 @@ def _evaluate_health(drive_data: dict[str, Any]) -> bool | None:
     critical_warning bitmask. Returns None when no usable SMART data is
     present — HA renders this as "Unknown" rather than a misleading "OK".
     """
-    smart_data = drive_data.get("smart_data", {})
-    if isinstance(smart_data, str):
-        import json
-        try:
-            smart_data = json.loads(smart_data)
-        except (json.JSONDecodeError, TypeError):
-            return None  # Unparseable → unknown, not "OK".
+    # Unusable payload yields {}, which the gate below turns into None
+    # (unknown), exactly as the inline coercion did.
+    smart_data = coerce_smart_data(drive_data)
 
     # No usable data at all → unknown.
     if not _has_usable_smart_data(smart_data):
@@ -84,7 +80,7 @@ def _evaluate_health(drive_data: dict[str, Any]) -> bool | None:
         "Uncorrectable_Error_Cnt":   1,
         "Reallocated_Event_Count":   1,
     }
-    ata_attrs = smart_data.get("ata_smart_attributes", {}).get("table", [])
+    ata_attrs = (smart_data.get("ata_smart_attributes") or {}).get("table", [])
     for attr in ata_attrs:
         threshold = CRITICAL_ATA.get(attr.get("name", ""))
         if threshold is not None:

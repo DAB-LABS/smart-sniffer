@@ -35,6 +35,7 @@ from .attention import (
     STATE_NO,
     STATE_UNSUPPORTED,
     STATE_YES,
+    coerce_smart_data,
     evaluate_attention,
 )
 from .const import CONF_FORCE_UPDATE, DEFAULT_FORCE_UPDATE, DOMAIN, FILESYSTEMS_KEY
@@ -380,18 +381,14 @@ def _extract_attribute(drive_data: dict[str, Any], key: str) -> Any | None:
     provides a universal top-level fallback for SCSI/SAS drives.
     Returns None if the attribute is not present.
     """
-    smart_data = drive_data.get("smart_data", {})
-
-    if isinstance(smart_data, str):
-        import json
-        try:
-            smart_data = json.loads(smart_data)
-        except (json.JSONDecodeError, TypeError):
-            return None
+    smart_data = coerce_smart_data(drive_data)
 
     # --- SMART overall status ---
     if key == "smart_status":
-        status = smart_data.get("smart_status", {})
+        # No default here. An unusable payload coerces to {}, and reporting
+        # "FAILED" for a drive that reported nothing at all would be a false
+        # alarm; the inline coercion this replaced returned None in that case.
+        status = smart_data.get("smart_status")
         if isinstance(status, dict):
             return "PASSED" if status.get("passed", False) else "FAILED"
         return None
@@ -415,7 +412,7 @@ def _extract_attribute(drive_data: dict[str, Any], key: str) -> Any | None:
             return extractor()
 
     # --- ATA path ---
-    ata_attrs = smart_data.get("ata_smart_attributes", {}).get("table", [])
+    ata_attrs = (smart_data.get("ata_smart_attributes") or {}).get("table", [])
 
     names = ATA_NAME_MAP.get(key, [])
     for attr in ata_attrs:
@@ -535,7 +532,7 @@ async def async_setup_entry(
             _LOGGER.debug("Skipping unreadable drive %s at setup", drive_id)
             continue
         protocol = drive_data.get("protocol", "").upper()
-        smart_data = drive_data.get("smart_data", {})
+        smart_data = coerce_smart_data(drive_data)
         has_ata_attrs = bool(smart_data.get("ata_smart_attributes"))
         is_nvme = protocol == "NVME" and not has_ata_attrs
         is_ata = protocol in ("ATA", "SATA", "") or has_ata_attrs
@@ -585,7 +582,7 @@ async def async_setup_entry(
         # For ATA drives in the smartctl database, expose all named
         # attributes that aren't already covered by a dedicated sensor.
         # Created disabled by default -- power users enable what they need.
-        ata_table = smart_data.get("ata_smart_attributes", {}).get("table", [])
+        ata_table = (smart_data.get("ata_smart_attributes") or {}).get("table", [])
         if is_ata and ata_table:
             # Build a per-drive "covered names" set: for each curated
             # sensor, only suppress the single name variant that actually
@@ -845,15 +842,9 @@ class SmartSnifferDiagnosticAttrSensor(SmartSnifferSensor):
         drive_data = self.coordinator.data.get(self._drive_id)
         if drive_data is None:
             return None
-        smart_data = drive_data.get("smart_data", {})
-        if isinstance(smart_data, str):
-            import json
-            try:
-                smart_data = json.loads(smart_data)
-            except (json.JSONDecodeError, TypeError):
-                return None
+        smart_data = coerce_smart_data(drive_data)
 
-        ata_attrs = smart_data.get("ata_smart_attributes", {}).get("table", [])
+        ata_attrs = (smart_data.get("ata_smart_attributes") or {}).get("table", [])
         for attr in ata_attrs:
             if attr.get("id") == self._attr_id:
                 # Unpack vendor-compound raw values here too -- diagnostic

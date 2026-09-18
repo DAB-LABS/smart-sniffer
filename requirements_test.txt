@@ -1,0 +1,12 @@
+# Test runner for the integration's Python tests.
+#
+# Pinned to an exact version, same reasoning as the ruff pin in release.yml and
+# tests.yml: an unpinned runner can fail a build on code that did not change.
+# `8.*` would float across the whole 8.x line, which is not a pin.
+#
+# These tests load attention.py directly by path and need nothing from Home
+# Assistant. Adding pytest-homeassistant-custom-component is tier 2 of
+# docs/internal/plans/plan-python-test-infrastructure.md; that package tracks
+# Home Assistant versions and must be pinned to one matching the HA release
+# being targeted.
+pytest==8.4.2

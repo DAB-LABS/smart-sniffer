@@ -33,6 +33,7 @@ References:
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -178,7 +179,7 @@ def _has_usable_smart_data(smart_data: dict[str, Any]) -> bool:
         return True
 
     # Check ATA attributes
-    ata_table = smart_data.get("ata_smart_attributes", {}).get("table", [])
+    ata_table = (smart_data.get("ata_smart_attributes") or {}).get("table", [])
     if ata_table:
         return True
 
@@ -188,6 +189,45 @@ def _has_usable_smart_data(smart_data: dict[str, Any]) -> bool:
         return True
 
     return False
+
+
+def coerce_smart_data(drive_data: dict[str, Any]) -> dict[str, Any]:
+    """Return the drive's smart_data as a dict, or {} if unusable.
+
+    The agent sends smart_data as raw JSON. It can arrive as a dict, as a
+    JSON string, or as null when the agent could not read the drive (fixed
+    agent-side in v0.6.2, but older agents are still in the field). Anything
+    that is not a usable dict becomes {}, which every caller already handles
+    as "no data".
+
+    This replaces four hand-maintained copies of the same coercion, each of
+    which dereferenced the result without a type check and raised
+    AttributeError on a null payload.
+    """
+    raw = drive_data.get("smart_data")
+
+    if isinstance(raw, dict):
+        return raw
+
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            parsed = None
+        if isinstance(parsed, dict):
+            return parsed
+
+    # Only the unusable branch logs. Debug level, so it is off unless someone
+    # has turned on debug for this integration, at which point per-poll detail
+    # is the point. The type name is the diagnostic: NoneType means an old
+    # agent or a drive it could not read, str means JSON that would not parse,
+    # anything else means something unexpected upstream.
+    _LOGGER.debug(
+        "Drive %s: unusable smart_data (%s), treating as no data",
+        drive_data.get("id", "unknown"),
+        type(raw).__name__,
+    )
+    return {}
 
 
 def evaluate_attention(
@@ -207,14 +247,7 @@ def evaluate_attention(
         - reasons:  human-readable list of what triggered the alert.
                     Empty list when state is STATE_NO or STATE_UNSUPPORTED.
     """
-    smart_data = drive_data.get("smart_data", {})
-
-    if isinstance(smart_data, str):
-        import json
-        try:
-            smart_data = json.loads(smart_data)
-        except (json.JSONDecodeError, TypeError):
-            return STATE_UNSUPPORTED, SEVERITY_NONE, []
+    smart_data = coerce_smart_data(drive_data)
 
     # --- Data-quality gate ---
     if not _has_usable_smart_data(smart_data):
@@ -277,7 +310,7 @@ def evaluate_attention(
     # ------------------------------------------------------------------
     # ATA evaluation
     # ------------------------------------------------------------------
-    ata_attrs = smart_data.get("ata_smart_attributes", {}).get("table", [])
+    ata_attrs = (smart_data.get("ata_smart_attributes") or {}).get("table", [])
     seen_labels: set[str] = set()
 
     for attr in ata_attrs:

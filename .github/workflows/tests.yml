@@ -1,0 +1,71 @@
+# Lint and test on every push and pull request.
+#
+# release.yml triggers only on v* tags, so until this workflow existed nothing
+# ran on a pull request: contributor PRs received no automated checking, and
+# lint failures surfaced on release night rather than months earlier.
+#
+# This workflow does not build or publish anything. Releases stay in
+# release.yml.
+
+name: Tests
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Tier 1 tests are stdlib only, so this version is not load bearing yet.
+      # Tier 2 adds pytest-homeassistant-custom-component, which tracks Home
+      # Assistant releases; align this with whatever that pin targets.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # DUPLICATED PIN. release.yml carries its own copy of RUFF_VERSION and
+      # the two must be bumped together. Sharing it through a requirements
+      # file was considered and rejected: release.yml is tag-triggered, so a
+      # mistake in it is not caught until release night, and it has carried
+      # three releases unchanged. If these two ever disagree, release.yml is
+      # the one that gates a release and therefore the one that is correct.
+      - name: Lint Python
+        env:
+          RUFF_VERSION: "0.15.20"
+        run: |
+          pip install "ruff==${RUFF_VERSION}"
+          ruff --version
+          ruff check custom_components/ tests/
+
+      - name: Test Python
+        run: |
+          pip install -r requirements_test.txt
+          pytest tests/ -q
+
+  go:
+    name: Go
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+
+      - name: Vet Go
+        working-directory: agent
+        run: go vet ./...
+
+      - name: Test Go
+        working-directory: agent
+        run: go test ./...

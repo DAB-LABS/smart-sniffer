@@ -1,0 +1,41 @@
+{
+  "json_format_version": [
+    1,
+    0
+  ],
+  "smartctl": {
+    "version": [
+      7,
+      4
+    ],
+    "exit_status": 0
+  },
+  "device": {
+    "name": "/dev/sda",
+    "info_name": "/dev/sda",
+    "type": "nvme",
+    "protocol": "NVMe"
+  },
+  "model_name": "Samsung SSD 980 PRO 1TB",
+  "serial_number": "S5GXNF0R000001",
+  "firmware_version": "5B2QGXA7",
+  "power_on_time": {
+    "hours": 2210
+  },
+  "smart_status": {
+    "passed": true
+  },
+  "nvme_smart_health_information_log": {
+    "critical_warning": 0,
+    "temperature": 35,
+    "available_spare": 100,
+    "available_spare_threshold": 10,
+    "percentage_used": 2,
+    "data_units_read": 18234123,
+    "data_units_written": 9123847,
+    "power_on_hours": 2210,
+    "unsafe_shutdowns": 11,
+    "media_errors": 0,
+    "num_err_log_entries": 0
+  }
+}
