@@ -19,7 +19,7 @@ from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry
 
-from .attention import evaluate_attention
+from .attention import evaluate_attention, get_thresholds
 from .const import DOMAIN, FILESYSTEMS_KEY, SERVICE_GET_DRIVE_DATA
 from .coordinator import AgentHealthCoordinator, SmartSnifferCoordinator
 
@@ -72,7 +72,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             for drive_id, drive_data in coord.data.items():
                 if drive_id.startswith("_"):
                     continue
-                state, severity, reasons = evaluate_attention(drive_data)
+                state, severity, reasons, accepted = evaluate_attention(
+                    drive_data, get_thresholds(coord.config_entry, drive_id)
+                )
                 drives[drive_id] = {
                     "model": drive_data.get("model"),
                     "serial": drive_data.get("serial"),
@@ -82,6 +84,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         "state": state,
                         "severity": severity,
                         "reasons": reasons,
+                        "accepted": accepted,
                     },
                     "smart_data": drive_data.get("smart_data"),
                 }

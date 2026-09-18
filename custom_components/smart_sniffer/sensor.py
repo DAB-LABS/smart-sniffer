@@ -36,7 +36,9 @@ from .attention import (
     STATE_UNSUPPORTED,
     STATE_YES,
     coerce_smart_data,
+    compose_reasons_text,
     evaluate_attention,
+    get_thresholds,
 )
 from .const import CONF_FORCE_UPDATE, DEFAULT_FORCE_UPDATE, DOMAIN, FILESYSTEMS_KEY
 from .coordinator import AgentHealthCoordinator, SmartSnifferCoordinator
@@ -914,6 +916,10 @@ class SmartSnifferAttentionSensor(
             "via_device": (DOMAIN, f"{coordinator.config_entry.entry_id}_agent"),
         }
 
+    def _thresholds(self) -> dict[str, int]:
+        """Threshold overrides for this drive, from entry.data."""
+        return get_thresholds(self.coordinator.config_entry, self._drive_id)
+
     @property
     def icon(self) -> str:
         """Dynamic icon based on current attention state."""
@@ -926,7 +932,7 @@ class SmartSnifferAttentionSensor(
         drive_data = self.coordinator.data.get(self._drive_id)
         if drive_data is None:
             return STATE_UNSUPPORTED
-        state, _, _ = evaluate_attention(drive_data)
+        state, _, _, _ = evaluate_attention(drive_data, self._thresholds())
         return state
 
     @property
@@ -937,12 +943,18 @@ class SmartSnifferAttentionSensor(
                 "severity": SEVERITY_NONE,
                 "reasons": ["Drive data unavailable"],
                 "issue_count": 0,
+                "accepted": [],
             }
-        _, severity, reasons = evaluate_attention(drive_data)
+        _, severity, reasons, accepted = evaluate_attention(
+            drive_data, self._thresholds()
+        )
         return {
             "severity": severity,
             "reasons": reasons if reasons else ["No issues detected"],
+            # issue_count counts actionable reasons only. Accepted readings are
+            # explicitly not issues, which is the whole point of accepting them.
             "issue_count": len(reasons),
+            "accepted": accepted,
         }
 
 
@@ -994,17 +1006,21 @@ class SmartSnifferAttentionReasonsSensor(
             "via_device": (DOMAIN, f"{coordinator.config_entry.entry_id}_agent"),
         }
 
+    def _thresholds(self) -> dict[str, int]:
+        """Threshold overrides for this drive, from entry.data."""
+        return get_thresholds(self.coordinator.config_entry, self._drive_id)
+
     @property
     def native_value(self) -> str:
         drive_data = self.coordinator.data.get(self._drive_id)
         if drive_data is None:
             return "Drive data unavailable"
-        state, _, reasons = evaluate_attention(drive_data)
-        if state == STATE_NO:
-            return "No issues detected"
-        if state == STATE_UNSUPPORTED:
-            return "No usable SMART data"
-        return "; ".join(reasons)
+        state, _, reasons, accepted = evaluate_attention(
+            drive_data, self._thresholds()
+        )
+        # Composed in attention.py so the 255-character cap is covered by the
+        # tier-1 suite; this module cannot be imported without Home Assistant.
+        return compose_reasons_text(state, reasons, accepted)
 
     @property
     def icon(self) -> str:
@@ -1012,7 +1028,7 @@ class SmartSnifferAttentionReasonsSensor(
         drive_data = self.coordinator.data.get(self._drive_id)
         if drive_data is None:
             return "mdi:text-box-search-outline"
-        state, _, _ = evaluate_attention(drive_data)
+        state, _, _, _ = evaluate_attention(drive_data, self._thresholds())
         if state == STATE_YES:
             return "mdi:alert-octagon"
         if state == STATE_MAYBE:

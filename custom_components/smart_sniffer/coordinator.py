@@ -54,6 +54,7 @@ from .attention import (
     STATE_UNSUPPORTED,
     STATE_YES,
     evaluate_attention,
+    get_thresholds,
 )
 from .const import (
     AGENT_RELEASES_URL,
@@ -268,7 +269,12 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for drive_id, drive_data in new_data.items():
             if drive_id.startswith("_"):
                 continue  # skip internal keys like _filesystems
-            state, severity, reasons = evaluate_attention(drive_data)
+            # The fourth value is deliberately ignored here. Accepted entries
+            # must not reach the reasons comparison below, or an accepted value
+            # drifting under its threshold would read as a change on every poll.
+            state, severity, reasons, _ = evaluate_attention(
+                drive_data, get_thresholds(self.config_entry, drive_id)
+            )
             prev = self._prev_state.get(drive_id)
 
             if prev is None:

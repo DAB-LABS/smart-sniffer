@@ -16,7 +16,7 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .attention import evaluate_attention
+from .attention import evaluate_attention, get_thresholds
 from .const import CONF_TOKEN, DOMAIN
 from .coordinator import SmartSnifferCoordinator
 
@@ -72,7 +72,9 @@ async def async_get_config_entry_diagnostics(
         if drive_id.startswith("_"):
             continue  # skip internal keys like _filesystems
         # Attention evaluation for this drive.
-        state, severity, reasons = evaluate_attention(drive_data)
+        state, severity, reasons, accepted = evaluate_attention(
+            drive_data, get_thresholds(entry, drive_id)
+        )
 
         # Redact the top-level drive fields.
         drive_summary = async_redact_data(
@@ -98,6 +100,8 @@ async def async_get_config_entry_diagnostics(
                 "state": state,
                 "severity": severity,
                 "reasons": reasons,
+                "accepted": accepted,
+                "thresholds": get_thresholds(entry, drive_id),
             },
             "smart_data": redacted_smart,
         }

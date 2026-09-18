@@ -40,6 +40,13 @@
   "options": {
     "step": {
       "init": {
+        "title": "SMART Sniffer",
+        "menu_options": {
+          "settings": "Connection and polling settings",
+          "thresholds": "Alert thresholds"
+        }
+      },
+      "settings": {
         "title": "SMART Sniffer Settings",
         "description": "Adjust connection and polling settings. The host cannot be changed — remove and re-add the integration to change it.",
         "data": {
@@ -54,11 +61,31 @@
           "scan_interval": "How often to poll for updated SMART data (in seconds).",
           "force_update": "Enable for InfluxDB, Prometheus, or Grafana. Records a data point on every poll even when the value has not changed. Leave off otherwise to keep the recorder database smaller."
         }
+      },
+      "thresholds": {
+        "title": "Choose a drive",
+        "description": "Alert thresholds are set per drive.",
+        "data": {
+          "drive_id": "Drive"
+        }
+      },
+      "drive_thresholds": {
+        "title": "Alert thresholds",
+        "description": "Thresholds for {drive}.\n\nSetting a threshold tells SMART Sniffer to treat the current damage as known and alert you only if it gets worse. It does not repair anything, and a drive with reallocated sectors is statistically more likely to fail than one without.\n\nCurrent readings: {readings}\n\nSMART overall status, the NVMe critical warning flag, and a drive reporting that it has reached its own spare threshold are never affected by these settings.",
+        "data": {
+          "accept_current": "Accept all current readings as the baseline"
+        },
+        "data_description": {
+          "accept_current": "Overrides anything typed below. Sets each threshold to what the drive reports right now, so today's readings stop alerting and anything worse still does."
+        }
       }
     },
     "error": {
       "cannot_connect": "Unable to connect with the new settings. Check the port and token.",
       "unknown": "An unexpected error occurred."
+    },
+    "abort": {
+      "no_drives": "The agent reported no readable drives, so there is nothing to set thresholds on. Check that the agent is reachable and try again."
     }
   },
   "services": {
