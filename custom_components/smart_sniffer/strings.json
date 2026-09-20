@@ -70,13 +70,57 @@
         }
       },
       "drive_thresholds": {
-        "title": "Alert thresholds",
-        "description": "Thresholds for {drive}.\n\nSetting a threshold tells SMART Sniffer to treat the current damage as known and alert you only if it gets worse. It does not repair anything, and a drive with reallocated sectors is statistically more likely to fail than one without.\n\nCurrent readings: {readings}\n\nSMART overall status, the NVMe critical warning flag, and a drive reporting that it has reached its own spare threshold are never affected by these settings.",
-        "data": {
-          "accept_current": "Accept all current readings as the baseline"
-        },
-        "data_description": {
-          "accept_current": "Overrides anything typed below. Sets each threshold to what the drive reports right now, so today's readings stop alerting and anything worse still does."
+        "title": "Thresholds for {drive}",
+        "menu_options": {
+          "edit_thresholds": "Edit thresholds",
+          "accept_current": "Accept current readings",
+          "reset_defaults": "Reset to defaults"
+        }
+      },
+      "threshold_form": {
+        "title": "Thresholds for {drive}",
+        "description": "A threshold is the value this drive is allowed to reach before it alerts.\nRaise one to accept damage you already know about and be told only if it gets worse.",
+        "sections": {
+          "damage": {
+            "name": "Reporting damage",
+            "description": "These are not zero on this drive.",
+            "data_description": {
+              "Command Timeout": "Currently: {command_timeout}",
+              "Current Pending Sector Count": "Currently: {current_pending_sector_count}",
+              "NVMe Media Errors": "Currently: {nvme_media_errors}",
+              "Offline Uncorrectable Errors": "Currently: {offline_uncorrectable_errors}",
+              "Reallocated Event Count": "Currently: {reallocated_event_count}",
+              "Reallocated Sector Count": "Currently: {reallocated_sector_count}",
+              "Reported Uncorrectable Errors": "Currently: {reported_uncorrectable_errors}",
+              "Spin Retry Count": "Currently: {spin_retry_count}",
+              "Total Offline Uncorrectable": "Currently: {total_offline_uncorrectable}",
+              "Uncorrectable Error Count": "Currently: {uncorrectable_error_count}"
+            }
+          },
+          "clean": {
+            "name": "Currently clean ({clean_count})",
+            "description": "Nothing to report on these yet.",
+            "data_description": {
+              "Command Timeout": "Currently: {command_timeout}",
+              "Current Pending Sector Count": "Currently: {current_pending_sector_count}",
+              "NVMe Media Errors": "Currently: {nvme_media_errors}",
+              "Offline Uncorrectable Errors": "Currently: {offline_uncorrectable_errors}",
+              "Reallocated Event Count": "Currently: {reallocated_event_count}",
+              "Reallocated Sector Count": "Currently: {reallocated_sector_count}",
+              "Reported Uncorrectable Errors": "Currently: {reported_uncorrectable_errors}",
+              "Spin Retry Count": "Currently: {spin_retry_count}",
+              "Total Offline Uncorrectable": "Currently: {total_offline_uncorrectable}",
+              "Uncorrectable Error Count": "Currently: {uncorrectable_error_count}"
+            }
+          },
+          "gauges": {
+            "name": "Wear and spare",
+            "description": "Accept current readings does not touch these two. They measure how much life the drive has left and are meant to move, so accepting today's reading would turn a lifetime warning into a hair trigger.",
+            "data_description": {
+              "NVMe Spare Warn Below": "Currently: {nvme_spare_warn_below}",
+              "SSD Wear Percent Used": "Currently: {ssd_wear_percent_used}"
+            }
+          }
         }
       }
     },

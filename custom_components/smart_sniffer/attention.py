@@ -226,22 +226,135 @@ def current_readings(drive_data: dict[str, Any]) -> dict[str, int]:
     return readings
 
 
-def accept_value(label: str, reading: int) -> int:
-    """The threshold that accepts a current reading without alerting on it.
+# The ten counters and the two gauges are different in kind, and "accept current
+# readings" only makes sense for one of them.
+#
+# A counter records damage that has already happened. "I know about these 147
+# reallocated sectors, tell me if it gets worse" is exactly right.
+#
+# A gauge tracks how much life the drive has left, and is SUPPOSED to move.
+# Accepting today's reading on one turns a lifetime warning into a hair trigger:
+# accept 1% wear and the drive alerts once it reaches 1%, which is almost
+# immediately, when the 90 default was correct. Accept an available spare of
+# 100% and the very first point of wear trips it. So accept-current skips them
+# and leaves each at whatever it already was, stored override or default.
+GAUGE_LABELS: frozenset[str] = frozenset({LABEL_SSD_WEAR, LABEL_NVME_SPARE_WARN})
 
-    Most labels compare strictly, so the reading itself is enough: 147 > 147 is
-    false. Wear compares inclusively, so accepting 85% means storing 86, not 85.
-    Storing the reading unchanged there would make the drive alert immediately,
-    which is the exact opposite of what "accept current readings" promises.
+# Form prefill modes. All three land on the same form; only the values differ,
+# so the user sees every value and can edit any of them before committing.
+PREFILL_STORED = "stored"
+PREFILL_ACCEPT = "accept"
+PREFILL_DEFAULTS = "defaults"
+
+
+def is_acceptable(label: str) -> bool:
+    """Whether "accept current readings" applies to this label."""
+    return label not in GAUGE_LABELS
+
+
+def flatten_sections(user_input: dict[str, Any]) -> dict[str, Any]:
+    """Undo the nesting a sectioned options form applies to its values.
+
+    A form built with section() returns {section_id: {field: value}} rather
+    than a flat mapping. Reading it without flattening finds no labels at all
+    and silently saves nothing, so this lives here where it can be tested;
+    config_flow.py cannot be imported without Home Assistant.
     """
-    if _THRESHOLD_COMPARE.get(label, _COMPARE_GT) == _COMPARE_GE:
-        return reading + 1
-    return reading
+    flat: dict[str, Any] = {}
+    for key, value in user_input.items():
+        if isinstance(value, dict):
+            flat.update(value)
+        else:
+            flat[key] = value
+    return flat
+
+
+def reading_placeholders(
+    readings: dict[str, int],
+    drive_label: str,
+    clean_count: int,
+) -> dict[str, str]:
+    """Placeholders behind the form's per-field "Currently: N" descriptions.
+
+    Home Assistant sources data_description from translations, so a per-drive
+    value cannot be passed directly and has to arrive as a placeholder. Each
+    translation reads "Currently: {slug}" and the value carries its own unit,
+    which also lets a label this drive does not expose read
+    "Currently: not reported".
+
+    Every label gets a placeholder, including ones absent from this drive's
+    protocol, so no translation is left with an unfilled slot.
+    """
+    placeholders = {"drive": drive_label, "clean_count": str(clean_count)}
+    for label in threshold_labels():
+        if label in readings:
+            unit = "%" if label in GAUGE_LABELS else ""
+            placeholders[threshold_slug(label)] = f"{readings[label]}{unit}"
+        else:
+            placeholders[threshold_slug(label)] = "not reported"
+    return placeholders
+
+
+def prefill_thresholds(
+    drive_data: dict[str, Any],
+    stored: dict[str, int],
+    mode: str,
+) -> dict[str, int]:
+    """Values to prefill the threshold form with, for one of the three modes.
+
+    Every mode returns a value for every label the drive can report, because the
+    form shows them all. Nothing applies on click; the prefill is a proposal the
+    user can edit, and the only commit is the Submit button.
+
+    Skipping a gauge under PREFILL_ACCEPT means leaving it alone, which is not
+    the same as resetting it: a stored override of 80 stays 80 rather than
+    reverting to the 90 default.
+    """
+    readings = current_readings(drive_data)
+    values: dict[str, int] = {}
+
+    for label in labels_for_drive(drive_data):
+        default = default_threshold(label)
+        in_force = (
+            _coerce_threshold(stored.get(label), default)
+            if label in stored
+            else default
+        )
+
+        if mode == PREFILL_DEFAULTS:
+            values[label] = default
+        elif mode == PREFILL_ACCEPT and is_acceptable(label) and label in readings:
+            # Every acceptable label compares strictly, so the reading itself is
+            # the value that stops it alerting. See test_no_acceptable_label_is_
+            # non_strict, which fails if that ever stops being true.
+            #
+            # Never below what is already in force. Command Timeout defaults to
+            # 100 because low counts are normal; a drive reporting 3 would
+            # otherwise have accept-current store 3 and start alerting on the
+            # fourth, tightening a deliberately tolerant default into a hair
+            # trigger. Accepting may relax a threshold or leave it alone, never
+            # sharpen it. The user can still edit it down in the form, where
+            # the change is visible before it commits.
+            values[label] = max(readings[label], in_force)
+        else:
+            values[label] = in_force
+
+    return values
 
 
 def default_threshold(label: str) -> int:
     """The built-in threshold for a label, used when the user sets none."""
     return _THRESHOLD_DEFAULTS.get(label, 0)
+
+
+def threshold_slug(label: str) -> str:
+    """Translation-placeholder key for a label.
+
+    The options form shows each field's current reading through
+    data_description, which Home Assistant sources from translations, so the
+    per-drive value has to arrive as a placeholder keyed by this slug.
+    """
+    return label.lower().replace(" ", "_")
 
 
 def get_thresholds(entry: Any, drive_id: str) -> dict[str, int]:
