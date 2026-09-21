@@ -35,7 +35,6 @@ from homeassistant.helpers.selector import (
 )
 
 from .attention import (
-    GAUGE_LABELS,
     PREFILL_ACCEPT,
     PREFILL_DEFAULTS,
     PREFILL_STORED,
@@ -43,6 +42,7 @@ from .attention import (
     default_threshold,
     flatten_sections,
     get_thresholds,
+    group_labels,
     labels_for_drive,
     prefill_thresholds,
     reading_placeholders,
@@ -68,6 +68,7 @@ _LOGGER = logging.getLogger(__name__)
 SECTION_DAMAGE = "damage"
 SECTION_CLEAN = "clean"
 SECTION_GAUGES = "gauges"
+
 
 def _agent_is_outdated(agent_version: str) -> bool:
     """Return True if agent_version < MIN_AGENT_VERSION."""
@@ -574,10 +575,7 @@ class SmartSnifferOptionsFlow(OptionsFlowWithConfigEntry):
         )
 
         # Three groups, because ten full-width cards is a wall.
-        gauges = [lbl for lbl in labels if lbl in GAUGE_LABELS]
-        counters = [lbl for lbl in labels if lbl not in GAUGE_LABELS]
-        damage = [lbl for lbl in counters if readings.get(lbl, 0) > 0]
-        clean = [lbl for lbl in counters if lbl not in damage]
+        damage, clean, gauges = group_labels(labels, readings)
 
         def _field(label: str) -> Any:
             return NumberSelector(

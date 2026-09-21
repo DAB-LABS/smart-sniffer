@@ -48,7 +48,7 @@
       },
       "settings": {
         "title": "SMART Sniffer Settings",
-        "description": "Adjust connection and polling settings. The host cannot be changed — remove and re-add the integration to change it.",
+        "description": "Adjust connection and polling settings. The host cannot be changed. To change it, remove and re-add the integration.",
         "data": {
           "port": "Port",
           "token": "Bearer Token",
@@ -70,7 +70,8 @@
         }
       },
       "drive_thresholds": {
-        "title": "Thresholds for {drive}",
+        "title": "Alert thresholds",
+        "description": "Drive: {drive}",
         "menu_options": {
           "edit_thresholds": "Edit thresholds",
           "accept_current": "Accept current readings",
@@ -99,7 +100,7 @@
           },
           "clean": {
             "name": "Currently clean ({clean_count})",
-            "description": "Nothing to report on these yet.",
+            "description": "These read zero or are not reported by this drive.",
             "data_description": {
               "Command Timeout": "Currently: {command_timeout}",
               "Current Pending Sector Count": "Currently: {current_pending_sector_count}",

@@ -252,6 +252,23 @@ def is_acceptable(label: str) -> bool:
     return label not in GAUGE_LABELS
 
 
+def group_labels(
+    labels: list[str],
+    readings: dict[str, int],
+) -> tuple[list[str], list[str], list[str]]:
+    """Split a drive's labels into the form's three sections.
+
+    Returns (damage, clean, gauges): counters reading above zero, counters
+    reading zero or not reported, and the two gauges. Here rather than in
+    config_flow.py so the grouping is tested; the rendered form is not.
+    """
+    gauges = [label for label in labels if label in GAUGE_LABELS]
+    counters = [label for label in labels if label not in GAUGE_LABELS]
+    damage = [label for label in counters if readings.get(label, 0) > 0]
+    clean = [label for label in counters if label not in damage]
+    return damage, clean, gauges
+
+
 def flatten_sections(user_input: dict[str, Any]) -> dict[str, Any]:
     """Undo the nesting a sectioned options form applies to its values.
 
@@ -637,7 +654,7 @@ def evaluate_attention(
                 f"NVMe media errors: {media_errors} (accepted {limit})"
             )
 
-        # CRITICAL — spare below the drive's OWN threshold. Never configurable:
+        # CRITICAL: spare below the drive's OWN threshold. Never configurable:
         # this is the device declaring it has reached its manufacturer limit,
         # the same category as SMART FAILED, and no user setting may silence it.
         spare     = nvme_log.get("available_spare")
@@ -649,7 +666,7 @@ def evaluate_attention(
                     f"drive threshold ({threshold}%)"
                 )
             else:
-                # WARNING — early heads-up before the drive's own limit. This
+                # WARNING: early heads-up before the drive's own limit. This
                 # tier IS configurable. Note the direction: spare counts DOWN,
                 # so it alerts BELOW the threshold, unlike every other label.
                 breached, was_accepted, limit = _evaluate_label(
@@ -668,7 +685,7 @@ def evaluate_attention(
                         f"(accepted down to {limit}%)"
                     )
 
-        # WARNING — approaching end of rated write endurance. Shares the
+        # WARNING: approaching end of rated write endurance. Shares the
         # SSD Wear Percent Used label with the ATA wear path, which is the
         # inconsistency called out in the plan: this used to hardcode 90 while
         # the ATA side used the constant.

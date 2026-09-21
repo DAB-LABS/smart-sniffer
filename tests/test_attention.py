@@ -1092,3 +1092,51 @@ def test_accept_current_never_sharpens_any_label(att, drive, set_ata_raw):
             f"{label} accepted to {value}, tighter than its default "
             f"{att.default_threshold(label)}"
         )
+
+
+# --- Section grouping (R2b: the populated-damage layout) ------------------
+# VM999's drives all read zero, so the damage section could not be seen
+# rendered there. Which fields land in which section is decided here and
+# tested against a fixture that does report damage.
+
+
+def test_group_labels_puts_nonzero_counters_in_damage(att, drive):
+    payload = drive("ata_reallocated")
+    damage, clean, gauges = att.group_labels(
+        att.labels_for_drive(payload), att.current_readings(payload)
+    )
+    assert damage == ["Reallocated Event Count", "Reallocated Sector Count"]
+    assert "Command Timeout" in clean
+    assert "Spin Retry Count" in clean
+    assert gauges == [att.LABEL_SSD_WEAR]
+
+
+def test_group_labels_on_a_clean_drive_leaves_damage_empty(att, drive):
+    """VM999's situation: the damage section is omitted and clean is opened."""
+    payload = drive("ata_healthy")
+    damage, clean, gauges = att.group_labels(
+        att.labels_for_drive(payload), att.current_readings(payload)
+    )
+    assert damage == []
+    # Nine, not ten. Of the ten counters, NVMe Media Errors exists only on NVMe
+    # drives, so an ATA drive carries nine. An earlier handback said ten.
+    assert len(clean) == 9
+    assert att.LABEL_NVME_MEDIA_ERRORS not in clean
+
+
+def test_group_labels_on_nvme(att, drive):
+    payload = drive("nvme_media_errors")
+    damage, clean, gauges = att.group_labels(
+        att.labels_for_drive(payload), att.current_readings(payload)
+    )
+    assert damage == [att.LABEL_NVME_MEDIA_ERRORS]
+    assert clean == []
+    assert sorted(gauges) == sorted(att.GAUGE_LABELS)
+
+
+def test_every_label_lands_in_exactly_one_section(att, drive, fixture_names):
+    for name in fixture_names:
+        payload = drive(name)
+        labels = att.labels_for_drive(payload)
+        damage, clean, gauges = att.group_labels(labels, att.current_readings(payload))
+        assert sorted(damage + clean + gauges) == sorted(labels), name
