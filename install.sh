@@ -947,6 +947,12 @@ is_truenas() {
   return 1
 }
 
+is_openwrt() {
+  [ -f /etc/openwrt_release ] && return 0
+  grep -qi '^ID=["]*openwrt' /etc/os-release 2>/dev/null && return 0
+  return 1
+}
+
 resolve_install_paths() {
   # Candidate 0: explicit override, highest priority. This is the escape hatch
   # for any locked-down platform, so a new read-only distro never needs a code
@@ -1013,7 +1019,11 @@ do_uninstall() {
   echo -e "${BOLD}╚══════════════════════════════════════════╝${NC}"
   echo ""
 
-  OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+  # BusyBox tr does not implement POSIX character classes: it reads [:upper:]
+# as the literal set [ : u p p e r ] and maps positionally, so "Linux" came
+# back as "Linlx" and OS detection failed. A-Z works on GNU and BusyBox both.
+# Reported on OpenWrt x86-64 in issue #51 by @DanaGoyette.
+OS=$(uname -s | tr 'A-Z' 'a-z')
 
   # Stop and remove service
   if [ "$OS" = "linux" ]; then
@@ -1429,7 +1439,11 @@ echo ""
 # ---------------------------------------------------------------------------
 # Detect platform
 # ---------------------------------------------------------------------------
-OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+# BusyBox tr does not implement POSIX character classes: it reads [:upper:]
+# as the literal set [ : u p p e r ] and maps positionally, so "Linux" came
+# back as "Linlx" and OS detection failed. A-Z works on GNU and BusyBox both.
+# Reported on OpenWrt x86-64 in issue #51 by @DanaGoyette.
+OS=$(uname -s | tr 'A-Z' 'a-z')
 ARCH=$(uname -m)
 
 case "$OS" in
@@ -1437,6 +1451,26 @@ case "$OS" in
   darwin) PLATFORM="darwin" ;;
   *)      fail "Unsupported OS: $OS. This installer supports Linux and macOS." ;;
 esac
+
+# OpenWrt runs the agent fine, but this installer does not know how to set up a
+# service there: it writes systemd units on Linux and launchd plists on macOS,
+# and OpenWrt uses procd. Stop here with the manual steps rather than failing
+# later at the service step, where the cause would be far less obvious. See #51.
+if is_openwrt; then
+  echo ""
+  echo -e "${YELLOW}  OpenWrt detected. This installer does not support it.${NC}"
+  echo ""
+  echo "  The agent runs on OpenWrt, but this installer only knows how to set up"
+  echo "  systemd and launchd services, and OpenWrt uses procd. Installing by hand"
+  echo "  takes about five minutes and the steps are here:"
+  echo ""
+  echo "    https://github.com/${REPO}/blob/main/docs/guides/openwrt.md"
+  echo ""
+  echo "  OpenWrt is community supported. If you get it working, please say so on"
+  echo "  https://github.com/${REPO}/issues/51 so the guide can be corrected."
+  echo ""
+  exit 1
+fi
 
 case "$ARCH" in
   x86_64)  GOARCH="amd64" ;;

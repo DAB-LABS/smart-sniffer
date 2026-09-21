@@ -17,6 +17,7 @@ These guides walk through each platform step by step.
 | [QNAP QTS](qnap.md) | SAT protocol fallback, mDNS interface selection, LXC bridge exclusion. |
 | [TrueNAS SCALE](truenas-scale.md) | ZFS context, btrfs-progs for filesystem monitoring, immutable rootfs notes. |
 | [Unraid](unraid.md) | Community guide -- br0 bridge, Docker-based deployment. *(In progress)* |
+| [OpenWrt](openwrt.md) | Community supported -- manual install only, procd service, x86-64 and ARM64. The installer does not support OpenWrt. |
 | [Docker](docker.md) | Containerized agent deployment, device passthrough, known limitations. *(In progress)* |
 | [Virtual Machines](virtual-machines.md) | Generic VM guide -- ESXi, Hyper-V, VirtualBox. Why SMART data needs the host. |
 | [Hardware RAID Controllers](raid-controllers.md) | MegaRAID, HP SmartArray, 3ware, Areca. Manual device_overrides for RAID passthrough. |
