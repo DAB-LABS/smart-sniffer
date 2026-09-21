@@ -6,6 +6,19 @@
 #
 # This workflow does not build or publish anything. Releases stay in
 # release.yml.
+#
+# RUNNER: deliberately ubuntu-latest, while release.yml is pinned to
+# ubuntu-24.04. GitHub migrates ubuntu-latest to Ubuntu 26.04 between
+# 2026-10-19 and 2026-11-19. This workflow is the canary: it runs on every
+# push, so a breakage surfaces here at no cost instead of on release night.
+# The deprecation warning this produces is expected. Do not silence it by
+# pinning without also deciding what replaces the early warning.
+# https://github.com/actions/runner-images/issues/14748
+#
+# ACTIONS ARE PINNED TO COMMIT SHAs, not tags. A tag is mutable and these
+# actions run with a token in a repo that publishes binaries people install
+# with curl | sudo bash. The version comment after each SHA is the human
+# readable part; when bumping, change both.
 
 name: Tests
 
@@ -20,13 +33,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Tier 1 tests are stdlib only, so this version is not load bearing yet.
       # Tier 2 adds pytest-homeassistant-custom-component, which tracks Home
       # Assistant releases; align this with whatever that pin targets.
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
@@ -54,10 +67,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: agent/go.mod
           cache-dependency-path: agent/go.sum

@@ -22,14 +22,27 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    # PINNED, not ubuntu-latest. GitHub migrates ubuntu-latest to Ubuntu 26.04
+    # between 2026-10-19 and 2026-11-19, and a release should not change what
+    # it was built on because of a date someone else picked. tests.yml stays on
+    # ubuntu-latest and is the canary for that migration; if it goes green on
+    # Ubuntu 26, bump this deliberately.
+    #
+    # This label will eventually be retired, which fails hard rather than
+    # warning. Review by 2027-04.
+    # https://github.com/actions/runner-images/issues/14748
+    runs-on: ubuntu-24.04
 
     steps:
+      # ACTIONS ARE PINNED TO COMMIT SHAs, not tags. A tag can be moved; this
+      # workflow holds a write token and publishes the binaries that install.sh
+      # fetches, so the supply chain into it is worth fixing in place. The
+      # version comment is the human readable part; bump both together.
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: agent/go.mod
           cache-dependency-path: agent/go.sum
@@ -42,13 +55,18 @@ jobs:
       # changes between releases, so an unpinned install lets an upstream
       # release fail a tagged build on source that did not change. Bump this
       # deliberately, and run the same version locally before tagging.
+      #
+      # The lint paths must match tests.yml. When they drifted, a finding in
+      # tests/ failed every push while the tagged build passed, so the two
+      # workflows disagreed about what "clean" means and the release gate was
+      # the weaker of the two.
       - name: Lint Python
         env:
           RUFF_VERSION: "0.15.20"
         run: |
           pip install "ruff==${RUFF_VERSION}"
           ruff --version
-          ruff check custom_components/
+          ruff check custom_components/ tests/
 
       - name: Extract version from tag
         id: version
@@ -81,7 +99,9 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        # v3.0.0 was purely the Node 20 to Node 24 runtime move; inputs are
+        # unchanged from v2.
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           name: SMART Sniffer v${{ steps.version.outputs.VERSION }}
           # Auto-flag any tag with -rc, -beta, or -alpha as a pre-release
