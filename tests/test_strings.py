@@ -15,12 +15,20 @@ and these tests start failing on their own.
 from __future__ import annotations
 
 import copy
+import importlib.util
 import json
 import re
 from pathlib import Path
 
 _COMPONENT = Path(__file__).resolve().parents[1] / "custom_components" / "smart_sniffer"
 _PLACEHOLDER = re.compile(r"\{([a-z0-9_]+)\}")
+
+# hassfest's own URL rule, from script/hassfest/translations.py.
+_URL = re.compile(
+    r"(((ftp|ftps|scp|http|https|mqtt|mqtts|socket|socks5):\/\/|www\.)"
+    r"[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,5}(:[0-9]{1,5})?(\/.*)?)",
+    re.IGNORECASE,
+)
 
 # First Home Assistant release whose frontend passes description_placeholders
 # into each slot. Read from src/dialogs/config-flow/show-dialog-options-flow.ts
@@ -54,6 +62,15 @@ _LABEL_FALLBACK_FROM = (2024, 9, 0)
 
 # section() options forms first render in frontend 20240904.0 (HA 2024.9).
 _SECTIONS_FROM = (2024, 9, 0)
+
+
+def _load_module(name: str, path: Path):
+    """Import a module of the integration by path. The package __init__ imports
+    Home Assistant, which the tier 1 suite does not have."""
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _load(relative: str) -> dict:
@@ -170,3 +187,48 @@ def test_no_sections_below_the_release_that_renders_them():
     ]
     if _floor() < _SECTIONS_FROM:
         assert with_sections == []
+
+
+# The agent_outdated repair notice
+# -------------------------------------------------------------------------
+# Home Assistant's validator rejects a URL written into a translation string,
+# so the install link moved out of the text and into a placeholder the
+# coordinator fills from const.py. What the user reads must not change.
+
+_CONST = _load_module("smart_sniffer_const", _COMPONENT / "const.py")
+
+# Byte for byte what the notice rendered before the placeholder was
+# introduced, taken from the string as it shipped in v0.6.3.
+_AGENT_OUTDATED_AS_SHIPPED = (
+    "The agent on **brookdale** is running version **0.4.20**, but this "
+    "integration requires at least **0.4.28**.\n\nTo update, SSH into the host "
+    "and run:\n```\ncurl -sSL "
+    "https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh "
+    "| sudo bash\n```\nThe installer will detect the existing installation and "
+    "upgrade in place. This repair will clear automatically once the agent "
+    "reports a compatible version."
+)
+
+
+def test_agent_outdated_renders_exactly_what_it_did_before():
+    description = _load("strings.json")["issues"]["agent_outdated"]["description"]
+    rendered = description.format(
+        hostname="brookdale",
+        current_version="0.4.20",
+        min_version="0.4.28",
+        install_url=_CONST.AGENT_INSTALL_URL,
+    )
+    assert rendered == _AGENT_OUTDATED_AS_SHIPPED
+
+
+def test_no_translation_string_contains_a_url():
+    """hassfest rejects URLs in translation strings, allowing them only under
+    preview_features, which this integration does not use. This is its rule,
+    with the regex taken from script/hassfest/translations.py, so a URL added
+    to a string fails here rather than in CI."""
+    offenders = [
+        path
+        for path, text in _walk(_load("strings.json"))
+        if _URL.search(text)
+    ]
+    assert offenders == []

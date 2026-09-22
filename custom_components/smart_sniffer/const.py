@@ -19,6 +19,10 @@ DEFAULT_FORCE_UPDATE = False
 # a HA repair notification when the running agent is older.
 MIN_AGENT_VERSION = "0.4.28"
 AGENT_RELEASES_URL = "https://github.com/DAB-LABS/smart-sniffer/releases"
+# Supplied to the agent_outdated repair notice as a translation placeholder.
+# Home Assistant's validator rejects a URL written into a translation string,
+# so the text carries {install_url} and this is what fills it.
+AGENT_INSTALL_URL = "https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh"
 
 # Key used in coordinator data dict to store filesystem info.
 # Underscore prefix avoids collision with drive ID keys.

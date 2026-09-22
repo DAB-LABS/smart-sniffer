@@ -57,6 +57,7 @@ from .attention import (
     get_thresholds,
 )
 from .const import (
+    AGENT_INSTALL_URL,
     AGENT_RELEASES_URL,
     CONF_TOKEN,
     DEFAULT_SCAN_INTERVAL,
@@ -174,6 +175,7 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     "hostname": self._hostname,
                     "current_version": agent_version or "unknown",
                     "min_version": MIN_AGENT_VERSION,
+                    "install_url": AGENT_INSTALL_URL,
                 },
                 learn_more_url=AGENT_RELEASES_URL,
             )
