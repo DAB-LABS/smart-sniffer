@@ -553,7 +553,7 @@ Drive-specific `smartctl -a --json` output samples are especially welcome — th
 - [x] Platform installation guides -- Proxmox, Synology, QNAP, TrueNAS SCALE, Unraid, Docker, VMs
 - [x] Drive Discovery (`--discover`) documentation
 - [ ] MQTT agent mode
-- [ ] Configurable alert thresholds via options flow
+- [x] Configurable alert thresholds via options flow (per-drive, current reading and default shown under each field) -- shipped v0.6.3
 - [ ] Per-drive scan intervals
 - [ ] YAML-based SMART attribute definitions (vendor field mapping, transforms, units)
 - [x] SAS/SCSI basic monitoring (health, temperature, power-on hours, power cycles) -- shipped v0.5.7
