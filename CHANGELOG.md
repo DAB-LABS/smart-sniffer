@@ -2,6 +2,27 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.6.4 -- 2026-09-22
+
+**Integration only. No agent update needed.** Update through HACS and reload.
+
+A housekeeping release with nothing new to see. It exists so SMART Sniffer can
+apply to the HACS default store, which asks for a release made after the
+repository passes HACS's and Home Assistant's own validators.
+
+### Changed
+- **The "update your agent" repair notice reads exactly as before.** Its install
+  link is now filled in by the integration instead of being written into the
+  notice text, which Home Assistant's validator requires.
+
+### Behind the scenes
+- **The declared minimum Home Assistant version is now tested.** Every push
+  installs the version `hacs.json` declares and checks the integration loads on
+  it. This is the check that would have caught the 2024.4 problem corrected in
+  v0.6.3.
+- **HACS and Home Assistant validation run on every push**, and weekly, so a
+  rule change upstream shows up here before it reaches a release.
+
 ## v0.6.3 -- 2026-09-21
 
 **Integration only. No agent update needed.** Update through HACS and reload.
