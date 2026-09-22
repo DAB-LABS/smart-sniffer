@@ -69,59 +69,36 @@
           "drive_id": "Drive"
         }
       },
-      "drive_thresholds": {
-        "title": "Alert thresholds",
-        "description": "Drive: {drive}",
-        "menu_options": {
-          "edit_thresholds": "Edit thresholds",
-          "accept_current": "Accept current readings",
-          "reset_defaults": "Reset to defaults"
-        }
-      },
       "threshold_form": {
         "title": "Thresholds for {drive}",
-        "description": "A threshold is the value this drive is allowed to reach before it alerts.\nRaise one to accept damage you already know about and be told only if it gets worse.",
-        "sections": {
-          "damage": {
-            "name": "Reporting damage",
-            "description": "These are not zero on this drive.",
-            "data_description": {
-              "Command Timeout": "Currently: {command_timeout}",
-              "Current Pending Sector Count": "Currently: {current_pending_sector_count}",
-              "NVMe Media Errors": "Currently: {nvme_media_errors}",
-              "Offline Uncorrectable Errors": "Currently: {offline_uncorrectable_errors}",
-              "Reallocated Event Count": "Currently: {reallocated_event_count}",
-              "Reallocated Sector Count": "Currently: {reallocated_sector_count}",
-              "Reported Uncorrectable Errors": "Currently: {reported_uncorrectable_errors}",
-              "Spin Retry Count": "Currently: {spin_retry_count}",
-              "Total Offline Uncorrectable": "Currently: {total_offline_uncorrectable}",
-              "Uncorrectable Error Count": "Currently: {uncorrectable_error_count}"
-            }
-          },
-          "clean": {
-            "name": "Currently clean ({clean_count})",
-            "description": "These read zero or are not reported by this drive.",
-            "data_description": {
-              "Command Timeout": "Currently: {command_timeout}",
-              "Current Pending Sector Count": "Currently: {current_pending_sector_count}",
-              "NVMe Media Errors": "Currently: {nvme_media_errors}",
-              "Offline Uncorrectable Errors": "Currently: {offline_uncorrectable_errors}",
-              "Reallocated Event Count": "Currently: {reallocated_event_count}",
-              "Reallocated Sector Count": "Currently: {reallocated_sector_count}",
-              "Reported Uncorrectable Errors": "Currently: {reported_uncorrectable_errors}",
-              "Spin Retry Count": "Currently: {spin_retry_count}",
-              "Total Offline Uncorrectable": "Currently: {total_offline_uncorrectable}",
-              "Uncorrectable Error Count": "Currently: {uncorrectable_error_count}"
-            }
-          },
-          "gauges": {
-            "name": "Wear and spare",
-            "description": "Accept current readings does not touch these two. They measure how much life the drive has left and are meant to move, so accepting today's reading would turn a lifetime warning into a hair trigger.",
-            "data_description": {
-              "NVMe Spare Warn Below": "Currently: {nvme_spare_warn_below}",
-              "SSD Wear Percent Used": "Currently: {ssd_wear_percent_used}"
-            }
-          }
+        "description": "A threshold is the value this drive is allowed to reach before it alerts.\nSet a damage count to its current reading to accept damage you already know about and be told only if it gets worse. Wear and spare are meant to move, so leave those near their defaults.\nType the default to clear a threshold.",
+        "data": {
+          "Command Timeout": "Command Timeout",
+          "Current Pending Sector Count": "Current Pending Sector Count",
+          "NVMe Media Errors": "NVMe Media Errors",
+          "NVMe Spare Warn Below": "NVMe Spare Warn Below",
+          "Offline Uncorrectable Errors": "Offline Uncorrectable Errors",
+          "Reallocated Event Count": "Reallocated Event Count",
+          "Reallocated Sector Count": "Reallocated Sector Count",
+          "Reported Uncorrectable Errors": "Reported Uncorrectable Errors",
+          "SSD Wear Percent Used": "SSD Wear Percent Used",
+          "Spin Retry Count": "Spin Retry Count",
+          "Total Offline Uncorrectable": "Total Offline Uncorrectable",
+          "Uncorrectable Error Count": "Uncorrectable Error Count"
+        },
+        "data_description": {
+          "Command Timeout": "Currently: {command_timeout}. Default: {command_timeout_default}.",
+          "Current Pending Sector Count": "Currently: {current_pending_sector_count}. Default: {current_pending_sector_count_default}.",
+          "NVMe Media Errors": "Currently: {nvme_media_errors}. Default: {nvme_media_errors_default}.",
+          "NVMe Spare Warn Below": "Currently: {nvme_spare_warn_below}. Default: {nvme_spare_warn_below_default}.",
+          "Offline Uncorrectable Errors": "Currently: {offline_uncorrectable_errors}. Default: {offline_uncorrectable_errors_default}.",
+          "Reallocated Event Count": "Currently: {reallocated_event_count}. Default: {reallocated_event_count_default}.",
+          "Reallocated Sector Count": "Currently: {reallocated_sector_count}. Default: {reallocated_sector_count_default}.",
+          "Reported Uncorrectable Errors": "Currently: {reported_uncorrectable_errors}. Default: {reported_uncorrectable_errors_default}.",
+          "SSD Wear Percent Used": "Currently: {ssd_wear_percent_used}. Default: {ssd_wear_percent_used_default}.",
+          "Spin Retry Count": "Currently: {spin_retry_count}. Default: {spin_retry_count_default}.",
+          "Total Offline Uncorrectable": "Currently: {total_offline_uncorrectable}. Default: {total_offline_uncorrectable_default}.",
+          "Uncorrectable Error Count": "Currently: {uncorrectable_error_count}. Default: {uncorrectable_error_count_default}."
         }
       }
     },

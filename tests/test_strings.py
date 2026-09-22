@@ -14,6 +14,7 @@ and these tests start failing on their own.
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 from pathlib import Path
@@ -33,7 +34,8 @@ _PLACEHOLDER = re.compile(r"\{([a-z0-9_]+)\}")
 #                beta. HA 2025.5.0 ships 20250507.0; 2025.4.x ships 20250401.0.
 #   always       Step title and description, menu description and options,
 #                data_description (nested or not), errors, aborts. Filled at
-#                every release this integration has declared.
+#                20240103.3, which is what HA 2024.1.0 ships, and every release
+#                since.
 _NEVER = None
 _ALWAYS = (0, 0, 0)
 _FILLED_FROM = {
@@ -43,6 +45,15 @@ _FILLED_FROM = {
     "field_label": (2025, 5, 0),
     "always": _ALWAYS,
 }
+
+# Below this release a field with no data.<field> translation renders with a
+# blank label. The "|| field.name" fallback in renderShowFormStepFieldLabel
+# arrived in frontend 20240828.0; HA 2024.9.0 ships 20240904.0 and 2024.8.3
+# ships 20240809.0. At 20240103.3 a missing key localizes to "".
+_LABEL_FALLBACK_FROM = (2024, 9, 0)
+
+# section() options forms first render in frontend 20240904.0 (HA 2024.9).
+_SECTIONS_FROM = (2024, 9, 0)
 
 
 def _load(relative: str) -> dict:
@@ -97,14 +108,17 @@ def test_no_placeholder_in_a_slot_the_declared_floor_does_not_fill():
     assert _unfilled(_load("strings.json"), _floor()) == []
 
 
-def test_the_guard_follows_the_floor():
-    """The guard has to bite, not just pass. The clean section's count sits in
-    its name, which is fine from 2025.5 and broken on anything older."""
-    strings = _load("strings.json")
-    clean_name = "options.step.threshold_form.sections.clean.name"
-    assert clean_name not in _unfilled(strings, (2025, 5, 0))
-    assert clean_name in _unfilled(strings, (2025, 4, 0))
-    assert clean_name in _unfilled(strings, (2024, 10, 0))
+def test_the_guard_bites_on_a_field_label():
+    """The guard has to bite, not just pass. Field labels are not filled at the
+    declared floor, so a placeholder put into one of the real labels must be
+    caught. Menu titles are covered by the next test."""
+    strings = copy.deepcopy(_load("strings.json"))
+    form = strings["options"]["step"]["threshold_form"]
+    form["data"]["Command Timeout"] = "Command Timeout ({command_timeout})"
+    assert _unfilled(strings, _floor()) == [
+        "options.step.threshold_form.data.Command Timeout"
+    ]
+    assert _unfilled(strings, (2025, 5, 0)) == []
 
 
 def test_a_menu_title_placeholder_fails_at_any_floor():
@@ -126,12 +140,33 @@ def test_every_threshold_form_placeholder_is_supplied(att, drive):
     form = _load("strings.json")["options"]["step"]["threshold_form"]
     wanted = {slot for _, text in _walk(form) for slot in _PLACEHOLDER.findall(text)}
     supplied = set(
-        att.reading_placeholders(att.current_readings(drive("ata_healthy")), "d", 0)
+        att.reading_placeholders(att.current_readings(drive("ata_healthy")), "d")
     )
     assert wanted - supplied == set()
 
 
-def test_declared_floor_supports_sectioned_options_forms():
-    """section() options forms first render in frontend 20240904.0 (HA 2024.9).
-    This holds even if the count ever leaves the section name."""
-    assert _floor() >= (2024, 9, 0)
+def test_every_threshold_field_has_a_label_below_the_fallback(att):
+    """Below 2024.9 a field without a data.<field> translation has no label at
+    all. The threshold form's fields are built at runtime from the labels, so
+    each one needs an entry."""
+    if _floor() >= _LABEL_FALLBACK_FROM:
+        return
+    form = _load("strings.json")["options"]["step"]["threshold_form"]
+    assert set(att.threshold_labels()) <= set(form.get("data", {}))
+
+
+def test_every_threshold_field_has_a_description(att):
+    form = _load("strings.json")["options"]["step"]["threshold_form"]
+    assert set(att.threshold_labels()) <= set(form.get("data_description", {}))
+
+
+def test_no_sections_below_the_release_that_renders_them():
+    strings = _load("strings.json")
+    with_sections = [
+        f"{flow}.step.{step_id}"
+        for flow in ("config", "options")
+        for step_id, step in strings.get(flow, {}).get("step", {}).items()
+        if "sections" in step
+    ]
+    if _floor() < _SECTIONS_FROM:
+        assert with_sections == []

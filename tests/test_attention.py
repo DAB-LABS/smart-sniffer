@@ -773,370 +773,206 @@ def test_current_readings_decodes_packed_command_timeout(att, drive, set_ata_raw
 
 
 # ===========================================================================
-# Accept current readings, and the gauge exclusion (round 2)
+# The threshold form (round 5: one flat form)
 # ===========================================================================
-# Round 1 snapshotted every label. That was a bug on the two gauges: accepting
-# 1% wear stored a threshold of 1, so a drive with 99% of its life left began
-# alerting, and accepting an available spare of 100% meant the first point of
-# wear tripped it. Gauges are now skipped.
-
-
-def test_gauges_are_not_acceptable(att):
-    assert not att.is_acceptable(att.LABEL_SSD_WEAR)
-    assert not att.is_acceptable(att.LABEL_NVME_SPARE_WARN)
-
-
-@pytest.mark.parametrize(
-    "label",
-    [
-        "Reallocated Sector Count",
-        "Current Pending Sector Count",
-        "Offline Uncorrectable Errors",
-        "Reported Uncorrectable Errors",
-        "Uncorrectable Error Count",
-        "Total Offline Uncorrectable",
-        "Reallocated Event Count",
-        "Spin Retry Count",
-        "Command Timeout",
-        "NVMe Media Errors",
-    ],
-)
-def test_every_counter_is_acceptable(att, label):
-    assert att.is_acceptable(label)
+# One form per drive. Each field is prefilled with the value in force and shows
+# "Currently: N. Default: M." under it. Typing the default clears an override.
+# These helpers live in attention.py because config_flow.py cannot be imported
+# without Home Assistant.
 
 
 def test_the_label_set_is_exactly_ten_counters_and_two_gauges(att):
-    """If a label is added without deciding which kind it is, this fails."""
+    """If a label is added without deciding which kind it is, this fails.
+    Gauges sort last in the form and show their values as percentages."""
     labels = set(att.threshold_labels())
     assert len(labels) == 12
     assert len(att.GAUGE_LABELS) == 2
     assert att.GAUGE_LABELS <= labels
 
 
-def test_no_acceptable_label_is_non_strict(att):
-    """prefill_thresholds stores the reading itself for acceptable labels.
+# --- Accepting known damage by typing the current reading -----------------
+# The form tells the user to set a damage count to its current reading to
+# accept it. That only works because every counter compares strictly.
 
-    That is only safe while every acceptable label compares strictly: 147 > 147
-    is false, so the accepted reading does not alert. A non-strict comparison
-    would need the value adjusted, and silently would not get it.
-    """
+
+def test_every_counter_compares_strictly(att):
+    """147 > 147 is false, so a counter set to its own reading does not alert.
+    A non-strict counter would alert at exactly the value the form told the
+    user to type."""
     for label in att.threshold_labels():
-        if att.is_acceptable(label):
+        if label not in att.GAUGE_LABELS:
             compare = att._THRESHOLD_COMPARE.get(label, att._COMPARE_GT)
-            assert compare == att._COMPARE_GT, f"{label} is acceptable but compares {compare}"
+            assert compare == att._COMPARE_GT, f"{label} compares {compare}"
 
 
-# --- 17. Accept-current with wear at 1 leaves the wear threshold alone ----
-def test_accept_current_skips_wear(att, drive, add_ata_attr):
-    """The reported bug. Wear at 1% must not become a threshold of 1."""
-    payload = drive("ata_healthy")
-    add_ata_attr(payload, 231, "SSD_Life_Left", 99)
-    payload["smart_data"]["ata_smart_attributes"]["table"][-1]["value"] = 99
-
-    values = att.prefill_thresholds(payload, {}, att.PREFILL_ACCEPT)
-    assert att.current_readings(payload)[att.LABEL_SSD_WEAR] == 1
-    assert values[att.LABEL_SSD_WEAR] == 90, "wear was snapshotted, it must not be"
-
-
-def test_accepting_wear_would_have_made_a_healthy_drive_alert(att, drive, add_ata_attr):
-    """The consequence, spelled out: what round 1 did, and that it no longer does."""
-    payload = drive("ata_healthy")
-    add_ata_attr(payload, 231, "SSD_Life_Left", 99)
-    payload["smart_data"]["ata_smart_attributes"]["table"][-1]["value"] = 99
-
-    accepted = att.prefill_thresholds(payload, {}, att.PREFILL_ACCEPT)
-    state, _, reasons, _ = att.evaluate_attention(payload, accepted)
-    assert state == "NO", f"a drive with 99% of its life left is alerting: {reasons}"
-
-
-# --- 18. Accept-current with NVMe spare at 100 ---------------------------
-def test_accept_current_skips_nvme_spare(att, drive, set_nvme):
-    payload = drive("nvme_healthy")
-    set_nvme(payload, available_spare=100, available_spare_threshold=10)
-
-    values = att.prefill_thresholds(payload, {}, att.PREFILL_ACCEPT)
-    assert values[att.LABEL_NVME_SPARE_WARN] == 20, "spare was snapshotted"
-
-
-def test_accepting_spare_would_have_tripped_on_the_first_point_of_wear(
-    att, drive, set_nvme
-):
-    payload = drive("nvme_healthy")
-    set_nvme(payload, available_spare=100, available_spare_threshold=10)
-    accepted = att.prefill_thresholds(payload, {}, att.PREFILL_ACCEPT)
-
-    # One point of wear later.
-    set_nvme(payload, available_spare=99)
-    state, _, reasons, _ = att.evaluate_attention(payload, accepted)
-    assert state == "NO", f"99% spare is alerting: {reasons}"
-
-
-# --- 19. Accept-current on a counter stores the reading ------------------
-def test_accept_current_stores_counter_readings(att, drive):
-    values = att.prefill_thresholds(drive("ata_reallocated"), {}, att.PREFILL_ACCEPT)
-    assert values["Reallocated Sector Count"] == 147
-    assert values["Reallocated Event Count"] == 47
-
-
-def test_accepted_counters_silence_the_drive(att, drive):
+def test_counters_set_to_their_readings_silence_the_drive(att, drive):
     payload = drive("ata_reallocated")
-    accepted = att.prefill_thresholds(payload, {}, att.PREFILL_ACCEPT)
-    state, _, reasons, accepted_list = att.evaluate_attention(payload, accepted)
+    readings = att.current_readings(payload)
+    typed = {
+        label: readings[label]
+        for label in att.labels_for_drive(payload)
+        if label in readings and label not in att.GAUGE_LABELS
+    }
+    state, _, reasons, accepted = att.evaluate_attention(payload, typed)
     assert state == "NO", reasons
-    assert "Reallocated Sector Count: 147 (accepted 147)" in accepted_list
+    assert "Reallocated Sector Count: 147 (accepted 147)" in accepted
 
 
-# --- 20. Skipping a gauge means leaving it, not resetting it -------------
-def test_accept_current_leaves_a_stored_gauge_override_alone(att, drive, add_ata_attr):
-    """The case worth getting right.
-
-    A user who set wear to 80 deliberately, then pressed accept-current, must
-    come back to 80. Not the 90 default, and not today's reading.
-    """
+def test_wear_set_to_its_reading_alerts_at_once(att, drive, add_ata_attr):
+    """Why the form tells the user to leave wear and spare near their defaults.
+    Wear compares inclusively, so typing today's reading alerts immediately."""
     payload = drive("ata_healthy")
-    add_ata_attr(payload, 231, "SSD_Life_Left", 99)
-    payload["smart_data"]["ata_smart_attributes"]["table"][-1]["value"] = 99
+    add_ata_attr(payload, 231, "SSD_Life_Left", 88)
+    payload["smart_data"]["ata_smart_attributes"]["table"][-1]["value"] = 88
+    assert att.current_readings(payload)[att.LABEL_SSD_WEAR] == 12
 
+    state, _, _, _ = att.evaluate_attention(payload, {att.LABEL_SSD_WEAR: 12})
+    assert state == "MAYBE"
+
+
+# --- Prefill: the stored override, else the default ------------------------
+
+
+def test_prefill_uses_overrides_then_defaults(att, drive):
     values = att.prefill_thresholds(
-        payload, {att.LABEL_SSD_WEAR: 80}, att.PREFILL_ACCEPT
-    )
-    assert values[att.LABEL_SSD_WEAR] == 80
-
-
-def test_accept_current_leaves_a_stored_spare_override_alone(att, drive, set_nvme):
-    payload = drive("nvme_healthy")
-    set_nvme(payload, available_spare=100, available_spare_threshold=10)
-    values = att.prefill_thresholds(
-        payload, {att.LABEL_NVME_SPARE_WARN: 5}, att.PREFILL_ACCEPT
-    )
-    assert values[att.LABEL_NVME_SPARE_WARN] == 5
-
-
-# --- 21. Reset to defaults ------------------------------------------------
-def test_reset_to_defaults_returns_every_label_to_its_default(att, drive):
-    stored = {"Reallocated Sector Count": 147, att.LABEL_SSD_WEAR: 80}
-    values = att.prefill_thresholds(drive("ata_reallocated"), stored, att.PREFILL_DEFAULTS)
-
-    assert values["Reallocated Sector Count"] == 0
-    assert values[att.LABEL_SSD_WEAR] == 90
-    assert values["Command Timeout"] == 100
-    for label, value in values.items():
-        assert value == att.default_threshold(label), label
-
-
-# --- Edit mode prefills what is stored now -------------------------------
-def test_stored_mode_prefills_overrides_then_defaults(att, drive):
-    values = att.prefill_thresholds(
-        drive("ata_reallocated"), {"Reallocated Sector Count": 147}, att.PREFILL_STORED
+        drive("ata_reallocated"), {"Reallocated Sector Count": 147}
     )
     assert values["Reallocated Sector Count"] == 147
     assert values["Reallocated Event Count"] == 0
     assert values["Command Timeout"] == 100
+    assert values[att.LABEL_SSD_WEAR] == 90
 
 
-def test_stored_mode_tolerates_a_malformed_override(att, drive):
+def test_prefill_tolerates_a_malformed_override(att, drive):
     values = att.prefill_thresholds(
-        drive("ata_reallocated"), {"Reallocated Sector Count": "abc"}, att.PREFILL_STORED
+        drive("ata_reallocated"), {"Reallocated Sector Count": "abc"}
     )
     assert values["Reallocated Sector Count"] == 0
 
 
-def test_every_mode_covers_every_applicable_label(att, drive):
-    """The form shows all of them, so a prefill must not leave a hole."""
-    for name in ("ata_reallocated", "nvme_healthy"):
+def test_prefill_covers_every_applicable_label(att, drive, fixture_names):
+    """The form shows all of them, so the prefill must not leave a hole."""
+    for name in fixture_names:
         payload = drive(name)
-        expected = set(att.labels_for_drive(payload))
-        for mode in (att.PREFILL_STORED, att.PREFILL_ACCEPT, att.PREFILL_DEFAULTS):
-            assert set(att.prefill_thresholds(payload, {}, mode)) == expected, (name, mode)
+        assert set(att.prefill_thresholds(payload, {})) == set(
+            att.labels_for_drive(payload)
+        ), name
 
 
-# ===========================================================================
-# Sectioned form support
-# ===========================================================================
-# The form groups fields into collapsible sections, which changes the shape of
-# what comes back on submit. Both helpers live in attention.py so they can be
-# tested; config_flow.py cannot be imported without Home Assistant, and a
-# submit path that silently reads nothing would look exactly like a form that
-# saved nothing.
+# --- Submit: typing the default clears an override --------------------------
 
 
-def test_flatten_sections_lifts_nested_values(att):
-    nested = {
-        "damage": {"Reallocated Sector Count": 147},
-        "clean": {"Spin Retry Count": 0},
-        "gauges": {"SSD Wear Percent Used": 90},
+def test_typing_the_default_clears_an_override(att, drive):
+    """The owner's case: wear set to 50, then back to 90. The second submit
+    must store nothing for wear, not 90."""
+    labels = att.labels_for_drive(drive("ata_healthy"))
+    assert att.overrides_from_form(labels, {att.LABEL_SSD_WEAR: 50}) == {
+        att.LABEL_SSD_WEAR: 50
     }
-    assert att.flatten_sections(nested) == {
-        "Reallocated Sector Count": 147,
-        "Spin Retry Count": 0,
-        "SSD Wear Percent Used": 90,
+    assert att.overrides_from_form(labels, {att.LABEL_SSD_WEAR: 90}) == {}
+
+
+def test_submitting_the_prefill_unchanged_stores_only_the_overrides(att, drive):
+    payload = drive("ata_reallocated")
+    labels = att.labels_for_drive(payload)
+    stored = {"Reallocated Sector Count": 147, "Command Timeout": 150}
+    submitted = att.prefill_thresholds(payload, stored)
+    assert att.overrides_from_form(labels, submitted) == stored
+
+
+def test_empty_and_junk_fields_are_not_stored(att, drive):
+    labels = att.labels_for_drive(drive("ata_healthy"))
+    submitted = {"Reallocated Sector Count": "abc", "Spin Retry Count": None}
+    assert att.overrides_from_form(labels, submitted) == {}
+
+
+def test_a_label_the_drive_cannot_report_is_not_stored(att, drive):
+    labels = att.labels_for_drive(drive("nvme_healthy"))
+    assert att.overrides_from_form(labels, {"Spin Retry Count": 5}) == {}
+
+
+def test_submitted_floats_are_stored_as_ints(att, drive):
+    """NumberSelector returns floats."""
+    labels = att.labels_for_drive(drive("ata_healthy"))
+    assert att.overrides_from_form(labels, {"Command Timeout": 150.0}) == {
+        "Command Timeout": 150
     }
 
 
-def test_flatten_sections_passes_a_flat_mapping_through(att):
-    """A form without sections must keep working unchanged."""
-    flat = {"Reallocated Sector Count": 147}
-    assert att.flatten_sections(flat) == flat
+# --- "Currently: N. Default: M." ------------------------------------------
 
 
-def test_flatten_sections_handles_an_empty_submit(att):
-    assert att.flatten_sections({}) == {}
-
-
-def test_reading_placeholders_use_units_for_the_gauges(att, drive, set_nvme):
+def test_placeholders_carry_units_on_the_gauges(att, drive, set_nvme):
     payload = drive("nvme_healthy")
     set_nvme(payload, available_spare=77, percentage_used=12, media_errors=4)
     placeholders = att.reading_placeholders(
-        att.current_readings(payload), "Some Drive (SERIAL)", 3
+        att.current_readings(payload), "Some Drive (SERIAL)"
     )
+    wear = att.threshold_slug(att.LABEL_SSD_WEAR)
+    spare = att.threshold_slug(att.LABEL_NVME_SPARE_WARN)
+    media = att.threshold_slug(att.LABEL_NVME_MEDIA_ERRORS)
 
-    assert placeholders[att.threshold_slug(att.LABEL_SSD_WEAR)] == "12%"
-    assert placeholders[att.threshold_slug(att.LABEL_NVME_SPARE_WARN)] == "77%"
-    assert placeholders[att.threshold_slug(att.LABEL_NVME_MEDIA_ERRORS)] == "4"
+    assert (placeholders[wear], placeholders[f"{wear}_default"]) == ("12%", "90%")
+    assert (placeholders[spare], placeholders[f"{spare}_default"]) == ("77%", "20%")
+    assert (placeholders[media], placeholders[f"{media}_default"]) == ("4", "0")
     assert placeholders["drive"] == "Some Drive (SERIAL)"
-    assert placeholders["clean_count"] == "3"
 
 
-def test_reading_placeholders_say_not_reported_for_absent_labels(att, drive):
-    """An NVMe drive has no Spin Retry Count, and the form must say so rather
+def test_placeholders_say_not_reported_for_absent_labels(att, drive):
+    """An NVMe drive has no Command Timeout, and the form must say so rather
     than leaving an unfilled translation slot."""
     placeholders = att.reading_placeholders(
-        att.current_readings(drive("nvme_healthy")), "d", 0
+        att.current_readings(drive("nvme_healthy")), "d"
     )
-    assert placeholders[att.threshold_slug("Spin Retry Count")] == "not reported"
+    slug = att.threshold_slug("Command Timeout")
+    assert placeholders[slug] == "not reported"
+    assert placeholders[f"{slug}_default"] == "100"
 
 
-def test_every_label_has_a_placeholder_whatever_the_drive(att, drive):
-    """A missing placeholder would render a literal {slug} in the form."""
-    for name in ("ata_healthy", "ata_reallocated", "nvme_healthy"):
+def test_every_label_has_both_placeholders_whatever_the_drive(att, drive, fixture_names):
+    """A missing placeholder renders as a translation error in the form."""
+    for name in fixture_names:
         placeholders = att.reading_placeholders(
-            att.current_readings(drive(name)), "d", 0
+            att.current_readings(drive(name)), "d"
         )
         for label in att.threshold_labels():
-            assert att.threshold_slug(label) in placeholders, (name, label)
+            slug = att.threshold_slug(label)
+            assert slug in placeholders, (name, label)
+            assert f"{slug}_default" in placeholders, (name, label)
 
 
-def test_a_section_round_trip_preserves_an_edited_value(att, drive):
-    """What the bench check confirms live: set a value in a collapsed section,
-    submit, and it survives the nesting."""
+# --- Field order ------------------------------------------------------------
+
+
+def test_a_drive_with_damage_lists_the_damaged_labels_first(att, drive):
     payload = drive("ata_reallocated")
-    prefill = att.prefill_thresholds(payload, {}, att.PREFILL_ACCEPT)
-
-    submitted = {
-        "damage": {
-            "Reallocated Sector Count": prefill["Reallocated Sector Count"],
-            "Reallocated Event Count": prefill["Reallocated Event Count"],
-        },
-        "clean": {"Spin Retry Count": 0},
-        "gauges": {att.LABEL_SSD_WEAR: 90},
-    }
-    flat = att.flatten_sections(submitted)
-
-    kept = {
-        label: int(value)
-        for label, value in flat.items()
-        if int(value) != att.default_threshold(label)
-    }
-    assert kept == {"Reallocated Sector Count": 147, "Reallocated Event Count": 47}
-
-    state, _, reasons, _ = att.evaluate_attention(payload, kept)
-    assert state == "NO", reasons
-
-
-# --- Accept-current must never tighten a threshold ------------------------
-# The same failure mode as the gauge bug, at a second site. Command Timeout
-# defaults to 100 because low counts are normal on healthy drives; snapshotting
-# a reading of 3 would store 3 and alert on the fourth timeout.
-
-
-def test_accept_current_does_not_tighten_command_timeout(att, drive, set_ata_raw):
-    payload = drive("ata_healthy")
-    set_ata_raw(payload, "Command_Timeout", 3)
-
-    values = att.prefill_thresholds(payload, {}, att.PREFILL_ACCEPT)
-    assert values["Command Timeout"] == 100, "a tolerant default was sharpened"
-
-
-def test_accept_current_still_relaxes_command_timeout_when_needed(att, drive, set_ata_raw):
-    payload = drive("ata_healthy")
-    set_ata_raw(payload, "Command_Timeout", 250)
-
-    values = att.prefill_thresholds(payload, {}, att.PREFILL_ACCEPT)
-    assert values["Command Timeout"] == 250
-
-    state, _, reasons, _ = att.evaluate_attention(payload, values)
-    assert state == "NO", reasons
-
-
-def test_accept_current_does_not_lower_a_stored_override(att, drive, set_ata_raw):
-    """A user who deliberately set 200 does not get dropped to 147 by a click."""
-    payload = drive("ata_reallocated")
-    values = att.prefill_thresholds(
-        payload, {"Reallocated Sector Count": 200}, att.PREFILL_ACCEPT
-    )
-    assert values["Reallocated Sector Count"] == 200
-
-
-def test_accept_current_never_sharpens_any_label(att, drive, set_ata_raw):
-    """The general property, over every counter on a drive reading zero.
-
-    A zero reading must never pull a threshold below its default, whatever the
-    label's default happens to be.
-    """
-    payload = drive("ata_healthy")
-    set_ata_raw(payload, "Command_Timeout", 0)
-
-    values = att.prefill_thresholds(payload, {}, att.PREFILL_ACCEPT)
-    for label, value in values.items():
-        assert value >= att.default_threshold(label), (
-            f"{label} accepted to {value}, tighter than its default "
-            f"{att.default_threshold(label)}"
-        )
-
-
-# --- Section grouping (R2b: the populated-damage layout) ------------------
-# VM999's drives all read zero, so the damage section could not be seen
-# rendered there. Which fields land in which section is decided here and
-# tested against a fixture that does report damage.
-
-
-def test_group_labels_puts_nonzero_counters_in_damage(att, drive):
-    payload = drive("ata_reallocated")
-    damage, clean, gauges = att.group_labels(
+    order = att.form_order(
         att.labels_for_drive(payload), att.current_readings(payload)
     )
-    assert damage == ["Reallocated Event Count", "Reallocated Sector Count"]
-    assert "Command Timeout" in clean
-    assert "Spin Retry Count" in clean
-    assert gauges == [att.LABEL_SSD_WEAR]
+    assert order[:2] == ["Reallocated Event Count", "Reallocated Sector Count"]
+    assert order[-1] == att.LABEL_SSD_WEAR
 
 
-def test_group_labels_on_a_clean_drive_leaves_damage_empty(att, drive):
-    """VM999's situation: the damage section is omitted and clean is opened."""
+def test_a_clean_drive_keeps_label_order_with_gauges_last(att, drive):
     payload = drive("ata_healthy")
-    damage, clean, gauges = att.group_labels(
-        att.labels_for_drive(payload), att.current_readings(payload)
-    )
-    assert damage == []
-    # Nine, not ten. Of the ten counters, NVMe Media Errors exists only on NVMe
-    # drives, so an ATA drive carries nine. An earlier handback said ten.
-    assert len(clean) == 9
-    assert att.LABEL_NVME_MEDIA_ERRORS not in clean
+    labels = att.labels_for_drive(payload)
+    order = att.form_order(labels, att.current_readings(payload))
+    counters = [label for label in labels if label not in att.GAUGE_LABELS]
+    assert order == counters + [att.LABEL_SSD_WEAR]
 
 
-def test_group_labels_on_nvme(att, drive):
+def test_nvme_order_puts_both_gauges_last(att, drive):
     payload = drive("nvme_media_errors")
-    damage, clean, gauges = att.group_labels(
+    order = att.form_order(
         att.labels_for_drive(payload), att.current_readings(payload)
     )
-    assert damage == [att.LABEL_NVME_MEDIA_ERRORS]
-    assert clean == []
-    assert sorted(gauges) == sorted(att.GAUGE_LABELS)
+    assert order[0] == att.LABEL_NVME_MEDIA_ERRORS
+    assert set(order[-2:]) == att.GAUGE_LABELS
 
 
-def test_every_label_lands_in_exactly_one_section(att, drive, fixture_names):
+def test_form_order_is_a_permutation_of_the_labels(att, drive, fixture_names):
     for name in fixture_names:
         payload = drive(name)
         labels = att.labels_for_drive(payload)
-        damage, clean, gauges = att.group_labels(labels, att.current_readings(payload))
-        assert sorted(damage + clean + gauges) == sorted(labels), name
+        order = att.form_order(labels, att.current_readings(payload))
+        assert sorted(order) == sorted(labels), name

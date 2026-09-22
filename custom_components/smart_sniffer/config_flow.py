@@ -23,7 +23,6 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import section
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     NumberSelector,
@@ -35,15 +34,11 @@ from homeassistant.helpers.selector import (
 )
 
 from .attention import (
-    PREFILL_ACCEPT,
-    PREFILL_DEFAULTS,
-    PREFILL_STORED,
     current_readings,
-    default_threshold,
-    flatten_sections,
+    form_order,
     get_thresholds,
-    group_labels,
     labels_for_drive,
+    overrides_from_form,
     prefill_thresholds,
     reading_placeholders,
 )
@@ -58,16 +53,6 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Threshold form layout
-# ---------------------------------------------------------------------------
-# Ten full-width cards is a wall, so the fields are grouped. Section ids are
-# fixed because their names and descriptions come from translations; the field
-# keys inside them are the labels themselves, derived at runtime.
-SECTION_DAMAGE = "damage"
-SECTION_CLEAN = "clean"
-SECTION_GAUGES = "gauges"
 
 
 def _agent_is_outdated(agent_version: str) -> bool:
@@ -466,11 +451,11 @@ class SmartSnifferOptionsFlow(OptionsFlowWithConfigEntry):
 
         if len(choices) == 1:
             self._threshold_drive_id = choices[0]["value"]
-            return await self.async_step_drive_thresholds()
+            return await self.async_step_threshold_form()
 
         if user_input is not None:
             self._threshold_drive_id = user_input["drive_id"]
-            return await self.async_step_drive_thresholds()
+            return await self.async_step_threshold_form()
 
         schema = vol.Schema(
             {
@@ -491,43 +476,15 @@ class SmartSnifferOptionsFlow(OptionsFlowWithConfigEntry):
             drive_id,
         )
 
-    async def async_step_drive_thresholds(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Choose how to fill the threshold form.
-
-        All three options land on the same form, prefilled differently. Nothing
-        applies on click: the user sees every value and can edit any of them
-        before the single commit, which is the Submit button.
-        """
-        return self.async_show_menu(
-            step_id="drive_thresholds",
-            menu_options=["edit_thresholds", "accept_current", "reset_defaults"],
-            description_placeholders={"drive": self._drive_label()},
-        )
-
-    async def async_step_edit_thresholds(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        self._threshold_mode = PREFILL_STORED
-        return await self.async_step_threshold_form()
-
-    async def async_step_accept_current(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        self._threshold_mode = PREFILL_ACCEPT
-        return await self.async_step_threshold_form()
-
-    async def async_step_reset_defaults(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        self._threshold_mode = PREFILL_DEFAULTS
-        return await self.async_step_threshold_form()
-
     async def async_step_threshold_form(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """The one threshold form. Reached from all three menu options."""
+        """The threshold form for one drive.
+
+        Every field is prefilled with the value in force, and shows the drive's
+        current reading and the built-in default under it. Typing the default
+        clears an override, because only values that differ from it are stored.
+        """
         drive_id = self._threshold_drive_id or ""
         coordinator = self._coordinator()
         drive_data = (coordinator.data or {}).get(drive_id) or {}
@@ -539,24 +496,7 @@ class SmartSnifferOptionsFlow(OptionsFlowWithConfigEntry):
         readings = current_readings(drive_data)
 
         if user_input is not None:
-            flat = flatten_sections(user_input)
-            chosen: dict[str, int] = {}
-            for label in labels:
-                if label not in flat:
-                    continue
-                try:
-                    chosen[label] = int(flat[label])
-                except (TypeError, ValueError):
-                    continue  # leave it at the default rather than storing junk
-
-            # Store only genuine overrides. Keeping a value that equals the
-            # built-in default would freeze today's default in place, so a
-            # future change to it would silently not reach this user.
-            chosen = {
-                label: value
-                for label, value in chosen.items()
-                if value != default_threshold(label)
-            }
+            chosen = overrides_from_form(labels, user_input)
 
             data = {**self.config_entry.data}
             thresholds = {**(data.get("thresholds") or {})}
@@ -569,47 +509,22 @@ class SmartSnifferOptionsFlow(OptionsFlowWithConfigEntry):
             self.hass.config_entries.async_update_entry(self.config_entry, data=data)
             return self.async_create_entry(title="", data={})
 
-        stored = get_thresholds(self.config_entry, drive_id)
         prefill = prefill_thresholds(
-            drive_data, stored, getattr(self, "_threshold_mode", PREFILL_STORED)
+            drive_data, get_thresholds(self.config_entry, drive_id)
         )
-
-        # Three groups, because ten full-width cards is a wall.
-        damage, clean, gauges = group_labels(labels, readings)
-
-        def _field(label: str) -> Any:
-            return NumberSelector(
-                NumberSelectorConfig(min=0, step=1, mode=NumberSelectorMode.BOX)
-            )
-
-        def _group(group_labels: list[str]) -> vol.Schema:
-            return vol.Schema(
-                {
-                    vol.Optional(label, default=prefill[label]): _field(label)
-                    for label in group_labels
-                }
-            )
-
-        schema: dict[Any, Any] = {}
-        if damage:
-            schema[vol.Required(SECTION_DAMAGE)] = section(
-                _group(damage), {"collapsed": False}
-            )
-        if clean:
-            # With nothing reporting damage the form would otherwise be three
-            # collapsed headers and no visible field, so expand this instead.
-            schema[vol.Required(SECTION_CLEAN)] = section(
-                _group(clean), {"collapsed": bool(damage)}
-            )
-        if gauges:
-            schema[vol.Required(SECTION_GAUGES)] = section(
-                _group(gauges), {"collapsed": True}
-            )
+        schema = vol.Schema(
+            {
+                vol.Optional(label, default=prefill[label]): NumberSelector(
+                    NumberSelectorConfig(min=0, step=1, mode=NumberSelectorMode.BOX)
+                )
+                for label in form_order(labels, readings)
+            }
+        )
 
         return self.async_show_form(
             step_id="threshold_form",
-            data_schema=vol.Schema(schema),
+            data_schema=schema,
             description_placeholders=reading_placeholders(
-                readings, self._drive_label(), len(clean)
+                readings, self._drive_label()
             ),
         )

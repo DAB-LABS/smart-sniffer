@@ -226,137 +226,92 @@ def current_readings(drive_data: dict[str, Any]) -> dict[str, int]:
     return readings
 
 
-# The ten counters and the two gauges are different in kind, and "accept current
-# readings" only makes sense for one of them.
-#
-# A counter records damage that has already happened. "I know about these 147
-# reallocated sectors, tell me if it gets worse" is exactly right.
-#
-# A gauge tracks how much life the drive has left, and is SUPPOSED to move.
-# Accepting today's reading on one turns a lifetime warning into a hair trigger:
-# accept 1% wear and the drive alerts once it reaches 1%, which is almost
-# immediately, when the 90 default was correct. Accept an available spare of
-# 100% and the very first point of wear trips it. So accept-current skips them
-# and leaves each at whatever it already was, stored override or default.
+# The two gauges measure how much life the drive has left and are meant to
+# move, where the ten counters record damage that has already happened. The
+# form lists them last and shows their values as percentages.
 GAUGE_LABELS: frozenset[str] = frozenset({LABEL_SSD_WEAR, LABEL_NVME_SPARE_WARN})
 
-# Form prefill modes. All three land on the same form; only the values differ,
-# so the user sees every value and can edit any of them before committing.
-PREFILL_STORED = "stored"
-PREFILL_ACCEPT = "accept"
-PREFILL_DEFAULTS = "defaults"
 
+def form_order(labels: list[str], readings: dict[str, int]) -> list[str]:
+    """The order the threshold form lists a drive's labels in.
 
-def is_acceptable(label: str) -> bool:
-    """Whether "accept current readings" applies to this label."""
-    return label not in GAUGE_LABELS
-
-
-def group_labels(
-    labels: list[str],
-    readings: dict[str, int],
-) -> tuple[list[str], list[str], list[str]]:
-    """Split a drive's labels into the form's three sections.
-
-    Returns (damage, clean, gauges): counters reading above zero, counters
-    reading zero or not reported, and the two gauges. Here rather than in
-    config_flow.py so the grouping is tested; the rendered form is not.
+    Counters with a non-zero reading first, so damage is the first thing seen;
+    then counters reading zero or not reported; then the two gauges. Each group
+    keeps the order it was given in.
     """
     gauges = [label for label in labels if label in GAUGE_LABELS]
     counters = [label for label in labels if label not in GAUGE_LABELS]
-    damage = [label for label in counters if readings.get(label, 0) > 0]
-    clean = [label for label in counters if label not in damage]
-    return damage, clean, gauges
-
-
-def flatten_sections(user_input: dict[str, Any]) -> dict[str, Any]:
-    """Undo the nesting a sectioned options form applies to its values.
-
-    A form built with section() returns {section_id: {field: value}} rather
-    than a flat mapping. Reading it without flattening finds no labels at all
-    and silently saves nothing, so this lives here where it can be tested;
-    config_flow.py cannot be imported without Home Assistant.
-    """
-    flat: dict[str, Any] = {}
-    for key, value in user_input.items():
-        if isinstance(value, dict):
-            flat.update(value)
-        else:
-            flat[key] = value
-    return flat
+    damaged = [label for label in counters if readings.get(label, 0) > 0]
+    rest = [label for label in counters if label not in damaged]
+    return damaged + rest + gauges
 
 
 def reading_placeholders(
     readings: dict[str, int],
     drive_label: str,
-    clean_count: int,
 ) -> dict[str, str]:
-    """Placeholders behind the form's per-field "Currently: N" descriptions.
+    """Placeholders behind each field's "Currently: N. Default: M." line.
 
     Home Assistant sources data_description from translations, so a per-drive
     value cannot be passed directly and has to arrive as a placeholder. Each
-    translation reads "Currently: {slug}" and the value carries its own unit,
-    which also lets a label this drive does not expose read
-    "Currently: not reported".
+    label gets two: {slug} for the reading and {slug_default} for the built-in
+    default. Both carry their own unit, and an absent reading is
+    "not reported".
 
-    Every label gets a placeholder, including ones absent from this drive's
-    protocol, so no translation is left with an unfilled slot.
+    Every label gets both, including ones absent from this drive's protocol, so
+    no translation is left with an unfilled slot.
     """
-    placeholders = {"drive": drive_label, "clean_count": str(clean_count)}
+    placeholders = {"drive": drive_label}
     for label in threshold_labels():
-        if label in readings:
-            unit = "%" if label in GAUGE_LABELS else ""
-            placeholders[threshold_slug(label)] = f"{readings[label]}{unit}"
-        else:
-            placeholders[threshold_slug(label)] = "not reported"
+        unit = "%" if label in GAUGE_LABELS else ""
+        slug = threshold_slug(label)
+        placeholders[slug] = (
+            f"{readings[label]}{unit}" if label in readings else "not reported"
+        )
+        placeholders[f"{slug}_default"] = f"{default_threshold(label)}{unit}"
     return placeholders
 
 
 def prefill_thresholds(
     drive_data: dict[str, Any],
     stored: dict[str, int],
-    mode: str,
 ) -> dict[str, int]:
-    """Values to prefill the threshold form with, for one of the three modes.
+    """Values to prefill the threshold form with: the stored override, else the
+    default, for every label the drive can report.
 
-    Every mode returns a value for every label the drive can report, because the
-    form shows them all. Nothing applies on click; the prefill is a proposal the
-    user can edit, and the only commit is the Submit button.
-
-    Skipping a gauge under PREFILL_ACCEPT means leaving it alone, which is not
-    the same as resetting it: a stored override of 80 stays 80 rather than
-    reverting to the 90 default.
+    A stored value that cannot be read as a number falls back to the default
+    rather than raising, since stored config survives downgrades and hand edits.
     """
-    readings = current_readings(drive_data)
     values: dict[str, int] = {}
-
     for label in labels_for_drive(drive_data):
         default = default_threshold(label)
-        in_force = (
+        values[label] = (
             _coerce_threshold(stored.get(label), default)
             if label in stored
             else default
         )
-
-        if mode == PREFILL_DEFAULTS:
-            values[label] = default
-        elif mode == PREFILL_ACCEPT and is_acceptable(label) and label in readings:
-            # Every acceptable label compares strictly, so the reading itself is
-            # the value that stops it alerting. See test_no_acceptable_label_is_
-            # non_strict, which fails if that ever stops being true.
-            #
-            # Never below what is already in force. Command Timeout defaults to
-            # 100 because low counts are normal; a drive reporting 3 would
-            # otherwise have accept-current store 3 and start alerting on the
-            # fourth, tightening a deliberately tolerant default into a hair
-            # trigger. Accepting may relax a threshold or leave it alone, never
-            # sharpen it. The user can still edit it down in the form, where
-            # the change is visible before it commits.
-            values[label] = max(readings[label], in_force)
-        else:
-            values[label] = in_force
-
     return values
+
+
+def overrides_from_form(labels: list[str], user_input: dict[str, Any]) -> dict[str, int]:
+    """What to store from a submitted threshold form: only genuine overrides.
+
+    A value equal to the built-in default is dropped, which is how typing the
+    default clears an override. Keeping it would also freeze today's default in
+    place, so a future change to it would silently not reach this user. A field
+    left empty or holding junk is dropped too, leaving that label at its default.
+    """
+    chosen: dict[str, int] = {}
+    for label in labels:
+        if label not in user_input:
+            continue
+        try:
+            value = int(user_input[label])
+        except (TypeError, ValueError):
+            continue
+        if value != default_threshold(label):
+            chosen[label] = value
+    return chosen
 
 
 def default_threshold(label: str) -> int:
