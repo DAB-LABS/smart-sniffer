@@ -1,0 +1,60 @@
+# HACS and hassfest validation.
+#
+# Both are entry requirements for the HACS default store, and both must pass
+# with no ignored checks. They also both validate this repository against rules
+# that live upstream, so they can start failing without a commit here. That is
+# why this workflow runs on a schedule as well as on push and pull request:
+# a Monday failure is an upstream rule change, not something a contributor did.
+#
+# ACTIONS ARE PINNED TO COMMIT SHAs, not tags, for the reason given in
+# tests.yml. Note the limit of that pinning here: both of these actions are
+# thin wrappers that run a container by a moving tag
+# (ghcr.io/hacs/action:main and ghcr.io/home-assistant/hassfest), so the pin
+# fixes the wrapper, not the validator that does the work. Pinning the wrapper
+# is still worth doing, and the moving image is the point of the schedule, but
+# it is not the same guarantee the pins in tests.yml and release.yml give.
+
+name: Validate
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # Mondays, 06:12 UTC. Off the hour on purpose: scheduled jobs at :00 queue
+    # behind everyone else's.
+    - cron: "12 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  hacs:
+    name: HACS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: HACS validation
+        uses: hacs/action@d556e736723344f83838d08488c983a15381059a # 22.5.0
+        with:
+          category: integration
+          # No ignores. The default store requires every check to pass, so
+          # silencing one here would only hide the rejection until submission.
+          #
+          # Commenting is off so this workflow needs no write permission on
+          # pull requests. The job result is the signal.
+          comment: "false"
+
+  hassfest:
+    name: hassfest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # home-assistant/actions carries one ancient tag (1.0.0) and is used as
+      # @master everywhere upstream, so this pins master as of 2026-09-10,
+      # "Require string versions in the info helper".
+      - name: hassfest validation
+        uses: home-assistant/actions/hassfest@58bff37c8947f690ace498be413a9b78d6f30f93 # master, 2026-09-10
