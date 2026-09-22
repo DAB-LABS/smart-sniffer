@@ -82,3 +82,120 @@ jobs:
       - name: Test Go
         working-directory: agent
         run: go test ./...
+
+  # The declared Home Assistant floor, actually installed and imported.
+  #
+  # hacs.json says which Home Assistant release this integration supports at
+  # minimum. Nothing tested that: v0.3.0 through v0.6.2 declared 2024.1.0 while
+  # config_flow.py imported ConfigFlowResult, which only exists from 2024.4, so
+  # on every release in the declared range the integration could not be added
+  # and its options could not be opened. That shipped for six months.
+  #
+  # This job installs exactly what hacs.json declares and imports every module.
+  # The version is read from the file, never written here, so raising or
+  # lowering the floor moves the test with it.
+  floor:
+    name: Declared Home Assistant floor
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The Python version follows the floor rather than being pinned here: the
+      # requires_python of that exact homeassistant release is what its own
+      # metadata says, so a floor bump cannot leave this behind. 2024.4 wants
+      # 3.12; later floors will want 3.13 and then 3.14.
+      - name: Resolve the floor and its Python version
+        id: floor
+        run: |
+          set -euo pipefail
+          floor=$(jq -re '.homeassistant' hacs.json)
+          requires=$(curl -fsSL "https://pypi.org/pypi/homeassistant/${floor}/json" \
+            | jq -re '.info.requires_python')
+          python_version=$(printf '%s' "$requires" | grep -oE '3\.[0-9]+' | head -1)
+          if [ -z "$python_version" ]; then
+            echo "Could not read a Python version out of requires_python: $requires" >&2
+            exit 1
+          fi
+          echo "Floor $floor requires Python $requires, using $python_version"
+          echo "floor=$floor" >> "$GITHUB_OUTPUT"
+          echo "python_version=$python_version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ steps.floor.outputs.python_version }}
+          cache: pip
+          # hacs.json is the only input to what this job installs, so it is the
+          # right cache key. A floor bump invalidates the cache, as it should.
+          cache-dependency-path: hacs.json
+
+      - name: Install Home Assistant at the floor
+        run: |
+          set -euo pipefail
+          # josepy 2.0 removed ComparableX509, which acme still calls, and Home
+          # Assistant's constraints do not pin josepy. Installing an older floor
+          # today therefore resolves a broken pair and every import fails on
+          # upstream packaging rather than on anything in this repo. Users are
+          # unaffected: their Home Assistant ships a resolved environment. Drop
+          # this pin once the floor reaches a release whose tree has no conflict.
+          pip install "homeassistant==${{ steps.floor.outputs.floor }}" "josepy<2"
+
+      # Discovered, not listed: the manifest's own requirements, plus those of
+      # each integration it declares a dependency on, read out of the installed
+      # Home Assistant. config_flow.py falls back to
+      # homeassistant.components.zeroconf on older releases, which needs the
+      # zeroconf package that the zeroconf integration declares.
+      - name: Install what the manifest asks for
+        run: |
+          set -euo pipefail
+          python - <<'PY' > /tmp/requirements.txt
+          import json, pathlib
+          import homeassistant
+
+          manifest = json.loads(
+              pathlib.Path("custom_components/smart_sniffer/manifest.json").read_text()
+          )
+          root = pathlib.Path(homeassistant.__file__).parent
+          requirements = list(manifest.get("requirements") or [])
+          for dependency in manifest.get("dependencies") or []:
+              path = root / "components" / dependency / "manifest.json"
+              if path.is_file():
+                  requirements += json.loads(path.read_text()).get("requirements") or []
+          print("\n".join(requirements))
+          PY
+          cat /tmp/requirements.txt
+          if [ -s /tmp/requirements.txt ]; then pip install -r /tmp/requirements.txt; fi
+
+      # Every module under the integration, found by walking the directory. A
+      # new module is covered without anyone editing this workflow.
+      - name: Import every module
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import importlib, pathlib, sys, traceback
+
+          sys.path.insert(0, ".")
+          failed = []
+          for path in sorted(pathlib.Path("custom_components/smart_sniffer").rglob("*.py")):
+              module = ".".join(path.with_suffix("").parts)
+              module = module.removesuffix(".__init__")
+              try:
+                  importlib.import_module(module)
+              except Exception:
+                  failed.append(module)
+                  print(f"FAIL {module}")
+                  traceback.print_exc()
+              else:
+                  print(f"ok   {module}")
+
+          if not failed:
+              print("\nEvery module imports on the declared floor.")
+              raise SystemExit(0)
+
+          print(f"\n{len(failed)} module(s) do not import on the floor hacs.json declares:")
+          for module in failed:
+              print(f"  {module}")
+          print("Either the floor in hacs.json is wrong, or the code uses something newer.")
+          raise SystemExit(1)
+          PY
