@@ -183,6 +183,23 @@ advertise_interface: eth0
 
 In most cases, you don't need `device_overrides` -- the agent's automatic SAT fallback handles QNAP's SCSI-to-SATA mismatch. Only add overrides if `--discover` tells you to or if you're seeing UNSUPPORTED drives.
 
+## Running in Docker instead
+
+Container Station can run an application from a compose file. See the
+[Docker guide](docker.md) for what the container needs.
+
+QNAP specifics:
+
+- **The `lxcbr0` problem follows you into a container.** With host networking,
+  the agent can still pick an internal bridge for mDNS. Set
+  `advertise_interface` to your LAN interface (usually `eth0`) in the config file
+  so it advertises the address Home Assistant can reach.
+- Keep any `device_overrides` from the native setup, such as the SAT protocol
+  fallback. Running `--discover` inside the container shows what each drive needs.
+- A container survives firmware updates, which is one reason to prefer it here.
+
+**Not yet verified on QNAP.** If you run it this way, please tell us what worked.
+
 ## Related
 
 - [Synology guide](synology.md) -- similar protocol issues, different device path quirks

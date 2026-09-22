@@ -503,17 +503,9 @@ Step-by-step setup for NAS devices, hypervisors, and containerized environments.
 | [QNAP QTS](docs/guides/qnap.md) | SAT fallback, lxcbr0 exclusion, interface selection |
 | [TrueNAS SCALE](docs/guides/truenas-scale.md) | ZFS context, btrfs-progs, filesystem monitoring |
 | [Unraid](docs/guides/unraid.md) | br0 bridge, Docker deployment *(community -- in progress)* |
-| [Docker](docs/guides/docker.md) | Device passthrough, host networking *(community -- in progress)* |
+| [Docker](docs/guides/docker.md) | Build your own container: what it needs, plus a ready prompt for AI coding assistants |
 | [Virtual Machines](docs/guides/virtual-machines.md) | ESXi, Hyper-V, VirtualBox -- why SMART needs the host |
 | [Hardware RAID Controllers](docs/guides/raid-controllers.md) | MegaRAID, HP SmartArray, 3ware, Areca -- manual `device_overrides` |
-
-## Community Deployments
-
-| Deployment | Maintainer | Description |
-|------------|-----------|-------------|
-| [Docker](https://github.com/fireinice/docker-smart-sniffer) | [@fireinice](https://github.com/fireinice) | Dockerfile + auto-generated docker-compose with per-drive capability scoping. Available on [Docker Hub](https://hub.docker.com/r/fireinice/smart-sniffer). |
-
-Note: disk usage monitoring (`/api/filesystems`) is not yet supported in Docker deployments. Container-aware path mapping is [on the roadmap](#roadmap).
 
 ## Testing
 

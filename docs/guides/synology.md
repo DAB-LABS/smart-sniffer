@@ -154,6 +154,25 @@ device_overrides:
     protocol: sat
 ```
 
+## Running in Docker instead
+
+Container Manager (DSM 7.2 and later) can run a project from a compose file. See
+the [Docker guide](docker.md) for what the container needs.
+
+Synology specifics:
+
+- **You may not need SynoCli.** The container brings its own smartmontools from
+  its base image, which is usually newer than the version DSM ships. That removes
+  Step 1 of the native install.
+- Pass drives through using the same `/dev/sataX` paths the native guide uses,
+  and keep the same `device_overrides` in your config. Running `--discover` inside
+  the container tells you what each drive needs.
+- Use host networking so Home Assistant can discover the agent.
+
+**Not yet verified on Synology.** In particular, we have not confirmed whether
+Container Manager honours individual capabilities or requires privileged mode.
+If you run it this way, please tell us what worked.
+
 ## Related
 
 - [QNAP guide](qnap.md) -- similar HBA/SAT issues on a different NAS platform

@@ -13,7 +13,7 @@ Unraid uses its own storage management layer rather than traditional RAID or ZFS
 Key platform details:
 
 - **Network bridge:** Unraid uses `br0` as its main network bridge (similar to Proxmox's `vmbr0`). When installing the agent, select `br0` for the mDNS interface if prompted.
-- **Docker-first ecosystem:** Unraid users typically run services as Docker containers. A community Docker image for the SMART Sniffer agent is available from [@fireinice](https://github.com/fireinice/docker-smart-sniffer) on [Docker Hub](https://hub.docker.com/r/fireinice/smart-sniffer).
+- **Docker-first ecosystem:** Unraid users typically run services as Docker containers. There is no official image, but the agent runs well in a container you set up yourself.
 - **Filesystem:** Unraid's array uses XFS or btrfs per-disk. The agent's filesystem monitoring should work, though this hasn't been confirmed on Unraid specifically.
 
 ## Installation options
@@ -26,9 +26,9 @@ curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.
 
 The installer's `/opt` fallback path should work if Unraid restricts `/usr/local/bin`. This path hasn't been validated on Unraid -- please report your experience.
 
-### Option B: Docker (community)
+### Option B: Docker
 
-See the [Docker guide](docker.md) and the [community Docker image](https://github.com/fireinice/docker-smart-sniffer).
+See the [Docker guide](docker.md) for what the container needs. On Unraid, the Docker tab's template form is where you add each drive as a device, add the capabilities as extra parameters, and set the network type to host. This has not been verified on Unraid yet; please report what worked.
 
 ## Contributing
 

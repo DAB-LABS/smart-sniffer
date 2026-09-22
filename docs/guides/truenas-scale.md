@@ -93,6 +93,24 @@ scan_interval: 120
 
 TrueNAS SCALE typically needs no `device_overrides` since drives are presented directly to the OS via HBA passthrough.
 
+## Running in Docker instead
+
+The native install above is the supported path. If you would rather keep the agent
+in a container, TrueNAS SCALE's Apps screen can run a custom app from a compose
+file. See the [Docker guide](docker.md) for what the container needs.
+
+TrueNAS specifics:
+
+- The root filesystem is read-only, which is the main reason to consider a
+  container here. Nothing gets written to the OS, so updates cannot remove it.
+- Drives in a ZFS pool can still be passed through as devices for SMART reads.
+  The pool is unaffected.
+- For disk usage, mount the host root read-only and set `mount_prefix`. The
+  agent then reports pool usage the same way the native install does.
+
+**Not yet verified on TrueNAS SCALE.** If you run it this way, please tell us
+what worked.
+
 ## Related
 
 - [Proxmox guide](proxmox.md) -- if you're running HA as a VM on TrueNAS, similar network considerations apply
