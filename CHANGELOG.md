@@ -2,6 +2,49 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.6.3 -- 2026-09-21
+
+**Integration only. No agent update needed.** Update through HACS and reload.
+
+The headline is configurable thresholds: a drive with old, stable damage can stop
+nagging without you losing the ability to hear about new damage.
+
+### Added
+- **Per-drive alert thresholds** -- every drive gets its own page under Configure,
+  listing each monitored attribute with what the drive currently reads and the
+  built-in default underneath. Type a threshold and attention is raised only
+  when the reading passes it. Type the default back in to clear one. Requested
+  by @nsleigh in [#36](https://github.com/DAB-LABS/smart-sniffer/issues/36).
+
+### Fixed
+- **A drive with no readable SMART data could stop the integration from
+  loading** -- an empty payload raised an error during setup, which took out
+  every drive and filesystem on that agent rather than the one drive. Most likely
+  to be hit by anyone still running an agent older than v0.6.2, where an
+  unreadable drive was published with an empty payload. Unreadable data is now
+  treated as "no data", which is what it is.
+
+### Changed
+- **A drive that reports no health status is no longer shown as FAILED** -- the
+  SMART Status sensor previously read FAILED when the drive had sent nothing at
+  all, which is alarming and wrong. It is now blank in that case. A drive that
+  genuinely reports a failing status still reads FAILED. Missing data and bad
+  data are different things and now look different.
+
+### Upgrade notes
+- **The declared minimum Home Assistant version is now 2024.4**, up from 2024.1.
+  This is a correction, not a new requirement: the integration has needed 2024.4
+  since v0.3.0 and could not be added or configured on anything older. If you
+  are on 2024.1 through 2024.3, nothing changes for you, because it was not
+  working there already.
+- Thresholds start empty, so behaviour is identical to v0.6.2 until you set one.
+  Nothing to do if you do not want the feature.
+- A threshold equal to the default is not stored. Setting wear to 90 when the
+  default is 90 is the same as leaving it alone, which is why the form shows the
+  default under every field.
+- The agent is unchanged since v0.6.2. Nothing to re-run on your monitored
+  machines.
+
 ## v0.6.2 -- 2026-09-18
 
 **Agent update. Re-run the installer on each monitored machine.** The integration is unchanged apart from its version number; take the HACS update so the versions match, but there is nothing new on that side.
