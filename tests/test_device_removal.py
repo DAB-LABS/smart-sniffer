@@ -260,7 +260,7 @@ _APPROVED = {
         "This drive is still being reported by the agent on {host}, so it can't be "
         "removed. If the drive has been taken out, it can be removed once the agent "
         "stops seeing it. To stop monitoring a drive that's still installed, add it "
-        "to `exclude_devices` in the agent's config."
+        "to \"exclude_devices\" in the agent's config."
     ),
     "remove_agent_device": (
         "This is the SMART Sniffer agent for {host}. To remove it and all of its "
@@ -273,7 +273,7 @@ _APPROVED = {
     ),
     "remove_disk_usage": (
         "Disk usage for {host} is still being reported. To remove it, remove the "
-        "`filesystems` section from the agent's config."
+        "\"filesystems\" section from the agent's config."
     ),
 }
 
