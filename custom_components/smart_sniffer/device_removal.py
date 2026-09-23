@@ -25,14 +25,44 @@ The rules, in order:
 A device deleted while its hardware is still present comes back on the next
 poll, because the platforms register it again from the agent's data.
 
+A refusal is raised to the user as a translated HomeAssistantError, so the
+dialog says why. How much of that reaches the screen depends on which page the
+user deleted from; see async_remove_config_entry_device in __init__.py.
+
 Nothing here imports Home Assistant, so the decision can be tested without it.
 """
 
 from __future__ import annotations
 
 from collections.abc import Collection, Iterable
+from typing import NamedTuple
 
 from .const import DOMAIN, FILESYSTEMS_KEY
+
+# Translation keys under "exceptions" in strings.json. A refusal is raised as a
+# HomeAssistantError carrying one of these, so the user reads the reason in the
+# dialog rather than core's generic "rejected by integration".
+REMOVE_LIVE_DRIVE = "remove_live_drive"
+REMOVE_AGENT_DEVICE = "remove_agent_device"
+REMOVE_AGENT_OFFLINE = "remove_agent_offline"
+REMOVE_DISK_USAGE = "remove_disk_usage"
+
+REFUSAL_KEYS: frozenset[str] = frozenset(
+    {REMOVE_LIVE_DRIVE, REMOVE_AGENT_DEVICE, REMOVE_AGENT_OFFLINE, REMOVE_DISK_USAGE}
+)
+
+
+class Decision(NamedTuple):
+    """The outcome for one device.
+
+    ``translation_key`` names the message the user sees when removal is refused,
+    and is None when it is allowed or when the device is not this integration's
+    at all, in which case core's own message is the honest one.
+    """
+
+    allowed: bool
+    reason: str
+    translation_key: str | None
 
 
 def our_identifier(
@@ -51,7 +81,7 @@ def removable(
     drive_ids: Collection[str] | None,
     filesystem_count: int | None,
     agent_reporting: bool,
-) -> tuple[bool, str]:
+) -> Decision:
     """Whether this device may be deleted, and why.
 
     ``agent_reporting`` is false when the last poll failed or none has completed
@@ -62,23 +92,33 @@ def removable(
     """
     identifier = our_identifier(identifiers)
     if identifier is None:
-        return False, "the device does not belong to this integration"
+        return Decision(False, "the device does not belong to this integration", None)
 
     if identifier == f"{entry_id}_agent":
-        return False, "the agent device goes away with its config entry"
+        return Decision(
+            False, "the agent device goes away with its config entry", REMOVE_AGENT_DEVICE
+        )
 
     if not agent_reporting or drive_ids is None or filesystem_count is None:
-        return False, "the agent is not reporting, so nothing can be called stale"
+        return Decision(
+            False,
+            "the agent is not reporting, so nothing can be called stale",
+            REMOVE_AGENT_OFFLINE,
+        )
 
     if identifier == f"{entry_id}_filesystems":
         if filesystem_count:
-            return False, f"the agent still reports {filesystem_count} filesystem(s)"
-        return True, "the agent reports no filesystems"
+            return Decision(
+                False,
+                f"the agent still reports {filesystem_count} filesystem(s)",
+                REMOVE_DISK_USAGE,
+            )
+        return Decision(True, "the agent reports no filesystems", None)
 
     if identifier in drive_ids:
-        return False, "the agent still reports this drive"
+        return Decision(False, "the agent still reports this drive", REMOVE_LIVE_DRIVE)
 
-    return True, "the agent no longer reports this drive"
+    return Decision(True, "the agent no longer reports this drive", None)
 
 
 def reported_drive_ids(coordinator_data: dict | None) -> list[str] | None:

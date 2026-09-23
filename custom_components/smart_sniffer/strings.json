@@ -127,5 +127,19 @@
       "title": "SMART Sniffer: Update agent on {hostname} (v{current_version} → v{min_version})",
       "description": "The agent on **{hostname}** is running version **{current_version}**, but this integration requires at least **{min_version}**.\n\nTo update, SSH into the host and run:\n```\ncurl -sSL {install_url} | sudo bash\n```\nThe installer will detect the existing installation and upgrade in place. This repair will clear automatically once the agent reports a compatible version."
     }
+  },
+  "exceptions": {
+    "remove_live_drive": {
+      "message": "This drive is still being reported by the agent on {host}, so it can't be removed. If the drive has been taken out, it can be removed once the agent stops seeing it. To stop monitoring a drive that's still installed, add it to `exclude_devices` in the agent's config."
+    },
+    "remove_agent_device": {
+      "message": "This is the SMART Sniffer agent for {host}. To remove it and all of its drives, delete the {host} entry under Settings, Devices & Services, SMART Sniffer."
+    },
+    "remove_agent_offline": {
+      "message": "The agent on {host} isn't responding, so SMART Sniffer can't tell whether this drive is really gone. Try again once the agent is back online."
+    },
+    "remove_disk_usage": {
+      "message": "Disk usage for {host} is still being reported. To remove it, remove the `filesystems` section from the agent's config."
+    }
   }
 }

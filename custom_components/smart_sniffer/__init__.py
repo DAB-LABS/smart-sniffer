@@ -16,7 +16,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry
 
 from .attention import evaluate_attention, get_thresholds
@@ -143,8 +143,12 @@ async def async_remove_config_entry_device(
     could not be followed: without it Home Assistant offers no such button.
 
     Core shows the button on every device of the entry and asks here only once
-    the user confirms, turning a False into a fixed "rejected by integration"
-    error with no room for a reason. So the reason is logged instead.
+    the user confirms. Returning False gets core's fixed "rejected by
+    integration" message, so a refusal is raised instead, as a translated
+    HomeAssistantError that core passes to the frontend unchanged. The reason is
+    also logged, because not every page shows it: in frontend 20260826.7 the
+    integration page's device row renders it, while the device page renders a
+    plain error object as "[object Object]" whatever is raised.
 
     A drive deleted while it is still attached re-registers on the next poll.
     """
@@ -154,25 +158,40 @@ async def async_remove_config_entry_device(
     data = getattr(coordinator, "data", None)
     agent_reporting = bool(coordinator is not None and coordinator.last_update_success)
 
-    allowed, reason = removable(
+    decision = removable(
         device_entry.identifiers,
         config_entry.entry_id,
         reported_drive_ids(data),
         reported_filesystem_count(data),
         agent_reporting,
     )
+    name = device_entry.name or device_entry.id
 
-    if allowed:
-        _LOGGER.info(
-            "Removing device %s: %s", device_entry.name or device_entry.id, reason
-        )
-    else:
-        _LOGGER.warning(
-            "Refusing to remove device %s: %s",
-            device_entry.name or device_entry.id,
-            reason,
-        )
-    return allowed
+    if decision.allowed:
+        _LOGGER.info("Removing device %s: %s", name, decision.reason)
+        return True
+
+    _LOGGER.warning("Refusing to remove device %s: %s", name, decision.reason)
+    if decision.translation_key is None:
+        return False
+    raise HomeAssistantError(
+        translation_domain=DOMAIN,
+        translation_key=decision.translation_key,
+        translation_placeholders={"host": _display_host(config_entry, coordinator)},
+    )
+
+
+def _display_host(config_entry: ConfigEntry, coordinator: Any) -> str:
+    """The host as the integration already shows it to users.
+
+    The coordinator derives it from the entry title, falling back to the
+    address, and uses it in the agent-update repair notice and the Disk Usage
+    device name. Without a coordinator the address is the next best thing.
+    """
+    hostname = getattr(coordinator, "_hostname", None)
+    if hostname:
+        return str(hostname)
+    return str(config_entry.data.get(CONF_HOST) or config_entry.title)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
