@@ -349,6 +349,12 @@ Stops the service, removes the binary, config, and service files.
 
 **Via HACS (recommended):**
 
+[![Open your Home Assistant instance and open the SMART Sniffer repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=DAB-LABS&repository=smart-sniffer&category=integration)
+
+Click the button above, then **Download**, then restart Home Assistant.
+
+Or add it by hand:
+
 1. Open HACS → three-dot menu → **Custom repositories**
 2. Add `https://github.com/DAB-LABS/smart-sniffer` · Category: **Integration**
 3. Download **SMART Sniffer** → Restart HA
