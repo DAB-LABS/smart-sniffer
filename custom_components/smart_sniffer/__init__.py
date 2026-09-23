@@ -21,6 +21,7 @@ from homeassistant.helpers import device_registry
 
 from .attention import evaluate_attention, get_thresholds
 from .const import AGENT_DEVICE_ID, DOMAIN, FILESYSTEMS_KEY, SERVICE_GET_DRIVE_DATA
+from .device_removal import removable, reported_drive_ids, reported_filesystem_count
 from .coordinator import AgentHealthCoordinator, SmartSnifferCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -128,6 +129,50 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     return True
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    device_entry: device_registry.DeviceEntry,
+) -> bool:
+    """Whether the user may delete this device from the integration.
+
+    Defining this function is what puts a Delete button on the integration's
+    devices at all, which is why the v0.6.2 note about deleting ghost devices
+    could not be followed: without it Home Assistant offers no such button.
+
+    Core shows the button on every device of the entry and asks here only once
+    the user confirms, turning a False into a fixed "rejected by integration"
+    error with no room for a reason. So the reason is logged instead.
+
+    A drive deleted while it is still attached re-registers on the next poll.
+    """
+    coordinator = (hass.data.get(DOMAIN, {}).get(config_entry.entry_id) or {}).get(
+        "coordinator"
+    )
+    data = getattr(coordinator, "data", None)
+    agent_reporting = bool(coordinator is not None and coordinator.last_update_success)
+
+    allowed, reason = removable(
+        device_entry.identifiers,
+        config_entry.entry_id,
+        reported_drive_ids(data),
+        reported_filesystem_count(data),
+        agent_reporting,
+    )
+
+    if allowed:
+        _LOGGER.info(
+            "Removing device %s: %s", device_entry.name or device_entry.id, reason
+        )
+    else:
+        _LOGGER.warning(
+            "Refusing to remove device %s: %s",
+            device_entry.name or device_entry.id,
+            reason,
+        )
+    return allowed
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
