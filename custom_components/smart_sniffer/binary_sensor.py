@@ -36,6 +36,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .attention import _has_usable_smart_data, coerce_smart_data
 from .const import CONF_TOKEN, DOMAIN
+from .device_link import agent_link
 from .coordinator import AgentHealthCoordinator, SmartSnifferCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -159,7 +160,7 @@ class SmartSnifferHealthSensor(
             "serial_number": serial,
             # Nest this drive under its agent so HA can cascade an area
             # assignment from the agent to every drive it reports (#24).
-            "via_device":    (DOMAIN, f"{coordinator.config_entry.entry_id}_agent"),
+            **agent_link(coordinator),
         }
 
     @property
@@ -235,7 +236,7 @@ class DriveStandbySensor(
             "serial_number": serial,
             # Nest this drive under its agent so HA can cascade an area
             # assignment from the agent to every drive it reports (#24).
-            "via_device":    (DOMAIN, f"{coordinator.config_entry.entry_id}_agent"),
+            **agent_link(coordinator),
         }
 
     @property

@@ -20,7 +20,7 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry
 
 from .attention import evaluate_attention, get_thresholds
-from .const import DOMAIN, FILESYSTEMS_KEY, SERVICE_GET_DRIVE_DATA
+from .const import AGENT_DEVICE_ID, DOMAIN, FILESYSTEMS_KEY, SERVICE_GET_DRIVE_DATA
 from .coordinator import AgentHealthCoordinator, SmartSnifferCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -46,13 +46,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # resolves that link if the parent already exists in the device registry.
     # Platforms are set up concurrently, so creating it here is the only way
     # to guarantee the parent is present whichever platform registers first.
-    device_registry.async_get(hass).async_get_or_create(
+    agent_device = device_registry.async_get(hass).async_get_or_create(
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, f"{entry.entry_id}_agent")},
         name=entry.title or f"SMART Sniffer ({entry.data.get(CONF_HOST, 'unknown')})",
         manufacturer="SMART Sniffer",
         model="Agent",
     )
+    # Its registry id, which is what via_device_id takes. Stored rather than
+    # looked up again per entity, and refreshed on every setup so a reload
+    # cannot leave a stale id behind.
+    hass.data[DOMAIN][entry.entry_id][AGENT_DEVICE_ID] = agent_device.id
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 

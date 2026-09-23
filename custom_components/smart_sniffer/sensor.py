@@ -41,6 +41,7 @@ from .attention import (
     get_thresholds,
 )
 from .const import CONF_FORCE_UPDATE, DEFAULT_FORCE_UPDATE, DOMAIN, FILESYSTEMS_KEY
+from .device_link import agent_link
 from .coordinator import AgentHealthCoordinator, SmartSnifferCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -759,7 +760,7 @@ class SmartSnifferSensor(CoordinatorEntity[SmartSnifferCoordinator], SensorEntit
             "serial_number": serial,
             # Nest this drive under its agent so HA can cascade an area
             # assignment from the agent to every drive it reports (#24).
-            "via_device": (DOMAIN, f"{coordinator.config_entry.entry_id}_agent"),
+            **agent_link(coordinator),
         }
 
     @property
@@ -913,7 +914,7 @@ class SmartSnifferAttentionSensor(
             "serial_number": serial,
             # Nest this drive under its agent so HA can cascade an area
             # assignment from the agent to every drive it reports (#24).
-            "via_device": (DOMAIN, f"{coordinator.config_entry.entry_id}_agent"),
+            **agent_link(coordinator),
         }
 
     def _thresholds(self) -> dict[str, int]:
@@ -1003,7 +1004,7 @@ class SmartSnifferAttentionReasonsSensor(
             "serial_number": serial,
             # Nest this drive under its agent so HA can cascade an area
             # assignment from the agent to every drive it reports (#24).
-            "via_device": (DOMAIN, f"{coordinator.config_entry.entry_id}_agent"),
+            **agent_link(coordinator),
         }
 
     def _thresholds(self) -> dict[str, int]:
@@ -1090,7 +1091,7 @@ class SmartSnifferFilesystemSensor(
             "manufacturer": "SMART Sniffer",
             "model": "Filesystem Monitor",
             # Nest under the agent alongside the drive devices (#24).
-            "via_device": (DOMAIN, f"{coordinator.config_entry.entry_id}_agent"),
+            **agent_link(coordinator),
         }
 
     def _get_fs_data(self) -> dict[str, Any] | None:

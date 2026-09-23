@@ -24,6 +24,10 @@ AGENT_RELEASES_URL = "https://github.com/DAB-LABS/smart-sniffer/releases"
 # so the text carries {install_url} and this is what fills it.
 AGENT_INSTALL_URL = "https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh"
 
+# Key under hass.data[DOMAIN][entry_id] holding the agent device's registry
+# id, which drive and filesystem devices point at with via_device_id.
+AGENT_DEVICE_ID = "agent_device_id"
+
 # Key used in coordinator data dict to store filesystem info.
 # Underscore prefix avoids collision with drive ID keys.
 FILESYSTEMS_KEY = "_filesystems"
