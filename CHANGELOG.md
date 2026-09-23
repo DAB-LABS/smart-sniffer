@@ -2,6 +2,42 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.6.5 -- 2026-09-23
+
+**Integration only. No agent update needed.** Update through HACS and reload.
+
+Two changes to how SMART Sniffer's devices behave in Home Assistant.
+
+### Fixed
+- **No more "via_device" deprecation warnings in the log.** Home Assistant 2026.9
+  started warning that SMART Sniffer links drives to their agent the old way, and
+  that the old way stops working in 2027.8. Drives now use the new link on
+  Home Assistant versions that support it and the old one on earlier versions.
+  Nothing changes in how drives are grouped. Reported by @hole222 in
+  [#53](https://github.com/DAB-LABS/smart-sniffer/issues/53).
+
+### Added
+- **You can now remove drives the agent no longer reports.** A drive that has
+  been taken out, or a leftover "ghost" device from before v0.6.2, can be removed
+  with **Remove device** on its page. SMART Sniffer allows it only when the agent
+  is online and no longer sees that drive.
+- **Clear reasons when a device can't be removed.** Removing a drive that is still
+  installed, or the agent itself, now explains why and what to do instead.
+
+### Upgrade notes
+- **Correction to the v0.6.2 notes.** They said a leftover ghost device could be
+  deleted in Settings. It could not, because SMART Sniffer did not allow device
+  removal until this release. Now it does.
+- **Remove device appears on every SMART Sniffer device.** Home Assistant shows it
+  per integration, not per device, so live drives and agents have it too. On those
+  it explains why it can't remove them and leaves them in place.
+- If you remove from the **Devices** page rather than from the SMART Sniffer
+  integration page, Home Assistant may show `[object Object]` instead of the
+  reason. That is a Home Assistant display issue; the reason is still written to
+  the log.
+- The agent is unchanged since v0.6.2. Nothing to re-run on your monitored
+  machines.
+
 ## v0.6.4 -- 2026-09-22
 
 **Integration only. No agent update needed.** Update through HACS and reload.
