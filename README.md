@@ -548,7 +548,7 @@ Drive-specific `smartctl -a --json` output samples are especially welcome — th
 - [x] Installer: macOS quarantine removal + expanded interface picker labels -- shipped v0.5.5.5
 - [x] Unified ATA/NVMe wear level scale + btrfs filesystem fallback + installer bind mount dedup -- shipped v0.5.6
 - [x] Custom Lovelace card -- [SMART Sniffer Card](frontend/smart-sniffer-card/) v1.0.19
-- [x] Platform installation guides -- Proxmox, Synology, QNAP, TrueNAS SCALE, Unraid, Docker, VMs
+- [x] Platform installation guides -- Proxmox, Synology, QNAP, TrueNAS SCALE, Unraid, OpenWrt, hardware RAID, VMs, and a build-your-own Docker guide
 - [x] Drive Discovery (`--discover`) documentation
 - [ ] MQTT agent mode
 - [x] Configurable alert thresholds via options flow (per-drive, current reading and default shown under each field) -- shipped v0.6.3
@@ -563,7 +563,9 @@ Drive-specific `smartctl -a --json` output samples are especially welcome — th
 - [x] Integration: opt-in `force_update` so InfluxDB, Prometheus and Grafana get a datapoint every poll -- shipped v0.6.0
 - [ ] Agent: runtime interface detection (replace static prefix list with OS-level physical NIC detection)
 - [x] Integration: parent-agent device hierarchy (drives and filesystems nest under their agent via `via_device`) -- shipped v0.6.1
-- [ ] Integration: optional area-on-setup (area inherits to child devices via HA prompt)
+- [x] Agent: unreadable drives are skipped instead of published under a made-up name, so a blocked or hung drive no longer creates ghost devices or blanks the whole agent -- shipped v0.6.2
+- [ ] Listed in the HACS default store (submitted, awaiting review)
+- [ ] Integration: optional area-on-setup (choose an area once and apply it to all of an agent's drives)
 - [x] Integration: split consolidated wear-leveling / uncorrectable / pending-sector sensors into separate diagnostic entities when a drive reports multiple variants -- shipped v0.5.14
 - [x] Integration: `smart_sniffer.get_drive_data` service call for AI/automation access to full SMART data -- shipped v0.5.15, community PR by @nsleigh
 
