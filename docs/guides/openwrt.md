@@ -1,10 +1,11 @@
 # OpenWrt
 
 **OpenWrt is community supported.** The agent runs on it, but the installer does
-not support it and nobody has tested a full install end to end. These steps are
-written from how OpenWrt works, not from a verified run. If you follow them,
-please report back on [#51](https://github.com/DAB-LABS/smart-sniffer/issues/51)
-so this page can be corrected.
+not support it, so the install is manual. These steps have been confirmed working
+on OpenWrt x86-64 by [@DanaGoyette](https://github.com/DanaGoyette) in
+[#51](https://github.com/DAB-LABS/smart-sniffer/issues/51). ARM64 has not been
+tried yet. If you run it on other hardware, or anything here is off, please say
+so in an issue.
 
 ## Why the installer stops
 
@@ -128,6 +129,11 @@ smartha-agent --discover
 That probes every drive the OS exposes and says what the agent will see at
 runtime. Paste its output into an issue if you need help.
 
+One known quirk: on a drive that supports SMART only partly (common on cheap
+SSDs), `--discover` can report "could not read SMART data" even though the
+agent reads it fine. If the drive appears in `/api/drives`, trust that. This
+will be fixed in a future agent update.
+
 ## Step 6: Add it in Home Assistant
 
 Install the integration through HACS as normal, then add it pointing at the
@@ -136,6 +142,26 @@ OpenWrt machine's LAN address on port 9099.
 Automatic discovery over mDNS may not work on OpenWrt depending on whether
 `umdns` is installed and how your firewall zones are set. Adding the host
 manually always works.
+
+## Step 7: Keep it across OpenWrt upgrades
+
+A `sysupgrade` replaces the system and keeps only the files it has been told to
+keep. Add these lines to `/etc/sysupgrade.conf` so the agent, its config and its
+service survive an upgrade:
+
+```
+# Home Assistant SMART Sniffer
+/etc/smartha-agent/config.yaml
+/usr/bin/smartha-agent
+/etc/init.d/smartha-agent
+/etc/rc.d/K10smartha-agent
+/etc/rc.d/S95smartha-agent
+```
+
+smartmontools is a package, so reinstall it after an upgrade with
+`opkg install smartmontools` if your upgrade did not keep packages.
+
+Thanks to [@DanaGoyette](https://github.com/DanaGoyette) for this list.
 
 ## Known rough edges
 
@@ -162,8 +188,8 @@ rm -f /etc/init.d/smartha-agent /usr/bin/smartha-agent
 rm -rf /etc/smartha-agent
 ```
 
-## What would make this supported
+## Reporting back
 
-A procd init script confirmed working on a real OpenWrt box, and a report of
-which steps above were wrong. That is genuinely most of the work. Post on
-[#51](https://github.com/DAB-LABS/smart-sniffer/issues/51).
+The steps above are confirmed on x86-64. Reports from ARM64 routers, or from
+anyone who hits a step that does not work, are the most useful thing for this
+page. Open an issue and mention OpenWrt.
