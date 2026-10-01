@@ -25,6 +25,12 @@ type discoverDriveResult struct {
 	// 2 was set in it (some SMART or ATA commands failed, the drive was still
 	// read). Zero when there is nothing to note.
 	partialCode int
+	// execErr explains why smartctl produced no verdict at all for the first
+	// read (it could not be launched, or it timed out). Non-empty means the
+	// drive is unreadable, as at runtime. satExecErr is the same for the SAT
+	// retry; there the original verdict stands, as at runtime.
+	execErr    string
+	satExecErr string
 }
 
 // smartctl exit statuses are a bitmask. The two helpers below are the single
@@ -224,12 +230,14 @@ func probeOneDrive(smartctlPath, path, protocol string) discoverDriveResult {
 	}
 	args = append(args, path)
 
-	out, err := exec.Command(smartctlPath, args...).CombinedOutput()
-	code := 0
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			code = exitErr.ExitCode()
-		}
+	// Same call and timeout as the runtime poll. A non-nil error means
+	// smartctl never ran to completion (missing binary, permission denied,
+	// timeout): fetchDriveInfo treats that as unreadable without a SAT retry,
+	// and so does discover.
+	out, code, execErr := runSmartctl(smartctlPath, args)
+	if execErr != nil {
+		r.execErr = smartctlExecErrorText(execErr)
+		return r
 	}
 
 	// SCSI (or SAT) reported and something in bits 0-2 failed -- try SAT.
@@ -237,23 +245,20 @@ func probeOneDrive(smartctlPath, path, protocol string) discoverDriveResult {
 		(strings.EqualFold(protocol, "scsi") || strings.EqualFold(protocol, "sat")) {
 		r.satRetried = true
 		satArgs := []string{"--json", "-a", "-d", "sat", path}
-		satOut, satErr := exec.Command(smartctlPath, satArgs...).CombinedOutput()
-		satCode := 0
-		if satErr != nil {
-			if satExitErr, ok := satErr.(*exec.ExitError); ok {
-				satCode = satExitErr.ExitCode()
-			}
-		}
-		if !smartctlWantsSATRetry(satCode) {
+		satOut, satCode, satExecErr := runSmartctl(smartctlPath, satArgs)
+		if satExecErr == nil && !smartctlWantsSATRetry(satCode) {
 			r.satOK = true
 			r.model, r.serial = extractSmartModelSerial(satOut)
 			// SAT auto-fallback handled at runtime -- only needs config if it won't
 			// be reached via scan (i.e. path not found by --scan-open).
 			return r
 		}
-		// SAT did not come back clean. The runtime keeps the original
-		// protocol and exit code in this case, so fall through and let the
-		// original code decide.
+		if satExecErr != nil {
+			r.satExecErr = smartctlExecErrorText(satExecErr)
+		}
+		// SAT did not come back clean (or did not run). The runtime keeps the
+		// original protocol and exit code in this case, so fall through and
+		// let the original code decide.
 	}
 
 	if smartctlReadable(code) {
@@ -298,6 +303,9 @@ func printDriveResult(r discoverDriveResult, cfg *Config) {
 			fmt.Printf("    Result:        OK (agent will auto-detect SAT at runtime)\n")
 		} else if r.smartOK {
 			fmt.Printf("    SAT retry:     No -- keeping scan protocol\n")
+			if r.satExecErr != "" {
+				fmt.Printf("    SAT error:     %s\n", r.satExecErr)
+			}
 			if r.model != "" {
 				fmt.Printf("    Model:         %s\n", r.model)
 			}
@@ -314,6 +322,9 @@ func printDriveResult(r discoverDriveResult, cfg *Config) {
 			}
 		} else {
 			fmt.Printf("    SAT retry:     No -- drive not readable\n")
+			if r.satExecErr != "" {
+				fmt.Printf("    SAT error:     %s\n", r.satExecErr)
+			}
 			fmt.Printf("    Result:        WARNING: could not read SMART data\n")
 		}
 	} else if r.smartOK {
@@ -340,6 +351,9 @@ func printDriveResult(r discoverDriveResult, cfg *Config) {
 	} else {
 		fmt.Printf("    Protocol:   %s\n", r.scanProto)
 		fmt.Printf("    SMART data: No\n")
+		if r.execErr != "" {
+			fmt.Printf("    Error:      %s\n", r.execErr)
+		}
 		fmt.Printf("    Result:     WARNING: could not read SMART data\n")
 	}
 }
@@ -348,6 +362,18 @@ func printDriveResult(r discoverDriveResult, cfg *Config) {
 // agent reads normally even though smartctl set exit bit 2.
 func partialReadNote(code int) string {
 	return fmt.Sprintf("smartctl reported some commands unsupported (exit code %d); the agent reads this drive normally", code)
+}
+
+// smartctlExecErrorText renders a runSmartctl error (smartctl never ran to
+// completion) as the one-line reason --discover prints under the drive.
+// runSmartctl words its own timeout error; any other error is a launch
+// failure, reported with the OS error text.
+func smartctlExecErrorText(err error) string {
+	msg := err.Error()
+	if strings.HasPrefix(msg, "timed out after ") {
+		return "smartctl " + msg
+	}
+	return "smartctl did not run (" + msg + ")"
 }
 
 // detectPlatform returns "synology", "qnap", or "" for standard Linux/other.
