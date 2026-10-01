@@ -21,7 +21,13 @@ from homeassistant.helpers import device_registry
 
 from .attention import evaluate_attention, get_thresholds
 from .const import AGENT_DEVICE_ID, DOMAIN, FILESYSTEMS_KEY, SERVICE_GET_DRIVE_DATA
-from .device_removal import removable, reported_drive_ids, reported_filesystem_count
+from .device_removal import (
+    refusal_placeholders,
+    removable,
+    reported_drive_ids,
+    reported_filesystem_count,
+    reported_pool_names,
+)
 from .coordinator import AgentHealthCoordinator, SmartSnifferCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -164,6 +170,7 @@ async def async_remove_config_entry_device(
         reported_drive_ids(data),
         reported_filesystem_count(data),
         agent_reporting,
+        reported_pool_names(data),
     )
     name = device_entry.name or device_entry.id
 
@@ -174,10 +181,12 @@ async def async_remove_config_entry_device(
     _LOGGER.warning("Refusing to remove device %s: %s", name, decision.reason)
     if decision.translation_key is None:
         return False
+    # A pool refusal names the pool as well as the host.
+    extra = refusal_placeholders(device_entry.identifiers, config_entry.entry_id)
     raise HomeAssistantError(
         translation_domain=DOMAIN,
         translation_key=decision.translation_key,
-        translation_placeholders={"host": _display_host(config_entry, coordinator)},
+        translation_placeholders={"host": _display_host(config_entry, coordinator), **extra},
     )
 
 

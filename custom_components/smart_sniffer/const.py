@@ -32,5 +32,10 @@ AGENT_DEVICE_ID = "agent_device_id"
 # Underscore prefix avoids collision with drive ID keys.
 FILESYSTEMS_KEY = "_filesystems"
 
+# Key used in coordinator data dict to store ZFS pool status (GH #50): a list
+# of pool dicts from the agent's /api/pools, [] when the agent does not
+# advertise pools, None when it does but the fetch failed.
+POOLS_KEY = "_pools"
+
 # Service name for the get_drive_data action.
 SERVICE_GET_DRIVE_DATA = "get_drive_data"

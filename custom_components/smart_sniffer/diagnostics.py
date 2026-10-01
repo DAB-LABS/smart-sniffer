@@ -19,6 +19,7 @@ from homeassistant.core import HomeAssistant
 from .attention import evaluate_attention, get_thresholds
 from .const import CONF_TOKEN, DOMAIN
 from .coordinator import SmartSnifferCoordinator
+from .pool_health import pool_problems, reported_pools
 
 # Keys to redact from config entry data (connection secrets).
 CONFIG_REDACT_KEYS = {CONF_TOKEN}
@@ -60,6 +61,9 @@ async def async_get_config_entry_diagnostics(
       - Integration version from manifest.
       - Per-drive summary: model, protocol, attention state, reasons.
       - Full (redacted) SMART data per drive for deep debugging.
+      - ZFS pools as the agent reported them, with the problem reasons the
+        integration derived (None when the last pool fetch failed). Pool
+        names and zpool's status text carry nothing identifying.
     """
     coordinator: SmartSnifferCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
 
@@ -116,4 +120,12 @@ async def async_get_config_entry_diagnostics(
             "drive_count": sum(1 for k in coordinator.data if not k.startswith("_")),
         },
         "drives": drives_diag,
+        "pools": _pools_diagnostics(coordinator.data),
     }
+
+
+def _pools_diagnostics(data: dict[str, Any] | None) -> list[dict[str, Any]] | None:
+    pools = reported_pools(data)
+    if pools is None:
+        return None
+    return [{**pool, "problems": pool_problems(pool)} for pool in pools]

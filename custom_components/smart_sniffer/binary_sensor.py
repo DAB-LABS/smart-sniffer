@@ -38,6 +38,8 @@ from .attention import _has_usable_smart_data, coerce_smart_data
 from .const import CONF_TOKEN, DOMAIN
 from .device_link import agent_link
 from .coordinator import AgentHealthCoordinator, SmartSnifferCoordinator
+from .pool_entity import ZfsPoolEntity
+from .pool_health import data_errors, pool_problems, reported_pools
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -116,6 +118,11 @@ async def async_setup_entry(
             continue
         entities.append(SmartSnifferHealthSensor(coordinator, drive_id, drive_data))
         entities.append(DriveStandbySensor(coordinator, drive_id, drive_data))
+
+    # ZFS pool problem sensors (one device per pool, GH #50).
+    for pool in reported_pools(coordinator.data) or []:
+        entities.append(ZfsPoolDataErrorsSensor(coordinator, pool["name"]))
+        entities.append(ZfsPoolProblemSensor(coordinator, pool["name"]))
 
     # Agent-level connectivity and auth sensors.
     entities.append(AgentStatusBinarySensor(health_coordinator, entry))
@@ -255,6 +262,64 @@ class DriveStandbySensor(
             return {}
         drive_data = self.coordinator.data.get(self._drive_id) or {}
         return {"data_as_of": drive_data.get("last_updated", "unknown")}
+
+
+# ---------------------------------------------------------------------------
+# ZFS pool binary sensors (GH #50)
+# ---------------------------------------------------------------------------
+
+class ZfsPoolDataErrorsSensor(ZfsPoolEntity, BinarySensorEntity):
+    """On when zpool reports permanent data errors in the pool.
+
+    Off for "errors: No known data errors". Unknown when zpool printed no
+    errors line, which happens when the pool's configuration cannot be read.
+    """
+
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+
+    def __init__(self, coordinator: SmartSnifferCoordinator, pool_name: str) -> None:
+        super().__init__(coordinator, pool_name, "pool_data_errors")
+
+    @property
+    def is_on(self) -> bool | None:
+        pool = self._pool
+        count = data_errors(pool) if pool is not None else None
+        return None if count is None else count > 0
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        pool = self._pool
+        return {"data_errors": data_errors(pool)} if pool is not None else {}
+
+
+class ZfsPoolProblemSensor(ZfsPoolEntity, BinarySensorEntity):
+    """On when the pool is unhealthy, with the reasons as an attribute.
+
+    Unhealthy means a state other than ONLINE, any read, write or checksum
+    error, or data errors. The status text ("Some supported and requested
+    features are not enabled") never counts. See pool_health.py.
+    """
+
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+
+    def __init__(self, coordinator: SmartSnifferCoordinator, pool_name: str) -> None:
+        super().__init__(coordinator, pool_name, "pool_problem")
+
+    @property
+    def is_on(self) -> bool | None:
+        pool = self._pool
+        return bool(pool_problems(pool)) if pool is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        pool = self._pool
+        if pool is None:
+            return {}
+        reasons = pool_problems(pool)
+        return {
+            "reasons": reasons if reasons else ["No issues detected"],
+            "issue_count": len(reasons),
+        }
 
 
 # ---------------------------------------------------------------------------

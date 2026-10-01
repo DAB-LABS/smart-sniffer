@@ -43,6 +43,16 @@ from .attention import (
 from .const import CONF_FORCE_UPDATE, DEFAULT_FORCE_UPDATE, DOMAIN, FILESYSTEMS_KEY
 from .device_link import agent_link
 from .coordinator import AgentHealthCoordinator, SmartSnifferCoordinator
+from .pool_entity import ZfsPoolEntity
+from .pool_health import (
+    ERROR_KEYS,
+    POOL_STATES,
+    error_total,
+    last_scrub_end,
+    reported_pools,
+    scrub_attributes,
+    state_option,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -669,6 +679,14 @@ async def async_setup_entry(
             SmartSnifferFilesystemSensor(coordinator, fs_info)
         )
 
+    # --- ZFS pool sensors (one device per pool, GH #50) ---
+    for pool in reported_pools(coordinator.data) or []:
+        name = pool["name"]
+        entities.append(ZfsPoolStateSensor(coordinator, name))
+        for key in ERROR_KEYS:
+            entities.append(ZfsPoolErrorSensor(coordinator, name, key))
+        entities.append(ZfsPoolLastScrubSensor(coordinator, name))
+
     # --- Agent diagnostic sensors ---
     entities.append(AgentVersionSensor(health_coordinator, entry))
     entities.append(AgentLastSeenSensor(health_coordinator, entry))
@@ -691,6 +709,8 @@ async def async_setup_entry(
             SmartSnifferAttentionSensor,
             SmartSnifferAttentionReasonsSensor,
             SmartSnifferFilesystemSensor,
+            ZfsPoolStateSensor,
+            ZfsPoolErrorSensor,
         )
         for entity in entities:
             if isinstance(entity, forced_classes):
@@ -1129,6 +1149,83 @@ class SmartSnifferFilesystemSensor(
             "used_gb": _bytes_to_gb(fs.get("used_bytes", 0)),
             "available_gb": _bytes_to_gb(fs.get("available_bytes", 0)),
         }
+
+
+# ---------------------------------------------------------------------------
+# ZFS pool sensors (GH #50)
+# ---------------------------------------------------------------------------
+
+class ZfsPoolStateSensor(ZfsPoolEntity, SensorEntity):
+    """The pool's state as zpool reports it, with its status text."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = POOL_STATES
+    _attr_icon = "mdi:database-check-outline"
+
+    def __init__(self, coordinator: SmartSnifferCoordinator, pool_name: str) -> None:
+        super().__init__(coordinator, pool_name, "pool_state")
+
+    @property
+    def native_value(self) -> str | None:
+        pool = self._pool
+        return state_option(pool) if pool is not None else None
+
+    @property
+    def icon(self) -> str:
+        if self.native_value in (None, "ONLINE"):
+            return "mdi:database-check-outline"
+        return "mdi:database-alert-outline"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        pool = self._pool or {}
+        # Informational, passed through as the agent read it. Never part of
+        # the health rule: see pool_health.py.
+        return {"status": pool.get("status"), "action": pool.get("action")}
+
+
+class ZfsPoolErrorSensor(ZfsPoolEntity, SensorEntity):
+    """One of the pool's read, write or checksum error totals.
+
+    A measurement, not total_increasing: `zpool clear` resets the counters,
+    and a reset is not a meter rollover.
+    """
+
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:alert-circle-outline"
+
+    def __init__(self, coordinator: SmartSnifferCoordinator, pool_name: str, key: str) -> None:
+        super().__init__(coordinator, pool_name, f"pool_{key}")
+        self._key = key
+
+    @property
+    def native_value(self) -> int | None:
+        pool = self._pool
+        return error_total(pool, self._key) if pool is not None else None
+
+
+class ZfsPoolLastScrubSensor(ZfsPoolEntity, SensorEntity):
+    """When the pool's last completed scrub ended.
+
+    Unknown when the pool has never been scrubbed, and also when a resilver
+    has run since: a pool keeps one scan record, so the scrub's is gone.
+    """
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:broom"
+
+    def __init__(self, coordinator: SmartSnifferCoordinator, pool_name: str) -> None:
+        super().__init__(coordinator, pool_name, "pool_last_scrub")
+
+    @property
+    def native_value(self) -> Any | None:
+        pool = self._pool
+        return last_scrub_end(pool) if pool is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        pool = self._pool
+        return scrub_attributes(pool) if pool is not None else {}
 
 
 # ---------------------------------------------------------------------------

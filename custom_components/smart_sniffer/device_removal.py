@@ -21,6 +21,9 @@ The rules, in order:
    out of this without naming them: the agent never reports those ids.
 4. The Disk Usage device is removable only when the agent reports no
    filesystems at all.
+5. A ZFS pool device is removable only when the agent is reachable, its pool
+   list could be read, and that pool is not in it. An agent that stopped
+   advertising pools (pool status turned off, or zpool gone) reports none.
 
 A device deleted while its hardware is still present comes back on the next
 poll, because the platforms register it again from the agent's data.
@@ -38,6 +41,7 @@ from collections.abc import Collection, Iterable
 from typing import NamedTuple
 
 from .const import DOMAIN, FILESYSTEMS_KEY
+from .pool_health import pool_name_from_identifier, reported_pools
 
 # Translation keys under "exceptions" in strings.json. A refusal is raised as a
 # HomeAssistantError carrying one of these, so the user reads the reason in the
@@ -46,9 +50,16 @@ REMOVE_LIVE_DRIVE = "remove_live_drive"
 REMOVE_AGENT_DEVICE = "remove_agent_device"
 REMOVE_AGENT_OFFLINE = "remove_agent_offline"
 REMOVE_DISK_USAGE = "remove_disk_usage"
+REMOVE_LIVE_POOL = "remove_live_pool"
 
 REFUSAL_KEYS: frozenset[str] = frozenset(
-    {REMOVE_LIVE_DRIVE, REMOVE_AGENT_DEVICE, REMOVE_AGENT_OFFLINE, REMOVE_DISK_USAGE}
+    {
+        REMOVE_LIVE_DRIVE,
+        REMOVE_AGENT_DEVICE,
+        REMOVE_AGENT_OFFLINE,
+        REMOVE_DISK_USAGE,
+        REMOVE_LIVE_POOL,
+    }
 )
 
 
@@ -81,11 +92,14 @@ def removable(
     drive_ids: Collection[str] | None,
     filesystem_count: int | None,
     agent_reporting: bool,
+    pool_names: Collection[str] | None = None,
 ) -> Decision:
     """Whether this device may be deleted, and why.
 
     ``agent_reporting`` is false when the last poll failed or none has completed
     yet, in which case ``drive_ids`` says nothing about what exists.
+    ``pool_names`` is None when the agent's pool list could not be read, which
+    blocks removing a pool device the same way.
 
     The reason is returned rather than logged here so that the caller decides
     how loud to be, and so the tests can assert on it.
@@ -105,6 +119,18 @@ def removable(
             "the agent is not reporting, so nothing can be called stale",
             REMOVE_AGENT_OFFLINE,
         )
+
+    pool = pool_name_from_identifier(identifier, entry_id)
+    if pool is not None:
+        if pool_names is None:
+            return Decision(
+                False,
+                "the agent's pool list could not be read, so no pool can be called stale",
+                REMOVE_AGENT_OFFLINE,
+            )
+        if pool in pool_names:
+            return Decision(False, f"the agent still reports pool {pool}", REMOVE_LIVE_POOL)
+        return Decision(True, f"the agent no longer reports pool {pool}", None)
 
     if identifier == f"{entry_id}_filesystems":
         if filesystem_count:
@@ -137,3 +163,20 @@ def reported_filesystem_count(coordinator_data: dict | None) -> int | None:
     if coordinator_data is None:
         return None
     return len(coordinator_data.get(FILESYSTEMS_KEY) or [])
+
+
+def reported_pool_names(coordinator_data: dict | None) -> list[str] | None:
+    """Names of the ZFS pools in a coordinator payload, or None when unknown."""
+    pools = reported_pools(coordinator_data)
+    if pools is None:
+        return None
+    return [pool["name"] for pool in pools if pool.get("name")]
+
+
+def refusal_placeholders(
+    identifiers: Iterable[tuple[str, str]], entry_id: str
+) -> dict[str, str]:
+    """Placeholders a refusal message needs beyond {host}: the pool name."""
+    identifier = our_identifier(identifiers)
+    pool = pool_name_from_identifier(identifier, entry_id) if identifier else None
+    return {"pool": pool} if pool is not None else {}

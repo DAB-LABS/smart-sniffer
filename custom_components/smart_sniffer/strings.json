@@ -140,6 +140,36 @@
     },
     "remove_disk_usage": {
       "message": "Disk usage for {host} is still being reported. To remove it, remove the \"filesystems\" section from the agent's config."
+    },
+    "remove_live_pool": {
+      "message": "The pool {pool} is still being reported by the agent on {host}, so it can't be removed."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "pool_state": {
+        "name": "State"
+      },
+      "pool_read_errors": {
+        "name": "Read Errors"
+      },
+      "pool_write_errors": {
+        "name": "Write Errors"
+      },
+      "pool_checksum_errors": {
+        "name": "Checksum Errors"
+      },
+      "pool_last_scrub": {
+        "name": "Last Scrub"
+      }
+    },
+    "binary_sensor": {
+      "pool_data_errors": {
+        "name": "Data Errors"
+      },
+      "pool_problem": {
+        "name": "Problem"
+      }
     }
   }
 }

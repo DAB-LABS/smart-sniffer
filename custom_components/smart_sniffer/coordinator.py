@@ -21,6 +21,11 @@ Transition rules:
   UNSUPPORTED → *   Dismiss informational notification.
 
 Notification IDs are stable: smart_sniffer_attention_{drive_id}
+
+ZFS pools (GH #50) follow the same rules through pool_health.py: a pool that
+goes from healthy to unhealthy raises a notification, a change in its reasons
+updates it, and recovery or the pool disappearing dismisses it. IDs are
+smart_sniffer_pool_{entry_id}_{pool name}.
 """
 
 from __future__ import annotations
@@ -63,6 +68,13 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     MIN_AGENT_VERSION,
+    POOLS_KEY,
+)
+from .pool_health import (
+    build_notification as build_pool_notification,
+    fetch_pools,
+    notification_actions as pool_notification_actions,
+    notification_id as pool_notification_id,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -149,6 +161,10 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._prev_state: dict[str, str | None] = {}
         self._prev_reasons: dict[str, list[str]] = {}
 
+        # The same for ZFS pools: pool name -> its problem reasons at the last
+        # poll that could read them ([] = healthy). A name absent = not seen.
+        self._prev_pool_reasons: dict[str, list[str]] = {}
+
     @property
     def _base_url(self) -> str:
         return f"http://{self.host}:{self.port}"
@@ -187,7 +203,9 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         Returns a dict keyed by drive ID, plus a ``_filesystems`` key
         containing a list of filesystem info dicts (empty list when the
-        agent is older or has no filesystems configured).
+        agent is older or has no filesystems configured), and a ``_pools``
+        key with the agent's ZFS pools (empty list when the agent does not
+        advertise them, None when it does and the fetch failed).
 
         After fetching, evaluates attention states and fires/dismisses
         notifications as needed.
@@ -217,6 +235,7 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             # Check agent version via /api/health (tiny payload, negligible overhead).
             fs_count = 0
+            health: dict[str, Any] | None = None
             try:
                 async with session.get(
                     f"{self._base_url}/api/health",
@@ -231,6 +250,7 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # Health check failed — don't block the poll, but treat as
                 # unknown version so the repair fires.
                 agent_version = ""
+                health = None
 
             self._check_agent_version(agent_version)
 
@@ -254,13 +274,54 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             result["_filesystems"] = filesystems
 
+            # ZFS pool status, when the agent advertises it (GH #50). Agents
+            # without it, or with it off, do not list /api/pools in health
+            # and are never asked. A failed fetch, or a failed health check,
+            # stores None: pools unknown, not pools gone.
+            async def _get_json(path: str) -> Any:
+                try:
+                    async with session.get(
+                        f"{self._base_url}{path}",
+                        headers=self._headers,
+                        timeout=timeout,
+                    ) as resp:
+                        resp.raise_for_status()
+                        return await resp.json()
+                except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
+                    _LOGGER.debug("SMART Sniffer: %s fetch failed, skipping", path)
+                    return None
+
+            result[POOLS_KEY] = (
+                await fetch_pools(health, _get_json) if health is not None else None
+            )
+
         except aiohttp.ClientError as err:
             raise UpdateFailed(
                 f"Error communicating with SMART Sniffer agent: {err}"
             ) from err
 
         await self._handle_attention_notifications(result)
+        self._handle_pool_notifications(result.get(POOLS_KEY))
         return result
+
+    def _handle_pool_notifications(self, pools: list[dict[str, Any]] | None) -> None:
+        """Raise, update or dismiss ZFS pool notifications after a poll."""
+        actions, self._prev_pool_reasons = pool_notification_actions(
+            self._prev_pool_reasons, pools
+        )
+        entry_id = self.config_entry.entry_id
+        for action, name, reasons in actions:
+            notif_id = pool_notification_id(entry_id, name)
+            if action == "dismiss":
+                _LOGGER.info("SMART Sniffer: ZFS pool %s attention cleared", name)
+                pn_dismiss(self.hass, notif_id)
+                continue
+            _LOGGER.warning(
+                "SMART Sniffer: ZFS pool %s needs attention: %s",
+                name, "; ".join(reasons),
+            )
+            title, message = build_pool_notification(name, self._hostname, reasons)
+            pn_create(self.hass, message=message, title=title, notification_id=notif_id)
 
     async def _handle_attention_notifications(
         self, new_data: dict[str, Any]
