@@ -280,4 +280,276 @@ func TestDiscoverMatchesRuntimeForEveryExitCode(t *testing.T) {
 				c.protocol, c.origCode, c.satCode, dReadable, r.satOK, rtReadable, rtSAT)
 		}
 	}
+
+	// The exec-error case: smartctl never ran to completion on the first read.
+	// Both paths call it unreadable and neither retries with SAT.
+	shortenSmartctlTimeout(t)
+	hung, hungLog := writeFakeSmartctlFailing(t, "hang", "0")
+	for _, c := range []struct{ smartctl, protocol string }{
+		{"/nonexistent/smartctl", "ata"},
+		{"/nonexistent/smartctl", "scsi"},
+		{"/nonexistent/smartctl", "sat"},
+		{hung, "scsi"},
+	} {
+		rtReadable, rtSAT := runtimeVerdict(t, c.smartctl, c.protocol)
+		r := probeOneDrive(c.smartctl, "/dev/sda", c.protocol)
+		if rtReadable || rtSAT || r.smartOK || r.satOK || r.satRetried || r.execErr == "" {
+			t.Errorf("%s %s: runtime readable=%v viaSAT=%v, discover smartOK=%v satOK=%v satRetried=%v execErr=%q",
+				c.smartctl, c.protocol, rtReadable, rtSAT, r.smartOK, r.satOK, r.satRetried, r.execErr)
+		}
+	}
+	if n := satCalls(t, hungLog); n != 0 {
+		t.Errorf("a SAT retry ran after the first read timed out (%d calls)", n)
+	}
+}
+
+// shortenSmartctlTimeout lowers the shared runSmartctl timeout for one test.
+func shortenSmartctlTimeout(t *testing.T) {
+	t.Helper()
+	saved := smartctlTimeout
+	smartctlTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { smartctlTimeout = saved })
+}
+
+// writeFakeSmartctlFailing writes a fake smartctl whose first read and SAT
+// retry each either exit with a code or fail in a named way:
+//
+//	"hang"     exec sleep, so the timeout fires (exec, so the kill reaches the
+//	           sleeping process directly and WaitDelay is not needed)
+//	"nolaunch" the first read exits origCode and then removes the script's
+//	           execute bit, so the SAT retry cannot be launched
+//
+// A numeric action exits with that code, printing a body as writeFakeSmartctl
+// does. Every invocation's arguments are appended to the returned log file.
+func writeFakeSmartctlFailing(t *testing.T, orig, sat string) (path, logPath string) {
+	t.Helper()
+	dir := t.TempDir()
+	path = filepath.Join(dir, "smartctl")
+	logPath = filepath.Join(dir, "calls.log")
+	action := func(a string) string {
+		switch a {
+		case "hang":
+			return "exec sleep 5\n"
+		default:
+			return "code=" + a + "\n" +
+				"if [ $((code & 3)) -ne 0 ]; then printf '%s' '" + fakeErrBody + "'; " +
+				"else printf '%s' '" + fakeGoodBody + "'; fi\n" +
+				"exit $code\n"
+		}
+	}
+	origAction := orig
+	nolaunch := ""
+	if strings.HasPrefix(sat, "nolaunch") {
+		nolaunch = "chmod -x \"$0\"\n"
+	}
+	script := "#!/bin/sh\n" +
+		"echo \"$*\" >> '" + logPath + "'\n" +
+		"sat=0\nprev=\"\"\n" +
+		"for a in \"$@\"; do\n" +
+		"  if [ \"$prev\" = \"-d\" ] && [ \"$a\" = \"sat\" ]; then sat=1; fi\n" +
+		"  prev=\"$a\"\n" +
+		"done\n" +
+		"if [ $sat = 1 ]; then\n" + action(sat) + "fi\n" +
+		nolaunch +
+		action(origAction)
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path, logPath
+}
+
+// --discover runs smartctl the way the runtime does: the same timeout, and an
+// exec error (launch failure or timeout) on the first read means unreadable
+// with no SAT retry. An exec error on the SAT retry leaves the original
+// verdict standing. Each case is also checked against fetchDriveInfo.
+func TestProbeOneDriveExecErrors(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a shell script as a fake smartctl")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores the execute bit, so the launch-failure cases cannot fail")
+	}
+	shortenSmartctlTimeout(t)
+
+	notExec := filepath.Join(t.TempDir(), "smartctl")
+	if err := os.WriteFile(notExec, []byte("#!/bin/sh\nexit 0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name      string
+		smartctl  func(t *testing.T) (path, logPath string)
+		protocol  string
+		wantSAT   bool // a SAT retry was made (r.satRetried)
+		satRan    bool // the fake saw the SAT call (false when it could not launch)
+		wantSmart bool
+		wantErr   string // r.execErr
+		wantSATEr string // r.satExecErr
+		wantOut   []string
+	}{
+		{
+			name:     "first read times out",
+			smartctl: func(t *testing.T) (string, string) { return writeFakeSmartctlFailing(t, "hang", "0") },
+			protocol: "scsi",
+			wantErr:  "smartctl timed out after 200ms (device may be unresponsive)",
+			wantOut: []string{
+				"    Protocol:   scsi\n",
+				"    SMART data: No\n",
+				"    Error:      smartctl timed out after 200ms (device may be unresponsive)\n",
+				"    Result:     WARNING: could not read SMART data\n",
+			},
+		},
+		{
+			name:     "smartctl path does not exist",
+			smartctl: func(t *testing.T) (string, string) { return "/nonexistent/smartctl", "" },
+			protocol: "ata",
+			wantErr:  "smartctl did not run (fork/exec /nonexistent/smartctl: no such file or directory)",
+			wantOut: []string{
+				"    SMART data: No\n",
+				"    Error:      smartctl did not run (fork/exec /nonexistent/smartctl: no such file or directory)\n",
+				"    Result:     WARNING: could not read SMART data\n",
+			},
+		},
+		{
+			name:     "smartctl not on PATH",
+			smartctl: func(t *testing.T) (string, string) { return "smartctl-not-installed-here", "" },
+			protocol: "ata",
+			wantErr:  `smartctl did not run (exec: "smartctl-not-installed-here": executable file not found in $PATH)`,
+			wantOut: []string{
+				`    Error:      smartctl did not run (exec: "smartctl-not-installed-here": executable file not found in $PATH)` + "\n",
+			},
+		},
+		{
+			name:     "smartctl not executable",
+			smartctl: func(t *testing.T) (string, string) { return notExec, "" },
+			protocol: "ata",
+			wantErr:  "smartctl did not run (fork/exec " + notExec + ": permission denied)",
+			wantOut:  []string{"    Error:      smartctl did not run (fork/exec " + notExec + ": permission denied)\n"},
+		},
+		{
+			name:      "SCSI exit 4, SAT retry hangs",
+			smartctl:  func(t *testing.T) (string, string) { return writeFakeSmartctlFailing(t, "4", "hang") },
+			protocol:  "scsi",
+			wantSAT:   true,
+			satRan:    true,
+			wantSmart: true,
+			wantSATEr: "smartctl timed out after 200ms (device may be unresponsive)",
+			wantOut: []string{
+				"    SMART data:    Yes\n",
+				"    SAT retry:     No -- keeping scan protocol\n",
+				"    SAT error:     smartctl timed out after 200ms (device may be unresponsive)\n",
+				"    Result:        OK\n",
+			},
+		},
+		{
+			name:      "SCSI exit 2, SAT retry hangs",
+			smartctl:  func(t *testing.T) (string, string) { return writeFakeSmartctlFailing(t, "2", "hang") },
+			protocol:  "scsi",
+			wantSAT:   true,
+			satRan:    true,
+			wantSATEr: "smartctl timed out after 200ms (device may be unresponsive)",
+			wantOut: []string{
+				"    SMART data:    No\n",
+				"    SAT retry:     No -- drive not readable\n",
+				"    SAT error:     smartctl timed out after 200ms (device may be unresponsive)\n",
+				"    Result:        WARNING: could not read SMART data\n",
+			},
+		},
+		{
+			name:      "SCSI exit 4, SAT retry cannot launch",
+			smartctl:  func(t *testing.T) (string, string) { return writeFakeSmartctlFailing(t, "4", "nolaunch") },
+			protocol:  "scsi",
+			wantSAT:   true,
+			wantSmart: true,
+			wantSATEr: "smartctl did not run (fork/exec ",
+			wantOut: []string{
+				"    SAT retry:     No -- keeping scan protocol\n",
+				"    SAT error:     smartctl did not run (fork/exec ",
+				": permission denied)\n",
+				"    Result:        OK\n",
+			},
+		},
+		{
+			name:      "SCSI exit 2, SAT retry cannot launch",
+			smartctl:  func(t *testing.T) (string, string) { return writeFakeSmartctlFailing(t, "2", "nolaunch") },
+			protocol:  "scsi",
+			wantSAT:   true,
+			wantSATEr: "smartctl did not run (fork/exec ",
+			wantOut: []string{
+				"    SAT retry:     No -- drive not readable\n",
+				"    SAT error:     smartctl did not run (fork/exec ",
+				"    Result:        WARNING: could not read SMART data\n",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fake, logPath := tc.smartctl(t)
+			start := time.Now()
+			r := probeOneDrive(fake, "/dev/sda", tc.protocol)
+			if elapsed := time.Since(start); elapsed > 2*time.Second {
+				t.Fatalf("probeOneDrive took %v; the timeout did not hold", elapsed)
+			}
+
+			if logPath != "" {
+				if got := satCalls(t, logPath) > 0; got != tc.satRan {
+					t.Errorf("fake saw a SAT call = %v, want %v", got, tc.satRan)
+				}
+			}
+			if r.satRetried != tc.wantSAT || r.smartOK != tc.wantSmart || r.satOK {
+				t.Errorf("satRetried=%v smartOK=%v satOK=%v, want %v %v false",
+					r.satRetried, r.smartOK, r.satOK, tc.wantSAT, tc.wantSmart)
+			}
+			if r.execErr != tc.wantErr {
+				t.Errorf("execErr = %q, want %q", r.execErr, tc.wantErr)
+			}
+			if !strings.HasPrefix(r.satExecErr, tc.wantSATEr) || (tc.wantSATEr == "") != (r.satExecErr == "") {
+				t.Errorf("satExecErr = %q, want prefix %q", r.satExecErr, tc.wantSATEr)
+			}
+			if !tc.wantSmart && r.model != "" {
+				t.Errorf("unreadable drive carries model %q", r.model)
+			}
+
+			out := captureDriveResult(t, r)
+			t.Logf("--discover output:%s", out)
+			for _, want := range tc.wantOut {
+				if !strings.Contains(out, want) {
+					t.Errorf("output missing %q:\n%s", want, out)
+				}
+			}
+
+			// Same verdict as the runtime. The SAT launch-failure fake has
+			// already removed its own execute bit, so rebuild it.
+			if logPath != "" {
+				fake, _ = tc.smartctl(t)
+			}
+			rtReadable, rtSAT := runtimeVerdict(t, fake, tc.protocol)
+			if rtReadable != (r.smartOK || r.satOK) || rtSAT != r.satOK {
+				t.Errorf("runtime readable=%v viaSAT=%v, discover readable=%v viaSAT=%v",
+					rtReadable, rtSAT, r.smartOK || r.satOK, r.satOK)
+			}
+		})
+	}
+}
+
+// smartctlExecErrorText relies on runSmartctl's own wording for a timeout.
+// Pin it here so a change to that message is caught where it matters.
+func TestSmartctlExecErrorTextMatchesRunSmartctl(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a shell script as a fake smartctl")
+	}
+	shortenSmartctlTimeout(t)
+	fake, _ := writeFakeSmartctlFailing(t, "hang", "0")
+	_, code, err := runSmartctl(fake, []string{"--json", "-a", "/dev/sda"})
+	if err == nil || code != -1 {
+		t.Fatalf("runSmartctl = (%d, %v), want a timeout error", code, err)
+	}
+	if got, want := smartctlExecErrorText(err), "smartctl timed out after 200ms (device may be unresponsive)"; got != want {
+		t.Errorf("timeout text = %q, want %q", got, want)
+	}
+	_, _, err = runSmartctl("/nonexistent/smartctl", nil)
+	if got := smartctlExecErrorText(err); !strings.HasPrefix(got, "smartctl did not run (") {
+		t.Errorf("launch failure text = %q", got)
+	}
 }
