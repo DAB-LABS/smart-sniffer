@@ -129,11 +129,6 @@ smartha-agent --discover
 That probes every drive the OS exposes and says what the agent will see at
 runtime. Paste its output into an issue if you need help.
 
-One known quirk: on a drive that supports SMART only partly (common on cheap
-SSDs), `--discover` can report "could not read SMART data" even though the
-agent reads it fine. If the drive appears in `/api/drives`, trust that. This
-will be fixed in a future agent update.
-
 ## Step 6: Add it in Home Assistant
 
 Install the integration through HACS as normal, then add it pointing at the
