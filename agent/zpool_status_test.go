@@ -332,3 +332,30 @@ func TestParseNiceNum(t *testing.T) {
 		}
 	}
 }
+
+// The integration's tests read tests/fixtures/pools, which must be exactly what
+// this agent serves at /api/pools for the same zpool fixtures.
+func TestZpoolIntegrationFixturesMatchAgentOutput(t *testing.T) {
+	for stem := range expected {
+		pools, err := parseZpoolStatusJSON(readFixture(t, stem+".json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		served, err := json.Marshal(pools)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := os.ReadFile(filepath.Join("..", "tests", "fixtures", "pools", stem+".json"))
+		if err != nil {
+			t.Fatalf("integration fixture for %s: %v", stem, err)
+		}
+		var want, got any
+		if err := json.Unmarshal(raw, &want); err != nil {
+			t.Fatal(err)
+		}
+		json.Unmarshal(served, &got)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("tests/fixtures/pools/%s.json differs from what the agent serves", stem)
+		}
+	}
+}
