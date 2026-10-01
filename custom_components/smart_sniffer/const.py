@@ -37,5 +37,10 @@ FILESYSTEMS_KEY = "_filesystems"
 # advertise pools, None when it does but the fetch failed.
 POOLS_KEY = "_pools"
 
+# Names of the registered ZFS pools the agent's last pool list left out
+# (exported, or failed to import): a sorted list, [] when none or when the
+# agent does not advertise pools, None when the pool fetch failed.
+POOLS_MISSING_KEY = "_pools_missing"
+
 # Service name for the get_drive_data action.
 SERVICE_GET_DRIVE_DATA = "get_drive_data"

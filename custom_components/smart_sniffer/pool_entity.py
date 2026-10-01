@@ -4,7 +4,9 @@ One Home Assistant device per pool, named "ZFS pool <name>", nested under the
 agent device the same way the drive and Disk Usage devices are. The pool's
 entities read their pool out of the coordinator's ``_pools`` list on every
 update, and go unavailable when the agent stops reporting the pool or the last
-pool fetch failed.
+pool fetch failed. A missing pool (registered, but left out of a pool list that
+was read) keeps its State and Problem sensors, which say so; the rest go
+unavailable, because nothing is known about them.
 """
 
 from __future__ import annotations
@@ -16,7 +18,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import SmartSnifferCoordinator
 from .device_link import agent_link
-from .pool_health import find_pool, pool_identifier
+from .pool_health import find_pool, is_missing, pool_identifier
 
 
 class ZfsPoolEntity(CoordinatorEntity[SmartSnifferCoordinator]):
@@ -44,5 +46,20 @@ class ZfsPoolEntity(CoordinatorEntity[SmartSnifferCoordinator]):
         return find_pool(self.coordinator.data, self._pool_name)
 
     @property
+    def _missing(self) -> bool:
+        return is_missing(self.coordinator.data, self._pool_name)
+
+    @property
     def available(self) -> bool:
         return super().available and self._pool is not None
+
+
+class ZfsPoolMissingAwareEntity(ZfsPoolEntity):
+    """A pool entity that stays available, and says so, when the pool is missing."""
+
+    @property
+    def available(self) -> bool:
+        # The coordinator's availability (agent reachable), skipping the
+        # pool-present rule of ZfsPoolEntity.
+        coordinator_ok = super(ZfsPoolEntity, self).available
+        return coordinator_ok and (self._pool is not None or self._missing)

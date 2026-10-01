@@ -176,6 +176,11 @@ async def async_remove_config_entry_device(
 
     if decision.allowed:
         _LOGGER.info("Removing device %s: %s", name, decision.reason)
+        # A removed pool device is a pool gone on purpose: dismiss its
+        # notification and never report it missing again.
+        pool = refusal_placeholders(device_entry.identifiers, config_entry.entry_id).get("pool")
+        if pool is not None and coordinator is not None:
+            coordinator.forget_pool(pool)
         return True
 
     _LOGGER.warning("Refusing to remove device %s: %s", name, decision.reason)

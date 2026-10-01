@@ -38,8 +38,14 @@ from .attention import _has_usable_smart_data, coerce_smart_data
 from .const import CONF_TOKEN, DOMAIN
 from .device_link import agent_link
 from .coordinator import AgentHealthCoordinator, SmartSnifferCoordinator
-from .pool_entity import ZfsPoolEntity
-from .pool_health import data_errors, pool_problems, reported_pools
+from .pool_entity import ZfsPoolEntity, ZfsPoolMissingAwareEntity
+from .pool_health import (
+    MISSING_REASON,
+    data_errors,
+    pool_names_for_setup,
+    pool_problems,
+    problem_devices,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -119,10 +125,11 @@ async def async_setup_entry(
         entities.append(SmartSnifferHealthSensor(coordinator, drive_id, drive_data))
         entities.append(DriveStandbySensor(coordinator, drive_id, drive_data))
 
-    # ZFS pool problem sensors (one device per pool, GH #50).
-    for pool in reported_pools(coordinator.data) or []:
-        entities.append(ZfsPoolDataErrorsSensor(coordinator, pool["name"]))
-        entities.append(ZfsPoolProblemSensor(coordinator, pool["name"]))
+    # ZFS pool problem sensors (one device per pool, GH #50), for every pool
+    # reported now and every pool device already registered.
+    for name in pool_names_for_setup(coordinator.data, coordinator.registered_pool_names()):
+        entities.append(ZfsPoolDataErrorsSensor(coordinator, name))
+        entities.append(ZfsPoolProblemSensor(coordinator, name))
 
     # Agent-level connectivity and auth sensors.
     entities.append(AgentStatusBinarySensor(health_coordinator, entry))
@@ -292,12 +299,14 @@ class ZfsPoolDataErrorsSensor(ZfsPoolEntity, BinarySensorEntity):
         return {"data_errors": data_errors(pool)} if pool is not None else {}
 
 
-class ZfsPoolProblemSensor(ZfsPoolEntity, BinarySensorEntity):
+class ZfsPoolProblemSensor(ZfsPoolMissingAwareEntity, BinarySensorEntity):
     """On when the pool is unhealthy, with the reasons as an attribute.
 
     Unhealthy means a state other than ONLINE, any read, write or checksum
-    error, or data errors. The status text ("Some supported and requested
-    features are not enabled") never counts. See pool_health.py.
+    error, data errors, or a problem vdev; the problem vdevs are named in the
+    reasons and listed in full under problem_devices. The status text ("Some
+    supported and requested features are not enabled") never counts. Also on
+    when the pool is missing. See pool_health.py.
     """
 
     _attr_device_class = BinarySensorDeviceClass.PROBLEM
@@ -308,17 +317,22 @@ class ZfsPoolProblemSensor(ZfsPoolEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool | None:
         pool = self._pool
-        return bool(pool_problems(pool)) if pool is not None else None
+        if pool is not None:
+            return bool(pool_problems(pool))
+        return True if self._missing else None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         pool = self._pool
         if pool is None:
+            if self._missing:
+                return {"reasons": [MISSING_REASON], "issue_count": 1, "problem_devices": []}
             return {}
         reasons = pool_problems(pool)
         return {
             "reasons": reasons if reasons else ["No issues detected"],
             "issue_count": len(reasons),
+            "problem_devices": problem_devices(pool),
         }
 
 

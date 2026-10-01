@@ -24,7 +24,9 @@ Notification IDs are stable: smart_sniffer_attention_{drive_id}
 
 ZFS pools (GH #50) follow the same rules through pool_health.py: a pool that
 goes from healthy to unhealthy raises a notification, a change in its reasons
-updates it, and recovery or the pool disappearing dismisses it. IDs are
+updates it, and recovery dismisses it. A registered pool the agent stops
+listing (exported, or failed to import) is missing, and raises a notification
+under the same id, even on the first poll. IDs are
 smart_sniffer_pool_{entry_id}_{pool name}.
 """
 
@@ -44,6 +46,7 @@ from homeassistant.components.persistent_notification import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.issue_registry import (
     IssueSeverity,
@@ -69,12 +72,17 @@ from .const import (
     DOMAIN,
     MIN_AGENT_VERSION,
     POOLS_KEY,
+    POOLS_MISSING_KEY,
 )
 from .pool_health import (
+    advertises_pools,
+    build_missing_notification as build_pool_missing_notification,
     build_notification as build_pool_notification,
     fetch_pools,
+    missing_pools,
     notification_actions as pool_notification_actions,
     notification_id as pool_notification_id,
+    registered_pool_names as pool_names_in_registry,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -203,9 +211,11 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         Returns a dict keyed by drive ID, plus a ``_filesystems`` key
         containing a list of filesystem info dicts (empty list when the
-        agent is older or has no filesystems configured), and a ``_pools``
-        key with the agent's ZFS pools (empty list when the agent does not
-        advertise them, None when it does and the fetch failed).
+        agent is older or has no filesystems configured), a ``_pools`` key
+        with the agent's ZFS pools (empty list when the agent does not
+        advertise them, None when it does and the fetch failed), and a
+        ``_pools_missing`` key naming the registered pools that list left out
+        (None when it could not be read).
 
         After fetching, evaluates attention states and fires/dismisses
         notifications as needed.
@@ -291,8 +301,10 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     _LOGGER.debug("SMART Sniffer: %s fetch failed, skipping", path)
                     return None
 
-            result[POOLS_KEY] = (
-                await fetch_pools(health, _get_json) if health is not None else None
+            pools = await fetch_pools(health, _get_json) if health is not None else None
+            result[POOLS_KEY] = pools
+            result[POOLS_MISSING_KEY] = missing_pools(
+                advertises_pools(health), pools, self.registered_pool_names()
             )
 
         except aiohttp.ClientError as err:
@@ -301,26 +313,58 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ) from err
 
         await self._handle_attention_notifications(result)
-        self._handle_pool_notifications(result.get(POOLS_KEY))
+        self._handle_pool_notifications(
+            result.get(POOLS_KEY), result.get(POOLS_MISSING_KEY)
+        )
         return result
 
-    def _handle_pool_notifications(self, pools: list[dict[str, Any]] | None) -> None:
+    def registered_pool_names(self) -> list[str]:
+        """Pools with a device in the registry for this config entry.
+
+        This is what "seen before" means for a pool: its device was created
+        when its entities were. Removing the device is how a user tells the
+        integration a pool is gone on purpose, so it is read fresh each poll.
+        """
+        entry_id = self.config_entry.entry_id
+        devices = dr.async_entries_for_config_entry(dr.async_get(self.hass), entry_id)
+        return pool_names_in_registry((device.identifiers for device in devices), entry_id)
+
+    def forget_pool(self, name: str) -> None:
+        """Drop a pool whose device the user removed: dismiss its notification
+        and forget its state, so it is never reported missing again."""
+        pn_dismiss(self.hass, pool_notification_id(self.config_entry.entry_id, name))
+        self._prev_pool_reasons.pop(name, None)
+
+    def _handle_pool_notifications(
+        self,
+        pools: list[dict[str, Any]] | None,
+        missing: list[str] | None,
+    ) -> None:
         """Raise, update or dismiss ZFS pool notifications after a poll."""
         actions, self._prev_pool_reasons = pool_notification_actions(
-            self._prev_pool_reasons, pools
+            self._prev_pool_reasons, pools, missing
         )
         entry_id = self.config_entry.entry_id
-        for action, name, reasons in actions:
-            notif_id = pool_notification_id(entry_id, name)
-            if action == "dismiss":
-                _LOGGER.info("SMART Sniffer: ZFS pool %s attention cleared", name)
+        for action in actions:
+            notif_id = pool_notification_id(entry_id, action.name)
+            if action.kind == "dismiss":
+                _LOGGER.info("SMART Sniffer: ZFS pool %s attention cleared", action.name)
                 pn_dismiss(self.hass, notif_id)
                 continue
-            _LOGGER.warning(
-                "SMART Sniffer: ZFS pool %s needs attention: %s",
-                name, "; ".join(reasons),
-            )
-            title, message = build_pool_notification(name, self._hostname, reasons)
+            if action.kind == "missing":
+                _LOGGER.warning(
+                    "SMART Sniffer: ZFS pool %s is no longer reported by the agent",
+                    action.name,
+                )
+                title, message = build_pool_missing_notification(action.name, self._hostname)
+            else:
+                _LOGGER.warning(
+                    "SMART Sniffer: ZFS pool %s needs attention: %s",
+                    action.name, "; ".join(action.reasons),
+                )
+                title, message = build_pool_notification(
+                    action.name, self._hostname, action.pool_lines, action.device_lines
+                )
             pn_create(self.hass, message=message, title=title, notification_id=notif_id)
 
     async def _handle_attention_notifications(

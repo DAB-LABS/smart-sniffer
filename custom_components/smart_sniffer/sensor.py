@@ -43,13 +43,14 @@ from .attention import (
 from .const import CONF_FORCE_UPDATE, DEFAULT_FORCE_UPDATE, DOMAIN, FILESYSTEMS_KEY
 from .device_link import agent_link
 from .coordinator import AgentHealthCoordinator, SmartSnifferCoordinator
-from .pool_entity import ZfsPoolEntity
+from .pool_entity import ZfsPoolEntity, ZfsPoolMissingAwareEntity
 from .pool_health import (
     ERROR_KEYS,
     POOL_STATES,
+    STATE_MISSING,
     error_total,
     last_scrub_end,
-    reported_pools,
+    pool_names_for_setup,
     scrub_attributes,
     state_option,
 )
@@ -680,8 +681,9 @@ async def async_setup_entry(
         )
 
     # --- ZFS pool sensors (one device per pool, GH #50) ---
-    for pool in reported_pools(coordinator.data) or []:
-        name = pool["name"]
+    # Every pool reported now and every pool device already registered, so a
+    # pool that failed to import before Home Assistant started still shows.
+    for name in pool_names_for_setup(coordinator.data, coordinator.registered_pool_names()):
         entities.append(ZfsPoolStateSensor(coordinator, name))
         for key in ERROR_KEYS:
             entities.append(ZfsPoolErrorSensor(coordinator, name, key))
@@ -1155,8 +1157,11 @@ class SmartSnifferFilesystemSensor(
 # ZFS pool sensors (GH #50)
 # ---------------------------------------------------------------------------
 
-class ZfsPoolStateSensor(ZfsPoolEntity, SensorEntity):
-    """The pool's state as zpool reports it, with its status text."""
+class ZfsPoolStateSensor(ZfsPoolMissingAwareEntity, SensorEntity):
+    """The pool's state as zpool reports it, with its status text.
+
+    MISSING when the agent's pool list no longer includes the pool.
+    """
 
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = POOL_STATES
@@ -1168,7 +1173,9 @@ class ZfsPoolStateSensor(ZfsPoolEntity, SensorEntity):
     @property
     def native_value(self) -> str | None:
         pool = self._pool
-        return state_option(pool) if pool is not None else None
+        if pool is not None:
+            return state_option(pool)
+        return STATE_MISSING if self._missing else None
 
     @property
     def icon(self) -> str:

@@ -136,7 +136,7 @@
       "message": "This is the SMART Sniffer agent for {host}. To remove it and all of its drives, delete the {host} entry under Settings, Devices & Services, SMART Sniffer."
     },
     "remove_agent_offline": {
-      "message": "The agent on {host} isn't responding, so SMART Sniffer can't tell whether this drive is really gone. Try again once the agent is back online."
+      "message": "The agent on {host} isn't responding, so SMART Sniffer can't tell whether this device is really gone. Try again once the agent is back online."
     },
     "remove_disk_usage": {
       "message": "Disk usage for {host} is still being reported. To remove it, remove the \"filesystems\" section from the agent's config."
