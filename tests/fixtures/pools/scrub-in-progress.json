@@ -13,6 +13,7 @@
     "scrub_in_progress": true,
     "last_scrub_end": null,
     "last_scrub_repaired": null,
-    "last_scrub_errors": null
+    "last_scrub_errors": null,
+    "problem_vdevs": []
   }
 ]

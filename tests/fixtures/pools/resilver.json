@@ -13,6 +13,32 @@
     "scrub_in_progress": false,
     "last_scrub_end": null,
     "last_scrub_repaired": null,
-    "last_scrub_errors": null
+    "last_scrub_errors": null,
+    "problem_vdevs": [
+      {
+        "name": "mirror-0",
+        "type": "mirror",
+        "state": "DEGRADED",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0
+      },
+      {
+        "name": "replacing-1",
+        "type": "replacing",
+        "state": "DEGRADED",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0
+      },
+      {
+        "name": "ata-ST4000VN008-2DR166_ZDH0002",
+        "type": "disk",
+        "state": "FAULTED",
+        "read_errors": 0,
+        "write_errors": 37,
+        "checksum_errors": 0
+      }
+    ]
   }
 ]

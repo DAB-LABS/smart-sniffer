@@ -1,0 +1,45 @@
+  pool: fast
+ state: ONLINE
+  scan: scrub repaired 0B in 00:08:51 with 0 errors on Sun Sep 13 00:32:52 2026
+config:
+
+	NAME                                         STATE     READ WRITE CKSUM
+	fast                                         ONLINE       0     0     0
+	  mirror-0                                   ONLINE       0     0     0
+	    nvme-Samsung_SSD_990_PRO_2TB_S7DNNJ0001  ONLINE       0     0     0
+	    nvme-Samsung_SSD_990_PRO_2TB_S7DNNJ0002  ONLINE       0     0     0
+	spares
+	  sdh                                        UNAVAIL   cannot open
+
+errors: No known data errors
+
+  pool: vault
+ state: DEGRADED
+status: One or more devices are faulted in response to persistent errors.
+	Sufficient replicas exist for the pool to continue functioning in a
+	degraded state.
+action: Replace the faulted device, or use 'zpool clear' to mark the device
+	repaired.
+  scan: resilvered 3.62T in 06:10:44 with 0 errors on Tue Sep 29 11:42:07 2026
+config:
+
+	NAME                                                      STATE     READ WRITE CKSUM
+	vault                                                     DEGRADED     0     0     0
+	  raidz1-0                                                DEGRADED     0     0     0
+	    sda                                                   ONLINE       0     0     0
+	    sdb                                                   ONLINE       0     0     5
+	    spare-2                                               DEGRADED     0     0     0
+	      sdc                                                 FAULTED     12     0     0  too many errors
+	      sde                                                 ONLINE       0     0     0
+	    sdd                                                   ONLINE       0     0     0
+	logs	
+	  mirror-1                                                ONLINE       0     0     0
+	    nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0002-part1  ONLINE       0     0     0
+	    nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0003-part1  ONLINE       0     0     0
+	cache
+	  nvme-WD_Red_SN700_500GB_22002                           ONLINE       0     0     0
+	spares
+	  sde                                                     INUSE     currently in use
+	  sdf                                                     AVAIL   
+
+errors: No known data errors

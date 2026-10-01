@@ -1,0 +1,337 @@
+{
+    "output_version": {
+        "command": "zpool status",
+        "vers_major": 0,
+        "vers_minor": 1
+    },
+    "pools": {
+        "fast": {
+            "name": "fast",
+            "state": "ONLINE",
+            "pool_guid": 635248313619925059,
+            "txg": 4114437,
+            "spa_version": 5000,
+            "zpl_version": 5,
+            "scan_stats": {
+                "function": "SCRUB",
+                "state": "FINISHED",
+                "start_time": 1789259041,
+                "end_time": 1789259572,
+                "to_examine": 0,
+                "examined": 0,
+                "skipped": 0,
+                "processed": 0,
+                "errors": 0,
+                "bytes_per_scan": 0,
+                "pass_start": 0,
+                "scrub_pause": 0,
+                "scrub_spent_paused": 0,
+                "issued_bytes_per_scan": 0,
+                "issued": 0
+            },
+            "vdevs": {
+                "fast": {
+                    "name": "fast",
+                    "vdev_type": "root",
+                    "guid": 3568430766082930823,
+                    "class": "normal",
+                    "state": "ONLINE",
+                    "alloc_space": 1211180777472,
+                    "total_space": 3985729650688,
+                    "def_space": 3985729650688,
+                    "read_errors": 0,
+                    "write_errors": 0,
+                    "checksum_errors": 0,
+                    "vdevs": {
+                        "mirror-0": {
+                            "name": "mirror-0",
+                            "vdev_type": "mirror",
+                            "guid": 8647906917440785531,
+                            "class": "normal",
+                            "state": "ONLINE",
+                            "alloc_space": 1211180777472,
+                            "total_space": 3985729650688,
+                            "def_space": 3985729650688,
+                            "read_errors": 0,
+                            "write_errors": 0,
+                            "checksum_errors": 0,
+                            "vdevs": {
+                                "nvme-Samsung_SSD_990_PRO_2TB_S7DNNJ0001": {
+                                    "name": "nvme-Samsung_SSD_990_PRO_2TB_S7DNNJ0001",
+                                    "vdev_type": "disk",
+                                    "guid": 4265044707941947927,
+                                    "path": "/dev/disk/by-id/nvme-Samsung_SSD_990_PRO_2TB_S7DNNJ0001-part1",
+                                    "devid": "nvme-Samsung_SSD_990_PRO_2TB_S7DNNJ0001-part1",
+                                    "class": "normal",
+                                    "state": "ONLINE",
+                                    "rep_dev_size": 4000776830976,
+                                    "phys_space": 4000787030016,
+                                    "read_errors": 0,
+                                    "write_errors": 0,
+                                    "checksum_errors": 0,
+                                    "slow_ios": 0
+                                },
+                                "nvme-Samsung_SSD_990_PRO_2TB_S7DNNJ0002": {
+                                    "name": "nvme-Samsung_SSD_990_PRO_2TB_S7DNNJ0002",
+                                    "vdev_type": "disk",
+                                    "guid": 4779920944842973211,
+                                    "path": "/dev/disk/by-id/nvme-Samsung_SSD_990_PRO_2TB_S7DNNJ0002-part1",
+                                    "devid": "nvme-Samsung_SSD_990_PRO_2TB_S7DNNJ0002-part1",
+                                    "class": "normal",
+                                    "state": "ONLINE",
+                                    "rep_dev_size": 4000776830976,
+                                    "phys_space": 4000787030016,
+                                    "read_errors": 0,
+                                    "write_errors": 0,
+                                    "checksum_errors": 0,
+                                    "slow_ios": 0
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "spares": {
+                "sdh": {
+                    "name": "sdh",
+                    "vdev_type": "disk",
+                    "guid": 6177968992360236817,
+                    "path": "/dev/sdh1",
+                    "class": "spare",
+                    "state": "UNAVAIL",
+                    "aux": "OPEN_FAILED"
+                }
+            },
+            "error_count": 0
+        },
+        "vault": {
+            "name": "vault",
+            "state": "DEGRADED",
+            "pool_guid": 9172319243914834859,
+            "txg": 4114437,
+            "spa_version": 5000,
+            "zpl_version": 5,
+            "status": "One or more devices are faulted in response to persistent errors.\n\tSufficient replicas exist for the pool to continue functioning in a\n\tdegraded state.\n",
+            "action": "Replace the faulted device, or use 'zpool clear' to mark the device\n\trepaired.\n",
+            "scan_stats": {
+                "function": "RESILVER",
+                "state": "FINISHED",
+                "start_time": 1790659883,
+                "end_time": 1790682127,
+                "to_examine": 0,
+                "examined": 0,
+                "skipped": 0,
+                "processed": 3980177387765,
+                "errors": 0,
+                "bytes_per_scan": 0,
+                "pass_start": 0,
+                "scrub_pause": 0,
+                "scrub_spent_paused": 0,
+                "issued_bytes_per_scan": 0,
+                "issued": 0
+            },
+            "vdevs": {
+                "vault": {
+                    "name": "vault",
+                    "vdev_type": "root",
+                    "guid": 6054200148394707311,
+                    "class": "normal",
+                    "state": "DEGRADED",
+                    "alloc_space": 1211180777472,
+                    "total_space": 3985729650688,
+                    "def_space": 3985729650688,
+                    "read_errors": 0,
+                    "write_errors": 0,
+                    "checksum_errors": 0,
+                    "vdevs": {
+                        "raidz1-0": {
+                            "name": "raidz1-0",
+                            "vdev_type": "raidz",
+                            "guid": 8207476785169185313,
+                            "class": "normal",
+                            "state": "DEGRADED",
+                            "alloc_space": 1211180777472,
+                            "total_space": 3985729650688,
+                            "def_space": 3985729650688,
+                            "read_errors": 0,
+                            "write_errors": 0,
+                            "checksum_errors": 0,
+                            "vdevs": {
+                                "sda": {
+                                    "name": "sda",
+                                    "vdev_type": "disk",
+                                    "guid": 5876022684672434085,
+                                    "path": "/dev/sda1",
+                                    "class": "normal",
+                                    "state": "ONLINE",
+                                    "rep_dev_size": 4000776830976,
+                                    "phys_space": 4000787030016,
+                                    "read_errors": 0,
+                                    "write_errors": 0,
+                                    "checksum_errors": 0,
+                                    "slow_ios": 0
+                                },
+                                "sdb": {
+                                    "name": "sdb",
+                                    "vdev_type": "disk",
+                                    "guid": 6766146073222996089,
+                                    "path": "/dev/sdb1",
+                                    "class": "normal",
+                                    "state": "ONLINE",
+                                    "rep_dev_size": 4000776830976,
+                                    "phys_space": 4000787030016,
+                                    "read_errors": 0,
+                                    "write_errors": 0,
+                                    "checksum_errors": 5,
+                                    "slow_ios": 0
+                                },
+                                "spare-2": {
+                                    "name": "spare-2",
+                                    "vdev_type": "spare",
+                                    "guid": 702624261116839441,
+                                    "class": "normal",
+                                    "state": "DEGRADED",
+                                    "alloc_space": 1211180777472,
+                                    "total_space": 3985729650688,
+                                    "def_space": 3985729650688,
+                                    "read_errors": 0,
+                                    "write_errors": 0,
+                                    "checksum_errors": 0,
+                                    "vdevs": {
+                                        "sdc": {
+                                            "name": "sdc",
+                                            "vdev_type": "disk",
+                                            "guid": 3300186568082020139,
+                                            "path": "/dev/sdc1",
+                                            "class": "normal",
+                                            "state": "FAULTED",
+                                            "rep_dev_size": 4000776830976,
+                                            "phys_space": 4000787030016,
+                                            "read_errors": 12,
+                                            "write_errors": 0,
+                                            "checksum_errors": 0,
+                                            "slow_ios": 0,
+                                            "aux": "ERR_EXCEEDED"
+                                        },
+                                        "sde": {
+                                            "name": "sde",
+                                            "vdev_type": "disk",
+                                            "guid": 7835511690811424259,
+                                            "path": "/dev/sde1",
+                                            "class": "normal",
+                                            "state": "ONLINE",
+                                            "rep_dev_size": 4000776830976,
+                                            "phys_space": 4000787030016,
+                                            "read_errors": 0,
+                                            "write_errors": 0,
+                                            "checksum_errors": 0,
+                                            "slow_ios": 0
+                                        }
+                                    }
+                                },
+                                "sdd": {
+                                    "name": "sdd",
+                                    "vdev_type": "disk",
+                                    "guid": 2717873844995276685,
+                                    "path": "/dev/sdd1",
+                                    "class": "normal",
+                                    "state": "ONLINE",
+                                    "rep_dev_size": 4000776830976,
+                                    "phys_space": 4000787030016,
+                                    "read_errors": 0,
+                                    "write_errors": 0,
+                                    "checksum_errors": 0,
+                                    "slow_ios": 0
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "logs": {
+                "mirror-1": {
+                    "name": "mirror-1",
+                    "vdev_type": "mirror",
+                    "guid": 3904520067046478547,
+                    "class": "log",
+                    "state": "ONLINE",
+                    "alloc_space": 1211180777472,
+                    "total_space": 3985729650688,
+                    "def_space": 3985729650688,
+                    "read_errors": 0,
+                    "write_errors": 0,
+                    "checksum_errors": 0,
+                    "vdevs": {
+                        "nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0002-part1": {
+                            "name": "nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0002-part1",
+                            "vdev_type": "disk",
+                            "guid": 7948030804482937645,
+                            "path": "/dev/disk/by-id/nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0002-part1-part1",
+                            "devid": "nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0002-part1-part1",
+                            "class": "log",
+                            "state": "ONLINE",
+                            "rep_dev_size": 4000776830976,
+                            "phys_space": 4000787030016,
+                            "read_errors": 0,
+                            "write_errors": 0,
+                            "checksum_errors": 0,
+                            "slow_ios": 0
+                        },
+                        "nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0003-part1": {
+                            "name": "nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0003-part1",
+                            "vdev_type": "disk",
+                            "guid": 6561092078635327537,
+                            "path": "/dev/disk/by-id/nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0003-part1-part1",
+                            "devid": "nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0003-part1-part1",
+                            "class": "log",
+                            "state": "ONLINE",
+                            "rep_dev_size": 4000776830976,
+                            "phys_space": 4000787030016,
+                            "read_errors": 0,
+                            "write_errors": 0,
+                            "checksum_errors": 0,
+                            "slow_ios": 0
+                        }
+                    }
+                }
+            },
+            "l2cache": {
+                "nvme-WD_Red_SN700_500GB_22002": {
+                    "name": "nvme-WD_Red_SN700_500GB_22002",
+                    "vdev_type": "disk",
+                    "guid": 2963912536814363039,
+                    "path": "/dev/disk/by-id/nvme-WD_Red_SN700_500GB_22002-part1",
+                    "devid": "nvme-WD_Red_SN700_500GB_22002-part1",
+                    "class": "l2cache",
+                    "state": "ONLINE",
+                    "rep_dev_size": 4000776830976,
+                    "phys_space": 4000787030016,
+                    "read_errors": 0,
+                    "write_errors": 0,
+                    "checksum_errors": 0,
+                    "slow_ios": 0
+                }
+            },
+            "spares": {
+                "sde": {
+                    "name": "sde",
+                    "vdev_type": "disk",
+                    "guid": 7519699056992947139,
+                    "path": "/dev/sde1",
+                    "class": "spare",
+                    "aux": "SPARED",
+                    "state": "INUSE"
+                },
+                "sdf": {
+                    "name": "sdf",
+                    "vdev_type": "disk",
+                    "guid": 8359748668056977857,
+                    "path": "/dev/sdf1",
+                    "class": "spare",
+                    "state": "AVAIL"
+                }
+            },
+            "error_count": 0
+        }
+    }
+}

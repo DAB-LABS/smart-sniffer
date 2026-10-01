@@ -37,6 +37,16 @@ import (
 //	never-scrubbed.*       CONSTRUCTED. Single disk, no scan record.
 //	resilver.*             CONSTRUCTED. A FAULTED disk being replaced; the scan
 //	                       record is the resilver, so the last scrub is unknown.
+//	spares.*               CONSTRUCTED. Two pools. vault: a FAULTED disk under a
+//	                       DEGRADED raidz1, stood in for by a hot spare that has
+//	                       finished resilvering (spare-2), a second disk with
+//	                       only checksum errors, a log mirror, a cache device, a
+//	                       spare INUSE and one AVAIL. fast: ONLINE with no
+//	                       errors, its only spare UNAVAIL (libzfs_status.c does
+//	                       not check spares, so zpool prints no status line).
+//	                       Spare rows follow print_spares() and the isspare
+//	                       branch of print_status_config(): a name and a state,
+//	                       no counters.
 //
 // The constructed text follows status_callback(), print_status_config() and
 // print_scan_scrub_resilver_status() at zfs-2.3.4 (the same at 2.2.7 and
@@ -70,7 +80,7 @@ func scrubbed(end string, repaired, errs uint64) func(*PoolInfo) {
 }
 
 func pool(name, state string, opts ...func(*PoolInfo)) PoolInfo {
-	p := PoolInfo{Name: name, State: state, DataErrors: up(0)}
+	p := PoolInfo{Name: name, State: state, DataErrors: up(0), ProblemVdevs: []ProblemVdev{}}
 	for _, o := range opts {
 		o(&p)
 	}
@@ -83,6 +93,14 @@ func withStatus(status, action string) func(*PoolInfo) {
 
 func withErrors(r, w, c uint64) func(*PoolInfo) {
 	return func(p *PoolInfo) { p.ReadErrors, p.WriteErrors, p.ChecksumErrors = r, w, c }
+}
+
+func withProblems(vdevs ...ProblemVdev) func(*PoolInfo) {
+	return func(p *PoolInfo) { p.ProblemVdevs = vdevs }
+}
+
+func pv(name, vtype, state string, r, w, c uint64) ProblemVdev {
+	return ProblemVdev{Name: name, Type: vtype, State: state, ReadErrors: r, WriteErrors: w, ChecksumErrors: c}
 }
 
 // expected is what both readers must produce for each fixture.
@@ -99,7 +117,12 @@ var expected = map[string][]PoolInfo{
 					"exist for the pool to continue functioning in a degraded state.",
 				"Replace the faulted device, or use 'zpool clear' to mark the device repaired."),
 			withErrors(18, 3, 2),
-			scrubbed("2026-09-27T05:36:09Z", 1572864, 0)),
+			scrubbed("2026-09-27T05:36:09Z", 1572864, 0),
+			withProblems(
+				pv("raidz2-0", "raidz", "DEGRADED", 0, 0, 0),
+				pv("ata-WDC_WD80EFAX-68KNBN0_VAGX0003", "disk", "FAULTED", 18, 3, 0),
+				pv("ata-WDC_WD80EFAX-68KNBN0_VAGX0005", "disk", "ONLINE", 0, 0, 2),
+			)),
 	},
 	"data-errors": {
 		pool("backup", "ONLINE",
@@ -109,7 +132,12 @@ var expected = map[string][]PoolInfo{
 				"Restore the file in question if possible. Otherwise restore the entire pool from backup."),
 			withErrors(0, 0, 16),
 			scrubbed("2026-09-13T00:24:02Z", 0, 2),
-			func(p *PoolInfo) { p.DataErrors = up(2) }),
+			func(p *PoolInfo) { p.DataErrors = up(2) },
+			withProblems(
+				pv("mirror-0", "mirror", "ONLINE", 0, 0, 4),
+				pv("ata-ST2000DM008-2FR102_ZFL0001", "disk", "ONLINE", 0, 0, 4),
+				pv("ata-ST2000DM008-2FR102_ZFL0002", "disk", "ONLINE", 0, 0, 4),
+			)),
 	},
 	"scrub-in-progress": {
 		pool("archive", "ONLINE", func(p *PoolInfo) {
@@ -126,7 +154,30 @@ var expected = map[string][]PoolInfo{
 					"function, possibly in a degraded state.",
 				"Wait for the resilver to complete."),
 			withErrors(0, 37, 0),
-			func(p *PoolInfo) { p.ScanFunction, p.ScanState = sp("RESILVER"), sp("SCANNING") }),
+			func(p *PoolInfo) { p.ScanFunction, p.ScanState = sp("RESILVER"), sp("SCANNING") },
+			withProblems(
+				pv("mirror-0", "mirror", "DEGRADED", 0, 0, 0),
+				pv("replacing-1", "replacing", "DEGRADED", 0, 0, 0),
+				pv("ata-ST4000VN008-2DR166_ZDH0002", "disk", "FAULTED", 0, 37, 0),
+			)),
+	},
+	"spares": {
+		pool("fast", "ONLINE",
+			scrubbed("2026-09-13T00:32:52Z", 0, 0),
+			withProblems(pv("sdh", "disk", "UNAVAIL", 0, 0, 0))),
+		pool("vault", "DEGRADED",
+			withStatus(
+				"One or more devices are faulted in response to persistent errors. Sufficient replicas "+
+					"exist for the pool to continue functioning in a degraded state.",
+				"Replace the faulted device, or use 'zpool clear' to mark the device repaired."),
+			withErrors(12, 0, 5),
+			func(p *PoolInfo) { p.ScanFunction, p.ScanState = sp("RESILVER"), sp("FINISHED") },
+			withProblems(
+				pv("raidz1-0", "raidz", "DEGRADED", 0, 0, 0),
+				pv("sdb", "disk", "ONLINE", 0, 0, 5),
+				pv("spare-2", "spare", "DEGRADED", 0, 0, 0),
+				pv("sdc", "disk", "FAULTED", 12, 0, 0),
+			)),
 	},
 }
 
@@ -216,6 +267,97 @@ func TestZpoolTotalsComeFromEveryVdev(t *testing.T) {
 	}
 	if got := pools[0]; got.ReadErrors != 18 || got.WriteErrors != 3 || got.ChecksumErrors != 2 {
 		t.Errorf("totals %d/%d/%d, want 18/3/2", got.ReadErrors, got.WriteErrors, got.ChecksumErrors)
+	}
+}
+
+// Healthy pools list no problem vdevs, as [] and never null.
+func TestZpoolHealthyPoolsListNoProblemVdevs(t *testing.T) {
+	for _, stem := range []string{"gh50-three-pools", "scrub-in-progress", "never-scrubbed"} {
+		for _, form := range []string{".json", ".txt"} {
+			var pools []PoolInfo
+			var err error
+			if form == ".json" {
+				pools, err = parseZpoolStatusJSON(readFixture(t, stem+form))
+			} else {
+				pools, err = parseZpoolStatusText(readFixture(t, stem+form))
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, p := range pools {
+				if p.ProblemVdevs == nil || len(p.ProblemVdevs) != 0 {
+					t.Errorf("%s%s: %s problem_vdevs = %#v, want []", stem, form, p.Name, p.ProblemVdevs)
+				}
+				b, _ := json.Marshal(p)
+				if !strings.Contains(string(b), `"problem_vdevs":[]`) {
+					t.Errorf("%s%s: %s serves %s", stem, form, p.Name, b)
+				}
+			}
+		}
+	}
+}
+
+// A spare standing in for a disk (INUSE) and one waiting (AVAIL) are not
+// problems; the disk the spare replaced is, and so is a spare that cannot be
+// opened. sde is in the vault pool twice: in the tree under spare-2, ONLINE,
+// and in the spares list, INUSE. Neither is listed.
+func TestZpoolSparesInUseAndAvailableAreNotProblems(t *testing.T) {
+	for _, form := range []string{".json", ".txt"} {
+		var pools []PoolInfo
+		var err error
+		if form == ".json" {
+			pools, err = parseZpoolStatusJSON(readFixture(t, "spares"+form))
+		} else {
+			pools, err = parseZpoolStatusText(readFixture(t, "spares"+form))
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range pools {
+			for _, v := range p.ProblemVdevs {
+				if v.Name == "sde" || v.Name == "sdf" || v.State == "AVAIL" || v.State == "INUSE" {
+					t.Errorf("spares%s: %s lists %+v", form, p.Name, v)
+				}
+			}
+		}
+	}
+}
+
+// Problem vdevs come out in the order zpool wrote them, not sorted by name.
+func TestZpoolJSONProblemVdevsKeepTreeOrder(t *testing.T) {
+	in := `{"pools":{"t":{"name":"t","state":"DEGRADED","error_count":0,"vdevs":{"t":{"name":"t","vdev_type":"root","state":"DEGRADED",
+		"read_errors":0,"write_errors":0,"checksum_errors":0,"vdevs":{
+		"mirror-1":{"name":"mirror-1","vdev_type":"mirror","state":"DEGRADED","read_errors":0,"write_errors":0,"checksum_errors":0,"vdevs":{
+			"sdz":{"name":"sdz","vdev_type":"disk","state":"REMOVED","read_errors":0,"write_errors":0,"checksum_errors":0},
+			"sda":{"name":"sda","vdev_type":"disk","state":"ONLINE","read_errors":1,"write_errors":0,"checksum_errors":0}}},
+		"mirror-0":{"name":"mirror-0","vdev_type":"mirror","state":"ONLINE","read_errors":0,"write_errors":0,"checksum_errors":3}}}},
+		"logs":{"sdq":{"name":"sdq","vdev_type":"disk","state":"OFFLINE","read_errors":0,"write_errors":0,"checksum_errors":0}},
+		"spares":{"sdy":{"name":"sdy","vdev_type":"disk","state":"AVAIL"},"sdx":{"name":"sdx","vdev_type":"disk","state":"FAULTED"}}}}}`
+	pools, err := parseZpoolStatusJSON([]byte(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, v := range pools[0].ProblemVdevs {
+		names = append(names, v.Name)
+	}
+	if got, want := strings.Join(names, " "), "mirror-1 sdz sda mirror-0 sdq sdx"; got != want {
+		t.Errorf("order %q, want %q", got, want)
+	}
+}
+
+// The text form has no vdev_type; it is derived from the name zpool prints.
+func TestVdevTypeFromName(t *testing.T) {
+	for name, want := range map[string]string{
+		"mirror-0": "mirror", "raidz1-0": "raidz", "raidz3-12": "raidz", "draid2:4d:12c:1s-0": "draid",
+		"draid2-0-1": "dspare", "replacing-1": "replacing", "spare-2": "spare", "missing-3": "missing",
+		"sdb": "disk", "ata-WDC_WD80EFAX-68KNBN0_VAGX0001-part1": "disk", "nvme0n1": "disk",
+		"dm-0": "disk", "16009123456789012345": "disk", "/dev/sdb1": "disk", "/tank/file0": "file",
+		"mirror": "disk",
+	} {
+		if got := vdevTypeFromName(name); got != want {
+			t.Errorf("%s: %s, want %s", name, got, want)
+		}
 	}
 }
 

@@ -113,7 +113,7 @@
                     "guid": 7293085335892066125,
                     "path": "/dev/disk/by-id/nvme-WD_Red_SN700_500GB_22001-part1",
                     "devid": "nvme-WD_Red_SN700_500GB_22001-part1",
-                    "class": "normal",
+                    "class": "l2cache",
                     "state": "ONLINE",
                     "rep_dev_size": 4000776830976,
                     "phys_space": 4000787030016,

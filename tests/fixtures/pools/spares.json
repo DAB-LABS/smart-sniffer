@@ -1,0 +1,78 @@
+[
+  {
+    "name": "fast",
+    "state": "ONLINE",
+    "status": null,
+    "action": null,
+    "read_errors": 0,
+    "write_errors": 0,
+    "checksum_errors": 0,
+    "data_errors": 0,
+    "scan_function": "SCRUB",
+    "scan_state": "FINISHED",
+    "scrub_in_progress": false,
+    "last_scrub_end": "2026-09-13T00:32:52Z",
+    "last_scrub_repaired": 0,
+    "last_scrub_errors": 0,
+    "problem_vdevs": [
+      {
+        "name": "sdh",
+        "type": "disk",
+        "state": "UNAVAIL",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0
+      }
+    ]
+  },
+  {
+    "name": "vault",
+    "state": "DEGRADED",
+    "status": "One or more devices are faulted in response to persistent errors. Sufficient replicas exist for the pool to continue functioning in a degraded state.",
+    "action": "Replace the faulted device, or use 'zpool clear' to mark the device repaired.",
+    "read_errors": 12,
+    "write_errors": 0,
+    "checksum_errors": 5,
+    "data_errors": 0,
+    "scan_function": "RESILVER",
+    "scan_state": "FINISHED",
+    "scrub_in_progress": false,
+    "last_scrub_end": null,
+    "last_scrub_repaired": null,
+    "last_scrub_errors": null,
+    "problem_vdevs": [
+      {
+        "name": "raidz1-0",
+        "type": "raidz",
+        "state": "DEGRADED",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0
+      },
+      {
+        "name": "sdb",
+        "type": "disk",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 5
+      },
+      {
+        "name": "spare-2",
+        "type": "spare",
+        "state": "DEGRADED",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0
+      },
+      {
+        "name": "sdc",
+        "type": "disk",
+        "state": "FAULTED",
+        "read_errors": 12,
+        "write_errors": 0,
+        "checksum_errors": 0
+      }
+    ]
+  }
+]

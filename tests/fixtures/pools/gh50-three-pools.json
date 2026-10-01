@@ -13,7 +13,8 @@
     "scrub_in_progress": false,
     "last_scrub_end": "2026-09-01T03:05:34Z",
     "last_scrub_repaired": 0,
-    "last_scrub_errors": 0
+    "last_scrub_errors": 0,
+    "problem_vdevs": []
   },
   {
     "name": "rpool",
@@ -29,7 +30,8 @@
     "scrub_in_progress": false,
     "last_scrub_end": "2026-09-01T01:00:33Z",
     "last_scrub_repaired": 0,
-    "last_scrub_errors": 0
+    "last_scrub_errors": 0,
+    "problem_vdevs": []
   },
   {
     "name": "storage",
@@ -45,6 +47,7 @@
     "scrub_in_progress": false,
     "last_scrub_end": "2026-09-01T09:39:32Z",
     "last_scrub_repaired": 0,
-    "last_scrub_errors": 0
+    "last_scrub_errors": 0,
+    "problem_vdevs": []
   }
 ]

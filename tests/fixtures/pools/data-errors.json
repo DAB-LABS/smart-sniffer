@@ -13,6 +13,32 @@
     "scrub_in_progress": false,
     "last_scrub_end": "2026-09-13T00:24:02Z",
     "last_scrub_repaired": 0,
-    "last_scrub_errors": 2
+    "last_scrub_errors": 2,
+    "problem_vdevs": [
+      {
+        "name": "mirror-0",
+        "type": "mirror",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 4
+      },
+      {
+        "name": "ata-ST2000DM008-2FR102_ZFL0001",
+        "type": "disk",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 4
+      },
+      {
+        "name": "ata-ST2000DM008-2FR102_ZFL0002",
+        "type": "disk",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 4
+      }
+    ]
   }
 ]

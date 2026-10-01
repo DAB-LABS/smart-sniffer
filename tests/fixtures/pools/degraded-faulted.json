@@ -13,6 +13,32 @@
     "scrub_in_progress": false,
     "last_scrub_end": "2026-09-27T05:36:09Z",
     "last_scrub_repaired": 1572864,
-    "last_scrub_errors": 0
+    "last_scrub_errors": 0,
+    "problem_vdevs": [
+      {
+        "name": "raidz2-0",
+        "type": "raidz",
+        "state": "DEGRADED",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0
+      },
+      {
+        "name": "ata-WDC_WD80EFAX-68KNBN0_VAGX0003",
+        "type": "disk",
+        "state": "FAULTED",
+        "read_errors": 18,
+        "write_errors": 3,
+        "checksum_errors": 0
+      },
+      {
+        "name": "ata-WDC_WD80EFAX-68KNBN0_VAGX0005",
+        "type": "disk",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 2
+      }
+    ]
   }
 ]
