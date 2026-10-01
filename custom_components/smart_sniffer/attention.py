@@ -108,6 +108,26 @@ _ATA_WEAR_NAMES: set[str] = {
 }
 _ATA_WEAR_WARN_THRESHOLD = 90  # percentage used
 
+
+def is_dead_wear_attr(attr: dict[str, Any]) -> bool:
+    """True when a wear-named ATA row is not a gauge and must be skipped.
+
+    A drive smartctl does not recognise gets the default attribute names, so a
+    row that is not a life gauge can arrive called Wear_Leveling_Count or
+    Media_Wearout_Indicator. The SandForce Corsair Force GT SSD in GH #55 does
+    this: 177 and 233 read value 0, worst 0, thresh 0 and flags 0, and taking
+    them as "0 % life left" showed a new drive as 100 % used. A real gauge
+    carries flags even when worn out (Samsung 177 is 0x0013 at value 1), so
+    all four at zero means no reading. Every field must be present and an
+    integer 0; a missing key is not zero and keeps today's behaviour.
+    """
+    flags = attr.get("flags")
+    flags_value = flags.get("value") if isinstance(flags, dict) else None
+    fields = (attr.get("value"), attr.get("worst"), attr.get("thresh"), flags_value)
+    return all(
+        isinstance(f, int) and not isinstance(f, bool) and f == 0 for f in fields
+    )
+
 # NVMe available_spare warning tier. The drive's own available_spare_threshold
 # is a separate, non-configurable critical check; this is the earlier heads-up.
 _NVME_SPARE_WARN_BELOW = 20  # percent remaining
@@ -219,6 +239,8 @@ def current_readings(drive_data: dict[str, Any]) -> dict[str, int]:
 
     for attr in ata_attrs:
         if attr.get("name", "") in _ATA_WEAR_NAMES:
+            if is_dead_wear_attr(attr):
+                continue  # not a gauge; try the next candidate (GH #55)
             normalized = attr.get("value")
             if normalized is not None:
                 readings[LABEL_SSD_WEAR] = max(0, 100 - normalized)
@@ -715,6 +737,8 @@ def evaluate_attention(
     if "SSD wear" not in seen_labels:
         for attr in ata_attrs:
             if attr.get("name", "") in _ATA_WEAR_NAMES:
+                if is_dead_wear_attr(attr):
+                    continue  # not a gauge; try the next candidate (GH #55)
                 normalized = attr.get("value")
                 if normalized is not None:
                     pct_used = max(0, 100 - normalized)

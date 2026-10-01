@@ -39,6 +39,7 @@ from .attention import (
     compose_reasons_text,
     evaluate_attention,
     get_thresholds,
+    is_dead_wear_attr,
 )
 from .const import CONF_FORCE_UPDATE, DEFAULT_FORCE_UPDATE, DOMAIN, FILESYSTEMS_KEY
 from .device_link import agent_link
@@ -435,6 +436,11 @@ def _extract_attribute(drive_data: dict[str, Any], key: str) -> Any | None:
     names = ATA_NAME_MAP.get(key, [])
     for attr in ata_attrs:
         if attr.get("name") in names:
+            # A wear-named row reading 0/0/0 with flags 0 is not a gauge
+            # (GH #55); skip it and keep looking.  With nothing usable left
+            # the drive has no wear reading.
+            if key == "wear_leveling_count" and is_dead_wear_attr(attr):
+                continue
             raw = attr.get("raw", {})
             if isinstance(raw, dict):
                 raw_value = raw.get("value")
@@ -634,6 +640,19 @@ async def async_setup_entry(
             _covered_rows: set[int] = set()
             for _desc in SENSOR_DESCRIPTIONS:
                 candidates = ATA_NAME_MAP.get(_desc.key, [])
+                if _desc.key == "wear_leveling_count":
+                    # The wear lookup skips rows that are not a gauge
+                    # (GH #55), so the covered row is the first usable one,
+                    # not the first by name.  Skipped rows stay eligible as
+                    # diagnostic entities.
+                    for _i, _attr in enumerate(ata_table):
+                        if (
+                            _attr.get("name") in candidates
+                            and not is_dead_wear_attr(_attr)
+                        ):
+                            _covered_rows.add(_i)
+                            break
+                    continue
                 present = [n for n in candidates if n in _attr_position]
                 if present:
                     # Match _extract_attribute's "first in drive-table
