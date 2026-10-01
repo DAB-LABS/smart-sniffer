@@ -1,0 +1,50 @@
+[
+  {
+    "name": "raid10",
+    "state": "ONLINE",
+    "status": "Some supported and requested features are not enabled on the pool. The pool can still be used, but some features are unavailable.",
+    "action": "Enable all features using 'zpool upgrade'. Once this is done, the pool may no longer be accessible by software that does not support the features. See zpool-features(7) for details.",
+    "read_errors": 0,
+    "write_errors": 0,
+    "checksum_errors": 0,
+    "data_errors": 0,
+    "scan_function": "SCRUB",
+    "scan_state": "FINISHED",
+    "scrub_in_progress": false,
+    "last_scrub_end": "2026-09-01T03:05:34Z",
+    "last_scrub_repaired": 0,
+    "last_scrub_errors": 0
+  },
+  {
+    "name": "rpool",
+    "state": "ONLINE",
+    "status": "Some supported and requested features are not enabled on the pool. The pool can still be used, but some features are unavailable.",
+    "action": "Enable all features using 'zpool upgrade'. Once this is done, the pool may no longer be accessible by software that does not support the features. See zpool-features(7) for details.",
+    "read_errors": 0,
+    "write_errors": 0,
+    "checksum_errors": 0,
+    "data_errors": 0,
+    "scan_function": "SCRUB",
+    "scan_state": "FINISHED",
+    "scrub_in_progress": false,
+    "last_scrub_end": "2026-09-01T01:00:33Z",
+    "last_scrub_repaired": 0,
+    "last_scrub_errors": 0
+  },
+  {
+    "name": "storage",
+    "state": "ONLINE",
+    "status": "Some supported and requested features are not enabled on the pool. The pool can still be used, but some features are unavailable.",
+    "action": "Enable all features using 'zpool upgrade'. Once this is done, the pool may no longer be accessible by software that does not support the features. See zpool-features(7) for details.",
+    "read_errors": 0,
+    "write_errors": 0,
+    "checksum_errors": 0,
+    "data_errors": 0,
+    "scan_function": "SCRUB",
+    "scan_state": "FINISHED",
+    "scrub_in_progress": false,
+    "last_scrub_end": "2026-09-01T09:39:32Z",
+    "last_scrub_repaired": 0,
+    "last_scrub_errors": 0
+  }
+]

@@ -1,0 +1,18 @@
+[
+  {
+    "name": "tank",
+    "state": "DEGRADED",
+    "status": "One or more devices are faulted in response to persistent errors. Sufficient replicas exist for the pool to continue functioning in a degraded state.",
+    "action": "Replace the faulted device, or use 'zpool clear' to mark the device repaired.",
+    "read_errors": 18,
+    "write_errors": 3,
+    "checksum_errors": 2,
+    "data_errors": 0,
+    "scan_function": "SCRUB",
+    "scan_state": "FINISHED",
+    "scrub_in_progress": false,
+    "last_scrub_end": "2026-09-27T05:36:09Z",
+    "last_scrub_repaired": 1572864,
+    "last_scrub_errors": 0
+  }
+]

@@ -45,6 +45,12 @@ LIVE = {
     "_filesystems": [{"mount": "/", "used_percent": 41}],
 }
 
+# The same agent with ZFS pool status on, reporting two pools.
+LIVE_POOLS = {
+    **LIVE,
+    "_pools": [{"name": "rpool", "state": "ONLINE"}, {"name": "storage", "state": "ONLINE"}],
+}
+
 
 def _device(identifier: str) -> set[tuple[str, str]]:
     return {(DOMAIN, identifier)}
@@ -57,6 +63,7 @@ def _decide(identifiers, data=LIVE, agent_reporting=True):
         removal.reported_drive_ids(data),
         removal.reported_filesystem_count(data),
         agent_reporting,
+        removal.reported_pool_names(data),
     )
 
 
@@ -202,7 +209,7 @@ def test_the_removal_hook_exists_and_delegates():
 
 
 # --- What the user is told (round 3) -----------------------------------------
-# A refusal is raised as a HomeAssistantError carrying one of four translation
+# A refusal is raised as a HomeAssistantError carrying one of five translation
 # keys, so the dialog explains itself instead of showing core's generic text.
 
 
@@ -212,6 +219,7 @@ def test_each_refusal_carries_its_message_key():
         removal.REMOVE_AGENT_OFFLINE: (_device("s6pxns0l100992m"), None, False),
         removal.REMOVE_LIVE_DRIVE: (_device("s6pxns0l100992m"), LIVE, True),
         removal.REMOVE_DISK_USAGE: (_device(f"{ENTRY}_filesystems"), LIVE, True),
+        removal.REMOVE_LIVE_POOL: (_device(f"{ENTRY}_zpool_rpool"), LIVE_POOLS, True),
     }
     for key, (identifiers, data, reporting) in cases.items():
         decision = _decide(identifiers, data=data, agent_reporting=reporting)
@@ -275,6 +283,11 @@ _APPROVED = {
         "Disk usage for {host} is still being reported. To remove it, remove the "
         "\"filesystems\" section from the agent's config."
     ),
+    # Proposed in the GH #50 kickoff; owner approves at the bench.
+    "remove_live_pool": (
+        "The pool {pool} is still being reported by the agent on {host}, so it can't "
+        "be removed."
+    ),
 }
 
 
@@ -290,11 +303,18 @@ def test_the_messages_are_the_approved_wording():
     assert {key: value["message"] for key, value in _EXCEPTIONS.items()} == _APPROVED
 
 
-def test_every_message_is_filled_by_the_one_placeholder_raised():
-    """__init__.py raises with translation_placeholders={"host": ...}. A message
-    wanting anything else would render its slot unfilled."""
+# The placeholders __init__.py raises with: {host} always, and {pool} from
+# refusal_placeholders for a pool device.
+_RAISED_PLACEHOLDERS = {"remove_live_pool": {"host", "pool"}}
+
+
+def test_every_message_is_filled_by_the_placeholders_raised():
+    """__init__.py raises with translation_placeholders={"host": ...} plus the
+    pool name for a pool device. A message wanting anything else would render
+    its slot unfilled."""
     for key, value in _EXCEPTIONS.items():
-        assert set(re.findall(r"\{(\w+)\}", value["message"])) == {"host"}, key
+        wanted = _RAISED_PLACEHOLDERS.get(key, {"host"})
+        assert set(re.findall(r"\{(\w+)\}", value["message"])) == wanted, key
 
 
 def test_the_hook_raises_a_translated_error_for_a_refusal():
@@ -303,3 +323,79 @@ def test_the_hook_raises_a_translated_error_for_a_refusal():
     assert "translation_domain=DOMAIN" in source
     assert "translation_key=decision.translation_key" in source
     assert 'translation_placeholders={"host": ' in source
+    assert "**extra}" in source
+    assert "extra = refusal_placeholders(device_entry.identifiers, config_entry.entry_id)" in source
+
+
+# --- Rule 5: ZFS pool devices (GH #50) --------------------------------------------
+
+
+def test_a_reported_pool_refuses():
+    decision = _decide(_device(f"{ENTRY}_zpool_rpool"), data=LIVE_POOLS)
+    assert decision.allowed is False
+    assert decision.translation_key == removal.REMOVE_LIVE_POOL
+    assert "still reports pool rpool" in decision.reason
+
+
+def test_a_pool_the_agent_no_longer_reports_is_removable():
+    decision = _decide(_device(f"{ENTRY}_zpool_oldpool"), data=LIVE_POOLS)
+    assert decision.allowed is True
+    assert decision.translation_key is None
+    assert "no longer reports pool oldpool" in decision.reason
+
+
+def test_an_agent_without_pool_status_frees_every_pool_device():
+    """Pool status turned off, or zpool gone: the agent stops advertising pools
+    and the coordinator stores an empty list."""
+    for data in (LIVE, {**LIVE, "_pools": []}):
+        assert _decide(_device(f"{ENTRY}_zpool_rpool"), data=data).allowed is True
+
+
+def test_a_pool_device_waits_for_an_offline_agent():
+    decision = _decide(_device(f"{ENTRY}_zpool_rpool"), data=None, agent_reporting=False)
+    assert decision.allowed is False
+    assert decision.translation_key == removal.REMOVE_AGENT_OFFLINE
+    decision = _decide(
+        _device(f"{ENTRY}_zpool_rpool"), data=LIVE_POOLS, agent_reporting=False
+    )
+    assert decision.translation_key == removal.REMOVE_AGENT_OFFLINE
+
+
+def test_a_failed_pool_fetch_is_not_a_licence_to_delete():
+    """The agent answered, but /api/pools did not: None, not an empty list."""
+    decision = _decide(_device(f"{ENTRY}_zpool_rpool"), data={**LIVE, "_pools": None})
+    assert decision.allowed is False
+    assert decision.translation_key == removal.REMOVE_AGENT_OFFLINE
+    assert "pool list could not be read" in decision.reason
+
+
+def test_a_pool_named_like_a_drive_is_still_a_pool():
+    data = {**LIVE_POOLS, "_pools": [{"name": "s6pxns0l100992m"}]}
+    decision = _decide(_device(f"{ENTRY}_zpool_s6pxns0l100992m"), data=data)
+    assert decision.translation_key == removal.REMOVE_LIVE_POOL
+
+
+def test_pools_do_not_change_drive_or_filesystem_decisions():
+    assert _decide(_device("s6pxns0l100992m"), data=LIVE_POOLS).allowed is False
+    assert _decide(_device("nvme-gone-9000"), data=LIVE_POOLS).allowed is True
+    assert _decide(_device(f"{ENTRY}_filesystems"), data=LIVE_POOLS).allowed is False
+
+
+def test_pools_are_not_drives():
+    assert removal.reported_drive_ids(LIVE_POOLS) == ["s6pxns0l100992m"]
+    assert removal.reported_pool_names(LIVE_POOLS) == ["rpool", "storage"]
+    assert removal.reported_pool_names(None) is None
+    assert removal.reported_pool_names({**LIVE, "_pools": None}) is None
+    assert removal.reported_pool_names(LIVE) == []
+
+
+def test_a_pool_refusal_names_the_pool():
+    assert removal.refusal_placeholders(_device(f"{ENTRY}_zpool_rpool"), ENTRY) == {"pool": "rpool"}
+    assert removal.refusal_placeholders(_device("s6pxns0l100992m"), ENTRY) == {}
+    assert removal.refusal_placeholders({("other", "x")}, ENTRY) == {}
+    message = _EXCEPTIONS["remove_live_pool"]["message"].format(
+        host="pve-nas", **removal.refusal_placeholders(_device(f"{ENTRY}_zpool_rpool"), ENTRY)
+    )
+    assert message == (
+        "The pool rpool is still being reported by the agent on pve-nas, so it can't be removed."
+    )

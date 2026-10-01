@@ -1,0 +1,18 @@
+[
+  {
+    "name": "backup",
+    "state": "ONLINE",
+    "status": "One or more devices has experienced an error resulting in data corruption. Applications may be affected.",
+    "action": "Restore the file in question if possible. Otherwise restore the entire pool from backup.",
+    "read_errors": 0,
+    "write_errors": 0,
+    "checksum_errors": 16,
+    "data_errors": 2,
+    "scan_function": "SCRUB",
+    "scan_state": "FINISHED",
+    "scrub_in_progress": false,
+    "last_scrub_end": "2026-09-13T00:24:02Z",
+    "last_scrub_repaired": 0,
+    "last_scrub_errors": 2
+  }
+]
