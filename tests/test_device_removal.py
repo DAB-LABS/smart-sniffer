@@ -275,9 +275,11 @@ _APPROVED = {
         "drives, delete the {host} entry under Settings, Devices & Services, SMART "
         "Sniffer."
     ),
+    # "this drive" became "this device" in GH #50 round 2, since the refusal
+    # also covers pool devices; owner approves at the bench.
     "remove_agent_offline": (
         "The agent on {host} isn't responding, so SMART Sniffer can't tell whether "
-        "this drive is really gone. Try again once the agent is back online."
+        "this device is really gone. Try again once the agent is back online."
     ),
     "remove_disk_usage": (
         "Disk usage for {host} is still being reported. To remove it, remove the "
