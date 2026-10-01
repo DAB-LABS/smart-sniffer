@@ -26,8 +26,11 @@
 //
 // ZFS is never required. No zpool binary means pool status is off, nothing is
 // advertised and nothing is logged. A zpool that exists but fails (module not
-// loaded, permissions) reports zero pools and logs through the shared throttle,
-// once and then at most hourly.
+// loaded, permissions, a timeout) reports zero pools in /api/health and logs
+// through the shared throttle, once and then at most hourly; /api/pools then
+// answers 503 rather than an empty list, because Home Assistant reads a pool
+// left out of a list it could read as missing (exported, or failed to
+// import), and a zpool that could not run says nothing about that.
 package main
 
 import (
@@ -179,6 +182,7 @@ type PoolCache struct {
 	zpoolPath string
 	mode      int
 	running   bool
+	ok        bool // the last completed read succeeded; false before the first
 	logs      *logThrottle
 }
 
@@ -260,10 +264,20 @@ func (pc *PoolCache) Pools() []PoolInfo {
 }
 
 // HandlePools serves GET /api/pools from the cache. It never runs zpool.
+//
+// 503 when no read has succeeded yet or the last one failed: "zpool did not
+// answer" must not look like "no pools are imported".
 func (pc *PoolCache) HandlePools(w http.ResponseWriter, r *http.Request) {
-	data := pc.Pools()
+	pc.mu.RLock()
+	ok := pc.ok
+	pc.mu.RUnlock()
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(data)
+	if !ok {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{"error": "zpool status has not been read successfully"})
+		return
+	}
+	json.NewEncoder(w).Encode(pc.Pools())
 }
 
 // Refresh starts a background read and returns a channel closed when it ends.
@@ -299,6 +313,7 @@ func (pc *PoolCache) refreshNow() {
 
 	pc.mu.Lock()
 	pc.mode = mode
+	pc.ok = err == nil
 	if err != nil {
 		pc.pools = nil
 	} else {
