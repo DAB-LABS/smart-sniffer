@@ -23,6 +23,17 @@ Key behaviors:
 - Disk usage monitoring: opt-in at install time. Each configured mountpoint gets a
   percentage sensor with total/used/available attributes under a "Disk Usage" device.
   Served via /api/filesystems on the agent. Requires agent v0.5.0+.
+- ZFS pool health (v0.7.0+): on a machine with ZFS the agent reads zpool status and
+  serves /api/pools. Each pool becomes an HA device with state, read/write/checksum
+  error totals (summed over every disk), data errors, last scrub, and a Problem binary
+  sensor whose problem_devices attribute names the failing disks. A notification fires
+  when a pool degrades or disappears (state MISSING). On by default when zpool exists;
+  zfs_pool_status: false turns it off. Machines without ZFS are unaffected.
+- Per-drive alert thresholds (v0.6.3+): Configure > Alert thresholds lets a user raise the
+  limit for an attribute on one drive, so old stable damage stops alerting while new
+  damage still does.
+- Device removal (v0.6.5+): a drive or pool the agent no longer reports can be removed
+  with Remove device; live drives and agents refuse with a reason.
 - Standby-aware polling: optional standby_mode config prevents the agent from waking
   sleeping HDDs during scans. When a drive is in standby, cached data is served. Each
   drive has a dedicated Standby binary sensor (v0.5.4+) that reports whether the drive
@@ -39,7 +50,7 @@ Key behaviors:
   in most network setups. Agents auto-filter virtual interfaces (Docker, VPN, etc.).
 - Optional bearer token authentication (timing-safe comparison). SHA256-verified
   binary downloads. Install scripts detect OS and architecture automatically.
-- Requires smartmontools 7.0+. The agent verifies this at startup with a clear error
+- Requires Home Assistant 2024.4+ and smartmontools 7.0+. The agent verifies this at startup with a clear error
   if the version is too old. The installer handles smartmontools installation.
 
 Attention Needed classification:
@@ -53,15 +64,14 @@ Attention Needed classification:
 - UNSUPPORTED: No usable S.M.A.R.T. data available. Common with USB enclosures due to
   hardware bridge chip limitations -- not a bug.
 
-Supported drive types: ATA, SATA, NVMe. SAS/SCSI support is on the roadmap.
+Supported drive types: ATA, SATA, NVMe, and basic SAS/SCSI (health, temperature,
+power-on hours, power cycles; v0.5.7+).
 
 Supported agent platforms: Linux (amd64, arm64, armv7), macOS (Intel, Apple Silicon),
 Windows (amd64 -- tested and field-validated as of v0.5.1).
 
-Community deployments:
-- Docker: https://github.com/fireinice/docker-smart-sniffer (Dockerfile + docker-compose,
-  Docker Hub at fireinice/smart-sniffer). Note: disk usage monitoring not yet supported
-  in Docker deployments.
+Docker: there is no official image. docs/guides/docker.md explains building your own
+from the release binary, including the device passthrough and mount_prefix settings.
 
 What SMART Sniffer is NOT:
 - Not a replacement for Scrutiny (no InfluxDB backend, no historical trend graphs or
@@ -103,6 +113,12 @@ companion HAOS add-on: https://github.com/DAB-LABS/smart-sniffer-app
 - [Platform Install Paths](https://github.com/DAB-LABS/smart-sniffer/blob/main/docs/platform-install-paths.md):
   Install locations, immutable rootfs support (ZimaOS, CasaOS), and mDNS interface
   filtering for multi-homed hosts.
+- [Drive Discovery](https://github.com/DAB-LABS/smart-sniffer/blob/main/docs/discover.md):
+  What smartha-agent --discover checks, how to read its output, and the
+  device_overrides it can write for NAS controllers.
+- [Platform Guides](https://github.com/DAB-LABS/smart-sniffer/tree/main/docs/guides):
+  Proxmox, Synology, QNAP, TrueNAS SCALE, Unraid, OpenWrt, hardware RAID, virtual
+  machines, and building your own Docker image.
 - [Mock Agent](https://github.com/DAB-LABS/smart-sniffer/blob/main/docs/mock-agent.md):
   Standalone Python testing tool that simulates a smartha-agent with controllable
   drives and a real-time web dashboard.

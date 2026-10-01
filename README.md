@@ -144,6 +144,21 @@ The Attention Needed sensor evaluates individual SMART attributes every poll cyc
 
 When a drive's state changes, a persistent notification fires in HA automatically. Notifications escalate on worsening conditions and dismiss when resolved. See [attention-severity-logic.md](docs/attention-severity-logic.md) for the full specification.
 
+**Adjusting thresholds (v0.6.3+):** If a drive has old, stable damage you have decided to live with, raise its limit instead of ignoring the alert: Settings → Devices & Services → SMART Sniffer → **Configure** → **Alert thresholds**, then pick the drive. Each field shows what the drive reads now and the built-in default. Attention is raised only when a reading passes your limit, so new damage still gets reported. Type the default back in to clear a threshold.
+
+</details>
+
+<details>
+<summary><strong>Removing drives and devices</strong></summary>
+
+<br>
+
+A drive you have taken out, or a leftover device from before v0.6.2, can be removed with **Remove device** on its device page. SMART Sniffer allows this only while the agent is online and no longer reports that drive; otherwise it says why. To stop monitoring a drive that is still installed, add it to `exclude_devices` in the agent's config instead.
+
+ZFS pool devices work the same way: once the agent no longer reports a pool (for example after you export it on purpose), remove its device to stop tracking it.
+
+To remove an agent and everything under it, delete its entry under Settings → Devices & Services → SMART Sniffer.
+
 </details>
 
 <details>
@@ -203,10 +218,11 @@ The equivalent config file setting is `mount_prefix: /host`. Configured mountpoi
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /api/health` | Agent status, version, available endpoints, drive/filesystem counts |
+| `GET /api/health` | Agent status, version, available endpoints, drive/filesystem/pool counts |
 | `GET /api/drives` | Summary list of all discovered drives |
 | `GET /api/drives/{id}` | Full SMART data for a single drive |
 | `GET /api/filesystems` | Disk usage for all configured mountpoints (only registered when filesystems are configured) |
+| `GET /api/pools` | ZFS pool health: state, error counts, problem disks, last scrub (only registered when `zpool` is found and `zfs_pool_status` is not false) |
 
 **Service management:**
 
@@ -351,6 +367,8 @@ Stops the service, removes the binary, config, and service files.
 </details>
 
 ### 2. Add the integration to Home Assistant
+
+Requires Home Assistant 2024.4 or newer.
 
 **Via HACS (recommended):**
 
@@ -569,6 +587,7 @@ Drive-specific `smartctl -a --json` output samples are especially welcome — th
 - [ ] Agent: runtime interface detection (replace static prefix list with OS-level physical NIC detection)
 - [x] Integration: parent-agent device hierarchy (drives and filesystems nest under their agent via `via_device`) -- shipped v0.6.1
 - [x] Agent: unreadable drives are skipped instead of published under a made-up name, so a blocked or hung drive no longer creates ghost devices or blanks the whole agent -- shipped v0.6.2
+- [x] Agent and integration: ZFS pool health -- each pool's state, error counts, problem disks and last scrub, with alerts when a pool degrades or disappears -- shipped v0.7.0
 - [ ] Listed in the HACS default store (submitted, awaiting review)
 - [ ] Integration: optional area-on-setup (choose an area once and apply it to all of an agent's drives)
 - [x] Integration: split consolidated wear-leveling / uncorrectable / pending-sector sensors into separate diagnostic entities when a drive reports multiple variants -- shipped v0.5.14

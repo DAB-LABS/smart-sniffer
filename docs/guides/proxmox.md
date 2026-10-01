@@ -73,6 +73,10 @@ Enter your Proxmox host's IP address and port `9099` (or whatever you configured
 
 Once connected, every physical drive on the Proxmox host appears as its own device in HA -- full SMART data, attention alerts, standby detection, the works.
 
+## ZFS pools
+
+Proxmox hosts often run ZFS. Since v0.7.0 the agent on the host also reports pool health: each pool shows up in Home Assistant as its own device with its state, error counts and last scrub, and you get a notification when a pool degrades or disappears. Nothing to configure; the agent finds `zpool` on its own. After updating the agent, reload the integration so the pool devices appear.
+
 ## Troubleshooting
 
 ### Auto-discovery doesn't work

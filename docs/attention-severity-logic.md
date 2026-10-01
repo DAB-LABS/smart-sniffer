@@ -187,26 +187,25 @@ Escalations/de-escalations overwrite the existing notification (same ID). Dismis
 
 ---
 
-## Suppressing Known Alerts
+## Per-Drive Thresholds (v0.6.3+)
 
-For drives with permanent issues (e.g., a drive with reallocated sectors you've chosen to keep in service), create an `input_boolean` helper and a suppression automation:
+For a drive with old, stable damage you have chosen to keep in service, raise the limit instead of suppressing the alert: Settings > Devices & Services > SMART Sniffer > Configure > Alert thresholds, then pick the drive. Each attribute shows the drive's current reading and the built-in default. Attention is raised only when a reading passes the limit you set, so new damage is still reported. Accepted readings are listed in the sensor's `accepted` attribute. Type the default back in to clear a threshold.
 
-```yaml
-automation:
-  - alias: "Suppress known SMART alerts"
-    trigger:
-      - platform: state
-        entity_id: binary_sensor.your_drive_attention_needed
-        to: "on"
-    condition:
-      - condition: state
-        entity_id: input_boolean.drive_sxxx_acknowledged
-        state: "on"
-    action:
-      - service: persistent_notification.dismiss
-        data:
-          notification_id: "smart_sniffer_attention_your_drive_id"
-```
+---
+
+## ZFS Pool Health (v0.7.0+)
+
+Pools are evaluated separately from drives. Each pool has a **Problem** binary sensor, on when any of these hold:
+
+- the pool state is not `ONLINE` (`DEGRADED`, `FAULTED`, `UNAVAIL`, `SUSPENDED`, and so on);
+- any read, write or checksum error count is above zero. Counts are summed over every disk in the pool, because ZFS records an error on the disk where it happened: a failing disk that redundancy covers shows errors on its own row while the pool row reads zero;
+- the pool reports data errors;
+- a disk or group in the pool is not `ONLINE` or has errors (listed in `problem_devices`);
+- the pool is no longer reported by `zpool status` while the agent is reachable (state `MISSING`).
+
+The `status:` and `action:` text from `zpool status` is shown as attributes but never counts on its own, so "Some supported and requested features are not enabled" does not raise an alert.
+
+A notification fires when a pool becomes unhealthy, updates when the reasons change, and dismisses when the pool recovers. A pool that is missing when Home Assistant starts notifies; a pool that is already unhealthy at start turns its Problem sensor on but does not notify until something changes. If the agent cannot read `zpool`, pool entities go unavailable and nothing is notified.
 
 ---
 

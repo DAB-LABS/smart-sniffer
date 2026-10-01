@@ -70,6 +70,22 @@ Found 2 drive(s). 2 readable.
 No config changes needed.
 ```
 
+### A drive that supports SMART only partly
+
+Some drives (cheap SSDs, Apple SSDs, some USB bridges) answer most SMART commands but not all, and smartctl exits with code 4. The agent reads these drives normally, and since v0.7.0 discovery says so instead of calling them unreadable:
+
+```
+  /dev/sda
+    Protocol:   ATA
+    SMART data: Yes
+    Model:      Generic SATA SSD 120GB
+    Serial:     AA00000000000
+    Note:       smartctl reported some commands unsupported (exit code 4); the agent reads this drive normally
+    Result:     OK
+```
+
+Each drive gets the same 30 second limit as the running agent. A drive that does not answer in time shows `SMART data: No` with an `Error:` line saying it timed out, and discovery moves on to the next drive.
+
 ### Synology (protocol fix needed)
 
 ```
