@@ -152,11 +152,41 @@ func TestPoolCache_FailingZpoolReportsZeroAndLogsOnce(t *testing.T) {
 		t.Errorf("log does not say why:\n%s", out)
 	}
 
-	// Served as an empty list.
+	// Served as 503, not as an empty list: Home Assistant reads a pool left
+	// out of a list as missing, and a zpool that failed says nothing of that.
 	rec := httptest.NewRecorder()
 	pc.HandlePools(rec, httptest.NewRequest("GET", "/api/pools", nil))
-	if body := strings.TrimSpace(rec.Body.String()); body != "[]" {
-		t.Errorf("/api/pools = %s, want []", body)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("/api/pools = %d %s, want 503", rec.Code, rec.Body.String())
+	}
+}
+
+// Before the first read completes, and after a failed one, /api/pools is 503;
+// after a successful read it is the list, [] when no pool is imported.
+func TestPoolsEndpointAnswersOnlyAfterASuccessfulRead(t *testing.T) {
+	captureLog(t)
+	dir := t.TempDir()
+	broken := filepath.Join(dir, "broken")
+	path, _ := stubZpool(t, `if [ -e '`+broken+`' ]; then exit 1; fi
+echo '{"output_version":{"command":"zpool status","vers_major":0,"vers_minor":1},"pools":{}}'
+`)
+	pc := NewPoolCache(path, false)
+	get := func() (int, string) {
+		rec := httptest.NewRecorder()
+		pc.HandlePools(rec, httptest.NewRequest("GET", "/api/pools", nil))
+		return rec.Code, strings.TrimSpace(rec.Body.String())
+	}
+	if code, _ := get(); code != http.StatusServiceUnavailable {
+		t.Errorf("before the first read: %d, want 503", code)
+	}
+	waitRefresh(t, pc)
+	if code, body := get(); code != http.StatusOK || body != "[]" {
+		t.Errorf("no pools imported: %d %s, want 200 []", code, body)
+	}
+	os.WriteFile(broken, nil, 0o644)
+	waitRefresh(t, pc)
+	if code, _ := get(); code != http.StatusServiceUnavailable {
+		t.Errorf("after a failed read: %d, want 503", code)
 	}
 }
 
