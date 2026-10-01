@@ -20,9 +20,9 @@
 //     the scan line is always printed with zfs_nicebytes, so the bytes a scrub
 //     repaired are only as precise as that ("1.50M").
 //
-// Both readers produce the same PoolInfo for the same pool. Only pool-level
-// data is kept: the vdev tree is walked to sum its counters and is not served
-// (owner ruling 2026-09-30, pool level only).
+// Both readers produce the same PoolInfo for the same pool. The vdev tree is
+// walked to sum its counters and to name the vdevs that are in trouble
+// (problem_vdevs); healthy vdevs are not served.
 //
 // ZFS is never required. No zpool binary means pool status is off, nothing is
 // advertised and nothing is logged. A zpool that exists but fails (module not
@@ -84,6 +84,63 @@ type PoolInfo struct {
 	LastScrubEnd      *string `json:"last_scrub_end"`      // RFC 3339 UTC, last completed scrub
 	LastScrubRepaired *uint64 `json:"last_scrub_repaired"` // bytes repaired by that scrub
 	LastScrubErrors   *uint64 `json:"last_scrub_errors"`   // errors that scrub found
+
+	// Every vdev below the pool root that is not ONLINE or has a nonzero
+	// read, write or checksum count, in the order zpool prints them: the
+	// main tree, then the dedup, special, log and cache vdevs, then spares.
+	// Interior vdevs (mirror-0, raidz2-0, spare-1, replacing-0) are listed as
+	// well as disks. Spares are listed only when they are neither AVAIL nor
+	// INUSE. Never null; [] for a healthy pool.
+	ProblemVdevs []ProblemVdev `json:"problem_vdevs"`
+}
+
+// ProblemVdev is one vdev that needs attention.
+type ProblemVdev struct {
+	Name           string `json:"name"`  // as zpool prints it: sdb, ata-WDC_..., mirror-0
+	Type           string `json:"type"`  // disk, file, mirror, raidz, draid, spare, replacing, ...
+	State          string `json:"state"` // ONLINE, DEGRADED, FAULTED, OFFLINE, UNAVAIL, REMOVED, ...
+	ReadErrors     uint64 `json:"read_errors"`
+	WriteErrors    uint64 `json:"write_errors"`
+	ChecksumErrors uint64 `json:"checksum_errors"`
+}
+
+// vdevNeedsAttention is the rule for one vdev in the pool's tree.
+func vdevNeedsAttention(state string, r, w, c uint64) bool {
+	return state != "ONLINE" || r > 0 || w > 0 || c > 0
+}
+
+// spareNeedsAttention is the rule for an entry in the spares list. zpool
+// prints a healthy spare as AVAIL and one standing in for a disk as INUSE (the
+// disk it replaced is listed, with its own state, in the main tree). Anything
+// else, such as UNAVAIL for a spare that cannot be opened, is a problem.
+// Spares carry no error counters.
+func spareNeedsAttention(state string) bool {
+	return state != "AVAIL" && state != "INUSE"
+}
+
+// Interior vdev names, as zpool_vdev_name() builds them with
+// VDEV_NAME_TYPE_ID: "<type>-<id>", with the parity level after raidz
+// ("raidz2-0") and the layout after draid ("draid2:4d:12c:1s-0"). A dRAID
+// distributed spare is named "draid<parity>-<top>-<spare>".
+var (
+	interiorVdevName = regexp.MustCompile(`^(mirror|raidz|draid|replacing|spare|root|missing|indirect|hole)\d*(?::[^\s-]*)?-\d+$`)
+	draidSpareName   = regexp.MustCompile(`^draid\d+-\d+-\d+$`)
+)
+
+// vdevTypeFromName derives a vdev's type from the name the text form prints,
+// to match the JSON form's vdev_type. Leaves are disks, except a path outside
+// /dev, which zpool prints in full for a file vdev.
+func vdevTypeFromName(name string) string {
+	if draidSpareName.MatchString(name) {
+		return "dspare"
+	}
+	if m := interiorVdevName.FindStringSubmatch(name); m != nil {
+		return m[1]
+	}
+	if strings.HasPrefix(name, "/") && !strings.HasPrefix(name, "/dev/") {
+		return "file"
+	}
+	return "disk"
 }
 
 // zpoolTimeout bounds one zpool run. A var so tests can shorten it.
@@ -440,34 +497,116 @@ type zpoolJSONDoc struct {
 }
 
 type zpoolJSONPool struct {
-	Name       string                   `json:"name"`
-	State      string                   `json:"state"`
-	Status     string                   `json:"status"`
-	Action     string                   `json:"action"`
-	ScanStats  *zpoolJSONScan           `json:"scan_stats"`
-	Vdevs      map[string]zpoolJSONVdev `json:"vdevs"`
-	Dedup      map[string]zpoolJSONVdev `json:"dedup"`
-	Special    map[string]zpoolJSONVdev `json:"special"`
-	Logs       map[string]zpoolJSONVdev `json:"logs"`
-	L2cache    map[string]zpoolJSONVdev `json:"l2cache"`
-	ErrorCount *zfsNum                  `json:"error_count"`
+	Name       string         `json:"name"`
+	State      string         `json:"state"`
+	Status     string         `json:"status"`
+	Action     string         `json:"action"`
+	ScanStats  *zpoolJSONScan `json:"scan_stats"`
+	Vdevs      zpoolJSONVdevs `json:"vdevs"`
+	Dedup      zpoolJSONVdevs `json:"dedup"`
+	Special    zpoolJSONVdevs `json:"special"`
+	Logs       zpoolJSONVdevs `json:"logs"`
+	L2cache    zpoolJSONVdevs `json:"l2cache"`
+	Spares     zpoolJSONVdevs `json:"spares"`
+	ErrorCount *zfsNum        `json:"error_count"`
 }
 
 type zpoolJSONVdev struct {
-	ReadErrors     zfsNum                   `json:"read_errors"`
-	WriteErrors    zfsNum                   `json:"write_errors"`
-	ChecksumErrors zfsNum                   `json:"checksum_errors"`
-	Vdevs          map[string]zpoolJSONVdev `json:"vdevs"`
+	Name           string         `json:"name"`
+	VdevType       string         `json:"vdev_type"`
+	State          string         `json:"state"`
+	ReadErrors     zfsNum         `json:"read_errors"`
+	WriteErrors    zfsNum         `json:"write_errors"`
+	ChecksumErrors zfsNum         `json:"checksum_errors"`
+	Vdevs          zpoolJSONVdevs `json:"vdevs"`
+}
+
+// zpoolJSONNamedVdev is one member of a vdev object, with the key it had.
+type zpoolJSONNamedVdev struct {
+	Key  string
+	Vdev zpoolJSONVdev
+}
+
+// zpoolJSONVdevs is a JSON object of vdevs keyed by name, kept in the order
+// zpool wrote it. zpool builds these objects from nvlists, which keep
+// insertion order, so the order is the tree order the text form prints; a Go
+// map would lose it.
+type zpoolJSONVdevs []zpoolJSONNamedVdev
+
+func (vs *zpoolJSONVdevs) UnmarshalJSON(b []byte) error {
+	dec := json.NewDecoder(bytes.NewReader(b))
+	tok, err := dec.Token()
+	if err != nil {
+		return err
+	}
+	if tok == nil {
+		*vs = nil
+		return nil
+	}
+	if d, ok := tok.(json.Delim); !ok || d != '{' {
+		return fmt.Errorf("vdevs: want an object, got %v", tok)
+	}
+	var out zpoolJSONVdevs
+	for dec.More() {
+		keyTok, err := dec.Token()
+		if err != nil {
+			return err
+		}
+		key, ok := keyTok.(string)
+		if !ok {
+			return fmt.Errorf("vdevs: key %v", keyTok)
+		}
+		var v zpoolJSONVdev
+		if err := dec.Decode(&v); err != nil {
+			return err
+		}
+		out = append(out, zpoolJSONNamedVdev{Key: key, Vdev: v})
+	}
+	if _, err := dec.Token(); err != nil { // the closing brace
+		return err
+	}
+	*vs = out
+	return nil
+}
+
+func (nv zpoolJSONNamedVdev) name() string {
+	if nv.Vdev.Name != "" {
+		return nv.Vdev.Name
+	}
+	return nv.Key
 }
 
 // addErrors adds the counters of every vdev in the tree to p.
-func addErrors(p *PoolInfo, tree map[string]zpoolJSONVdev) {
-	for _, v := range tree {
+func addErrors(p *PoolInfo, tree zpoolJSONVdevs) {
+	for _, nv := range tree {
+		v := nv.Vdev
 		p.ReadErrors += uint64(v.ReadErrors)
 		p.WriteErrors += uint64(v.WriteErrors)
 		p.ChecksumErrors += uint64(v.ChecksumErrors)
 		addErrors(p, v.Vdevs)
 	}
+}
+
+// addProblemVdevs appends every vdev in the tree that needs attention, parent
+// before children.
+func addProblemVdevs(p *PoolInfo, tree zpoolJSONVdevs) {
+	for _, nv := range tree {
+		v := nv.Vdev
+		r, w, c := uint64(v.ReadErrors), uint64(v.WriteErrors), uint64(v.ChecksumErrors)
+		if vdevNeedsAttention(v.State, r, w, c) {
+			p.ProblemVdevs = append(p.ProblemVdevs, jsonProblemVdev(nv, r, w, c))
+		}
+		addProblemVdevs(p, v.Vdevs)
+	}
+}
+
+func jsonProblemVdev(nv zpoolJSONNamedVdev, r, w, c uint64) ProblemVdev {
+	name := nv.name()
+	vtype := nv.Vdev.VdevType
+	if vtype == "" {
+		vtype = vdevTypeFromName(name)
+	}
+	return ProblemVdev{Name: name, Type: vtype, State: nv.Vdev.State, ReadErrors: r, WriteErrors: w, ChecksumErrors: c}
 }
 
 type zpoolJSONScan struct {
@@ -515,8 +654,28 @@ func parseZpoolStatusJSON(out []byte) ([]PoolInfo, error) {
 		if len(jp.Vdevs) == 0 {
 			return nil, fmt.Errorf("%w: pool %q has no vdevs", errZpoolParse, name)
 		}
-		for _, tree := range []map[string]zpoolJSONVdev{jp.Vdevs, jp.Dedup, jp.Special, jp.Logs, jp.L2cache} {
+		for _, tree := range []zpoolJSONVdevs{jp.Vdevs, jp.Dedup, jp.Special, jp.Logs, jp.L2cache} {
 			addErrors(&p, tree)
+		}
+
+		// Problem vdevs, in the order the text form prints them (status_
+		// callback: the tree, then dedup, special, logs, cache, spares). The
+		// root vdev is the pool itself and is not listed; its children are.
+		p.ProblemVdevs = []ProblemVdev{}
+		for _, nv := range jp.Vdevs {
+			if nv.Vdev.VdevType == "root" || nv.name() == name {
+				addProblemVdevs(&p, nv.Vdev.Vdevs)
+			} else {
+				addProblemVdevs(&p, zpoolJSONVdevs{nv})
+			}
+		}
+		for _, tree := range []zpoolJSONVdevs{jp.Dedup, jp.Special, jp.Logs, jp.L2cache} {
+			addProblemVdevs(&p, tree)
+		}
+		for _, nv := range jp.Spares {
+			if spareNeedsAttention(nv.Vdev.State) {
+				p.ProblemVdevs = append(p.ProblemVdevs, jsonProblemVdev(nv, 0, 0, 0))
+			}
 		}
 
 		if jp.ErrorCount != nil {
@@ -592,6 +751,9 @@ var sectionKey = regexp.MustCompile(`^ {0,6}([a-z]+):(?: (.*))?$`)
 // ansiEscape strips colour codes, in case ZFS_COLOR reached a terminal-less run.
 var ansiEscape = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
+// classHeadings are the lines that introduce the vdevs outside the main tree.
+var classHeadings = map[string]bool{"dedup": true, "special": true, "logs": true, "cache": true, "spares": true}
+
 // dataErrorsLine matches "2 data errors, use '-v' for a list".
 var dataErrorsLine = regexp.MustCompile(`^(\d+) data errors`)
 
@@ -608,6 +770,7 @@ func parseZpoolStatusText(out []byte) ([]PoolInfo, error) {
 	var sectionText []string // status/action/scan lines collected so far
 	var scanLines []string   // first scan block of the current pool
 	var tableHeaderSeen, rootRowSeen bool
+	var class string // class heading the config rows are under: "", logs, cache, special, dedup, spares
 
 	flush := func() {
 		if cur == nil {
@@ -652,8 +815,8 @@ func parseZpoolStatusText(out []byte) ([]PoolInfo, error) {
 				if err := finishPool(); err != nil {
 					return nil, err
 				}
-				cur = &PoolInfo{Name: value}
-				tableHeaderSeen, rootRowSeen = false, false
+				cur = &PoolInfo{Name: value, ProblemVdevs: []ProblemVdev{}}
+				tableHeaderSeen, rootRowSeen, class = false, false, ""
 			case "state":
 				if cur != nil {
 					cur.State = value
@@ -696,17 +859,33 @@ func parseZpoolStatusText(out []byte) ([]PoolInfo, error) {
 				}
 				continue
 			}
+			isRoot := false
 			if !rootRowSeen {
 				// The first row is the pool itself. Anything else means
 				// this is not the table this reader knows.
-				rootRowSeen = true
+				rootRowSeen, isRoot = true, true
 				if len(fields) < 5 || fields[0] != cur.Name {
 					return nil, fmt.Errorf("%w: pool %q: unexpected first config row %q", errZpoolParse, cur.Name, trimmed)
 				}
 			}
-			// Class headings ("logs") and spares ("sdf AVAIL") have no
-			// counters; a row whose three counter columns do not all read
-			// as numbers is not a counted vdev.
+			// Class headings stand alone on their line (print_class_vdevs,
+			// print_l2cache, print_spares).
+			if len(fields) == 1 && classHeadings[fields[0]] {
+				class = fields[0]
+				continue
+			}
+			// Spares print a name and a state and no counters
+			// (print_status_config with isspare).
+			if class == "spares" {
+				if len(fields) >= 2 && spareNeedsAttention(fields[1]) {
+					cur.ProblemVdevs = append(cur.ProblemVdevs, ProblemVdev{
+						Name: fields[0], Type: vdevTypeFromName(fields[0]), State: fields[1],
+					})
+				}
+				continue
+			}
+			// A row whose three counter columns do not all read as numbers
+			// is not a counted vdev.
 			if len(fields) < 5 {
 				continue
 			}
@@ -722,6 +901,12 @@ func parseZpoolStatusText(out []byte) ([]PoolInfo, error) {
 			cur.ReadErrors += r
 			cur.WriteErrors += w
 			cur.ChecksumErrors += c
+			if !isRoot && vdevNeedsAttention(fields[1], r, w, c) {
+				cur.ProblemVdevs = append(cur.ProblemVdevs, ProblemVdev{
+					Name: fields[0], Type: vdevTypeFromName(fields[0]), State: fields[1],
+					ReadErrors: r, WriteErrors: w, ChecksumErrors: c,
+				})
+			}
 		}
 	}
 	if err := finishPool(); err != nil {
