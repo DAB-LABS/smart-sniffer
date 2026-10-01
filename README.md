@@ -30,6 +30,8 @@ SMART Sniffer follows the trail, sniffing out the [early warning signs](https://
 
 **Disk usage monitoring** — Opt-in filesystem tracking during install. Monitor storage utilization on any mountpoint — the agent reports total, used, available bytes and percentage via a dedicated API endpoint.
 
+**ZFS pool health** -- On a machine with ZFS, each pool appears as its own device with its state, error counts and last scrub. A notification names the pool and the failing disks when a pool degrades, and tells you when a pool disappears.
+
 **Multi-machine monitoring** — Install a lightweight Go agent on each machine. Each drive appears as its own HA device with full sensor entities and diagnostics.
 
 **Auto-discovery** — Agents advertise themselves on the local network via mDNS/Zeroconf. Home Assistant discovers them automatically — no manual IP entry needed.
@@ -159,6 +161,7 @@ standby_mode: standby          # optional -- never, standby, sleep, or idle
 advertise_interface: eth0      # optional -- restrict mDNS to this interface
 exclude_devices:               # optional -- set by installer's drive picker
   - /dev/sdb
+zfs_pool_status: true          # optional -- report ZFS pool health when zpool is found
 filesystems:                   # optional -- set by installer's disk usage picker
   - path: /
     uuid: a1b2c3d4-5678-90ab-cdef-1234567890ab
@@ -179,6 +182,8 @@ docker run -v /:/host:ro -e SMARTHA_MOUNT_PREFIX=/host ...
 The equivalent config file setting is `mount_prefix: /host`. Configured mountpoints are then read through that prefix, while the paths reported to Home Assistant stay as the host sees them. This affects disk usage reporting only; reading SMART data from host drives additionally requires passing the devices through to the container.
 
 **Exclude devices:** Device paths listed in `exclude_devices` are skipped during every scan. The agent resolves symlinks at startup, so `/dev/disk/by-id/...` paths and their `/dev/sdX` equivalents both match. The installer's drive picker (Linux) shows all detected drives and lets you choose which ones to monitor -- useful for excluding iSCSI LUNs, USB backup drives, or anything you don't want polled. Drives with remote-storage transports (iSCSI, Fibre Channel) are flagged in yellow and excluded from the default selection. You can also add paths manually and restart the service. If a device appears in both `exclude_devices` and `device_overrides`, the exclusion wins and a warning is logged.
+
+**ZFS pool health:** On a machine with ZFS the agent reads `zpool status` on every scan and reports each pool at `/api/pools`. Nothing to configure; machines without ZFS are unaffected. Set `zfs_pool_status: false` to turn it off, or `zpool_path: /path/to/zpool` if `zpool` is not on the usual paths. Pool level only: the error counts add up every disk in the pool, and the disks with problems are named in the Problem sensor and the notification.
 
 **Scan interval:** Uses Go duration syntax -- `30s`, `5m`, `1h`, `24h` are all valid. When `standby_mode` is set, the agent skips sleeping drives and serves cached data, so the interval does not cause unnecessary wake-ups. When `standby_mode` is `never` (the default), each poll wakes any drive that is spun down. This is the *agent-side* read cadence and is separate from the HA Poll Interval entity, which reflects how often Home Assistant pulls fresh data from the agent itself.
 

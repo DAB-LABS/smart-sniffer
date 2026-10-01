@@ -2,6 +2,50 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.7.0 -- 2026-10-01
+
+**Agent and integration.** Update the integration through HACS. Update the agent
+on any machine with ZFS to get pool health, then reload the integration.
+Elsewhere the agent update is optional.
+
+ZFS pool health arrives: each pool becomes its own device with its state, error
+counts and last scrub, and you get a notification when a pool is degraded or
+disappears.
+
+### Added
+- **ZFS pool health** -- On a machine with ZFS, each pool appears as a device
+  ("ZFS pool <name>") with its state, read/write/checksum errors, data errors,
+  last scrub and a Problem sensor. The notification names the disks involved,
+  such as "sdc: FAULTED, 12 read errors". Requested by @Telejunky in
+  [#50](https://github.com/DAB-LABS/smart-sniffer/issues/50).
+- **A pool that disappears is reported** -- If a pool is no longer listed
+  (exported, or failed to import at boot), its state reads MISSING and you get a
+  notification. Remove its device to stop tracking a pool you exported on
+  purpose.
+
+### Fixed
+- **Some SandForce SSDs read as 100% worn when nearly new** -- Corsair Force,
+  Kingston and similar drives report a wear attribute that is not a life gauge,
+  and some report one that is always zero. Neither is read as wear any more.
+  Reported by @kyrreaa in [#55](https://github.com/DAB-LABS/smart-sniffer/issues/55).
+- **`--discover` called some readable drives unreadable** -- a drive that
+  supports SMART only partly is now reported the way the running agent sees it,
+  with a note. `--discover` also no longer hangs on an unresponsive drive.
+  Reported by @DanaGoyette in [#51](https://github.com/DAB-LABS/smart-sniffer/issues/51).
+
+### Upgrade notes
+- **Pool health needs the v0.7.0 agent** on the ZFS machine. Older agents keep
+  working without pool devices.
+- **Reload the integration** after updating the agent so pool devices appear. A
+  pool created later also needs a reload, the same as a new drive.
+- Pool health is on by default when `zpool` is found. Set `zfs_pool_status: false`
+  in the agent's `config.yaml` to turn it off, or `zpool_path:` if `zpool` is
+  somewhere unusual.
+- On a drive whose wear can no longer be read, the old wear entity shows
+  unavailable until you delete it.
+- A pool that is already unhealthy when Home Assistant starts turns its Problem
+  sensor on but does not notify until something changes.
+
 ## v0.6.5 -- 2026-09-23
 
 **Integration only. No agent update needed.** Update through HACS and reload.

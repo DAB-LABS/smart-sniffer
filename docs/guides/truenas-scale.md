@@ -55,6 +55,8 @@ ZFS has its own disk health monitoring (`zpool status`, scrubs, checksums). SMAR
 
 Running both gives you two layers of visibility: SMART catches the drive starting to degrade, ZFS catches the data integrity impact.
 
+Since v0.7.0 SMART Sniffer also reports what `zpool status` says: each pool appears in Home Assistant with its state, error counts and last scrub, and you get a notification when a pool degrades or disappears. Nothing to configure; the agent finds `zpool` on its own.
+
 ## Drive passthrough vs. RAID
 
 Most TrueNAS users run their SATA/SAS controllers in HBA mode (IT mode) or use HBA cards directly. This passes each physical drive through to the OS individually -- which is exactly what SMART Sniffer needs. No special configuration required.
