@@ -1,0 +1,129 @@
+{
+    "output_version": {
+        "command": "zpool status",
+        "vers_major": 0,
+        "vers_minor": 1
+    },
+    "pools": {
+        "archive": {
+            "name": "archive",
+            "state": "ONLINE",
+            "pool_guid": 6992929018347794393,
+            "txg": 4114437,
+            "spa_version": 5000,
+            "zpl_version": 5,
+            "scan_stats": {
+                "function": "SCRUB",
+                "state": "SCANNING",
+                "start_time": 1790733601,
+                "end_time": 0,
+                "to_examine": 10027372261048,
+                "examined": 3749334040412,
+                "skipped": 0,
+                "processed": 0,
+                "errors": 0,
+                "bytes_per_scan": 0,
+                "pass_start": 0,
+                "scrub_pause": 0,
+                "scrub_spent_paused": 0,
+                "issued_bytes_per_scan": 0,
+                "issued": 3265530527007
+            },
+            "vdevs": {
+                "archive": {
+                    "name": "archive",
+                    "vdev_type": "root",
+                    "guid": 1385677763260216675,
+                    "class": "normal",
+                    "state": "ONLINE",
+                    "alloc_space": 1211180777472,
+                    "total_space": 3985729650688,
+                    "def_space": 3985729650688,
+                    "read_errors": 0,
+                    "write_errors": 0,
+                    "checksum_errors": 0,
+                    "vdevs": {
+                        "raidz1-0": {
+                            "name": "raidz1-0",
+                            "vdev_type": "raidz",
+                            "guid": 3305629598099305407,
+                            "class": "normal",
+                            "state": "ONLINE",
+                            "alloc_space": 1211180777472,
+                            "total_space": 3985729650688,
+                            "def_space": 3985729650688,
+                            "read_errors": 0,
+                            "write_errors": 0,
+                            "checksum_errors": 0,
+                            "vdevs": {
+                                "ata-TOSHIBA_MG08ACA16TE_Y0001": {
+                                    "name": "ata-TOSHIBA_MG08ACA16TE_Y0001",
+                                    "vdev_type": "disk",
+                                    "guid": 8344312365932543027,
+                                    "path": "/dev/disk/by-id/ata-TOSHIBA_MG08ACA16TE_Y0001-part1",
+                                    "devid": "ata-TOSHIBA_MG08ACA16TE_Y0001-part1",
+                                    "class": "normal",
+                                    "state": "ONLINE",
+                                    "rep_dev_size": 4000776830976,
+                                    "phys_space": 4000787030016,
+                                    "read_errors": 0,
+                                    "write_errors": 0,
+                                    "checksum_errors": 0,
+                                    "slow_ios": 0
+                                },
+                                "ata-TOSHIBA_MG08ACA16TE_Y0002": {
+                                    "name": "ata-TOSHIBA_MG08ACA16TE_Y0002",
+                                    "vdev_type": "disk",
+                                    "guid": 6280447881082462021,
+                                    "path": "/dev/disk/by-id/ata-TOSHIBA_MG08ACA16TE_Y0002-part1",
+                                    "devid": "ata-TOSHIBA_MG08ACA16TE_Y0002-part1",
+                                    "class": "normal",
+                                    "state": "ONLINE",
+                                    "rep_dev_size": 4000776830976,
+                                    "phys_space": 4000787030016,
+                                    "read_errors": 0,
+                                    "write_errors": 0,
+                                    "checksum_errors": 0,
+                                    "slow_ios": 0
+                                },
+                                "ata-TOSHIBA_MG08ACA16TE_Y0003": {
+                                    "name": "ata-TOSHIBA_MG08ACA16TE_Y0003",
+                                    "vdev_type": "disk",
+                                    "guid": 4360074028400248123,
+                                    "path": "/dev/disk/by-id/ata-TOSHIBA_MG08ACA16TE_Y0003-part1",
+                                    "devid": "ata-TOSHIBA_MG08ACA16TE_Y0003-part1",
+                                    "class": "normal",
+                                    "state": "ONLINE",
+                                    "rep_dev_size": 4000776830976,
+                                    "phys_space": 4000787030016,
+                                    "read_errors": 0,
+                                    "write_errors": 0,
+                                    "checksum_errors": 0,
+                                    "slow_ios": 0
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "l2cache": {
+                "nvme-WD_Red_SN700_500GB_22001": {
+                    "name": "nvme-WD_Red_SN700_500GB_22001",
+                    "vdev_type": "disk",
+                    "guid": 7293085335892066125,
+                    "path": "/dev/disk/by-id/nvme-WD_Red_SN700_500GB_22001-part1",
+                    "devid": "nvme-WD_Red_SN700_500GB_22001-part1",
+                    "class": "normal",
+                    "state": "ONLINE",
+                    "rep_dev_size": 4000776830976,
+                    "phys_space": 4000787030016,
+                    "read_errors": 0,
+                    "write_errors": 0,
+                    "checksum_errors": 0,
+                    "slow_ios": 0
+                }
+            },
+            "error_count": 0
+        }
+    }
+}

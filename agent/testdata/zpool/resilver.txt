@@ -1,0 +1,19 @@
+  pool: media
+ state: DEGRADED
+status: One or more devices is currently being resilvered.  The pool will
+	continue to function, possibly in a degraded state.
+action: Wait for the resilver to complete.
+  scan: resilver in progress since Mon Sep 28 14:02:11 2026
+	1.21T / 2.87T scanned at 412M/s, 640G / 2.87T issued at 218M/s
+	640G resilvered, 21.78% done, 02:58:21 to go
+config:
+
+	NAME                                  STATE     READ WRITE CKSUM
+	media                                 DEGRADED     0     0     0
+	  mirror-0                            DEGRADED     0     0     0
+	    ata-ST4000VN008-2DR166_ZDH0001    ONLINE       0     0     0
+	    replacing-1                       DEGRADED     0     0     0
+	      ata-ST4000VN008-2DR166_ZDH0002  FAULTED      0    37     0  too many errors
+	      ata-ST4000VN008-2DR166_ZDH0009  ONLINE       0     0     0  (resilvering)
+
+errors: No known data errors

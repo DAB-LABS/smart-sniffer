@@ -1,0 +1,160 @@
+{
+    "output_version": {
+        "command": "zpool status",
+        "vers_major": 0,
+        "vers_minor": 1
+    },
+    "pools": {
+        "tank": {
+            "name": "tank",
+            "state": "DEGRADED",
+            "pool_guid": 6293504400521001387,
+            "txg": 4114437,
+            "spa_version": 5000,
+            "zpl_version": 5,
+            "status": "One or more devices are faulted in response to persistent errors.\n\tSufficient replicas exist for the pool to continue functioning in a\n\tdegraded state.\n",
+            "action": "Replace the faulted device, or use 'zpool clear' to mark the device\n\trepaired.\n",
+            "scan_stats": {
+                "function": "SCRUB",
+                "state": "FINISHED",
+                "start_time": 1790468640,
+                "end_time": 1790487369,
+                "to_examine": 0,
+                "examined": 0,
+                "skipped": 0,
+                "processed": 1572864,
+                "errors": 0,
+                "bytes_per_scan": 0,
+                "pass_start": 0,
+                "scrub_pause": 0,
+                "scrub_spent_paused": 0,
+                "issued_bytes_per_scan": 0,
+                "issued": 0
+            },
+            "vdevs": {
+                "tank": {
+                    "name": "tank",
+                    "vdev_type": "root",
+                    "guid": 8208751161920679043,
+                    "class": "normal",
+                    "state": "DEGRADED",
+                    "alloc_space": 1211180777472,
+                    "total_space": 3985729650688,
+                    "def_space": 3985729650688,
+                    "read_errors": 0,
+                    "write_errors": 0,
+                    "checksum_errors": 0,
+                    "vdevs": {
+                        "raidz2-0": {
+                            "name": "raidz2-0",
+                            "vdev_type": "raidz",
+                            "guid": 8896724710237921833,
+                            "class": "normal",
+                            "state": "DEGRADED",
+                            "alloc_space": 1211180777472,
+                            "total_space": 3985729650688,
+                            "def_space": 3985729650688,
+                            "read_errors": 0,
+                            "write_errors": 0,
+                            "checksum_errors": 0,
+                            "vdevs": {
+                                "ata-WDC_WD80EFAX-68KNBN0_VAGX0001": {
+                                    "name": "ata-WDC_WD80EFAX-68KNBN0_VAGX0001",
+                                    "vdev_type": "disk",
+                                    "guid": 1084085513222543625,
+                                    "path": "/dev/disk/by-id/ata-WDC_WD80EFAX-68KNBN0_VAGX0001-part1",
+                                    "devid": "ata-WDC_WD80EFAX-68KNBN0_VAGX0001-part1",
+                                    "class": "normal",
+                                    "state": "ONLINE",
+                                    "rep_dev_size": 4000776830976,
+                                    "phys_space": 4000787030016,
+                                    "read_errors": 0,
+                                    "write_errors": 0,
+                                    "checksum_errors": 0,
+                                    "slow_ios": 0
+                                },
+                                "ata-WDC_WD80EFAX-68KNBN0_VAGX0002": {
+                                    "name": "ata-WDC_WD80EFAX-68KNBN0_VAGX0002",
+                                    "vdev_type": "disk",
+                                    "guid": 9122164164140881185,
+                                    "path": "/dev/disk/by-id/ata-WDC_WD80EFAX-68KNBN0_VAGX0002-part1",
+                                    "devid": "ata-WDC_WD80EFAX-68KNBN0_VAGX0002-part1",
+                                    "class": "normal",
+                                    "state": "ONLINE",
+                                    "rep_dev_size": 4000776830976,
+                                    "phys_space": 4000787030016,
+                                    "read_errors": 0,
+                                    "write_errors": 0,
+                                    "checksum_errors": 0,
+                                    "slow_ios": 0
+                                },
+                                "ata-WDC_WD80EFAX-68KNBN0_VAGX0003": {
+                                    "name": "ata-WDC_WD80EFAX-68KNBN0_VAGX0003",
+                                    "vdev_type": "disk",
+                                    "guid": 7263633017050916381,
+                                    "path": "/dev/disk/by-id/ata-WDC_WD80EFAX-68KNBN0_VAGX0003-part1",
+                                    "devid": "ata-WDC_WD80EFAX-68KNBN0_VAGX0003-part1",
+                                    "class": "normal",
+                                    "state": "FAULTED",
+                                    "rep_dev_size": 4000776830976,
+                                    "phys_space": 4000787030016,
+                                    "read_errors": 18,
+                                    "write_errors": 3,
+                                    "checksum_errors": 0,
+                                    "slow_ios": 0,
+                                    "aux": "ERR_EXCEEDED"
+                                },
+                                "ata-WDC_WD80EFAX-68KNBN0_VAGX0004": {
+                                    "name": "ata-WDC_WD80EFAX-68KNBN0_VAGX0004",
+                                    "vdev_type": "disk",
+                                    "guid": 5015694504983151915,
+                                    "path": "/dev/disk/by-id/ata-WDC_WD80EFAX-68KNBN0_VAGX0004-part1",
+                                    "devid": "ata-WDC_WD80EFAX-68KNBN0_VAGX0004-part1",
+                                    "class": "normal",
+                                    "state": "ONLINE",
+                                    "rep_dev_size": 4000776830976,
+                                    "phys_space": 4000787030016,
+                                    "read_errors": 0,
+                                    "write_errors": 0,
+                                    "checksum_errors": 0,
+                                    "slow_ios": 0
+                                },
+                                "ata-WDC_WD80EFAX-68KNBN0_VAGX0005": {
+                                    "name": "ata-WDC_WD80EFAX-68KNBN0_VAGX0005",
+                                    "vdev_type": "disk",
+                                    "guid": 3937617003967200163,
+                                    "path": "/dev/disk/by-id/ata-WDC_WD80EFAX-68KNBN0_VAGX0005-part1",
+                                    "devid": "ata-WDC_WD80EFAX-68KNBN0_VAGX0005-part1",
+                                    "class": "normal",
+                                    "state": "ONLINE",
+                                    "rep_dev_size": 4000776830976,
+                                    "phys_space": 4000787030016,
+                                    "read_errors": 0,
+                                    "write_errors": 0,
+                                    "checksum_errors": 2,
+                                    "slow_ios": 0
+                                },
+                                "ata-WDC_WD80EFAX-68KNBN0_VAGX0006": {
+                                    "name": "ata-WDC_WD80EFAX-68KNBN0_VAGX0006",
+                                    "vdev_type": "disk",
+                                    "guid": 4773320377620659595,
+                                    "path": "/dev/disk/by-id/ata-WDC_WD80EFAX-68KNBN0_VAGX0006-part1",
+                                    "devid": "ata-WDC_WD80EFAX-68KNBN0_VAGX0006-part1",
+                                    "class": "normal",
+                                    "state": "ONLINE",
+                                    "rep_dev_size": 4000776830976,
+                                    "phys_space": 4000787030016,
+                                    "read_errors": 0,
+                                    "write_errors": 0,
+                                    "checksum_errors": 0,
+                                    "slow_ios": 0
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "error_count": 0
+        }
+    }
+}

@@ -1,0 +1,19 @@
+  pool: backup
+ state: ONLINE
+status: One or more devices has experienced an error resulting in data
+	corruption.  Applications may be affected.
+action: Restore the file in question if possible.  Otherwise restore the
+	entire pool from backup.
+   see: https://openzfs.github.io/openzfs-docs/msg/ZFS-8000-8A
+  scan: scrub repaired 0B in 00:41:17 with 2 errors on Sun Sep 13 00:24:02 2026
+config:
+
+	NAME                                                    STATE     READ WRITE CKSUM
+	backup                                                  ONLINE       0     0     4
+	  mirror-0                                              ONLINE       0     0     4
+	    ata-ST2000DM008-2FR102_ZFL0001                      ONLINE       0     0     4
+	    ata-ST2000DM008-2FR102_ZFL0002                      ONLINE       0     0     4
+	logs                                                  
+	  nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0001-part4  ONLINE       0     0     0
+
+errors: 2 data errors, use '-v' for a list

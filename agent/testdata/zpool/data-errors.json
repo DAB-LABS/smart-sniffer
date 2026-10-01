@@ -1,0 +1,118 @@
+{
+    "output_version": {
+        "command": "zpool status",
+        "vers_major": 0,
+        "vers_minor": 1
+    },
+    "pools": {
+        "backup": {
+            "name": "backup",
+            "state": "ONLINE",
+            "pool_guid": 4905194543518992637,
+            "txg": 4114437,
+            "spa_version": 5000,
+            "zpl_version": 5,
+            "status": "One or more devices has experienced an error resulting in data\n\tcorruption.  Applications may be affected.\n",
+            "action": "Restore the file in question if possible.  Otherwise restore the\n\tentire pool from backup.\n",
+            "msgid": "ZFS-8000-8A",
+            "moreinfo": "https://openzfs.github.io/openzfs-docs/msg/ZFS-8000-8A",
+            "scan_stats": {
+                "function": "SCRUB",
+                "state": "FINISHED",
+                "start_time": 1789256565,
+                "end_time": 1789259042,
+                "to_examine": 0,
+                "examined": 0,
+                "skipped": 0,
+                "processed": 0,
+                "errors": 2,
+                "bytes_per_scan": 0,
+                "pass_start": 0,
+                "scrub_pause": 0,
+                "scrub_spent_paused": 0,
+                "issued_bytes_per_scan": 0,
+                "issued": 0
+            },
+            "vdevs": {
+                "backup": {
+                    "name": "backup",
+                    "vdev_type": "root",
+                    "guid": 6216801899879553597,
+                    "class": "normal",
+                    "state": "ONLINE",
+                    "alloc_space": 1211180777472,
+                    "total_space": 3985729650688,
+                    "def_space": 3985729650688,
+                    "read_errors": 0,
+                    "write_errors": 0,
+                    "checksum_errors": 4,
+                    "vdevs": {
+                        "mirror-0": {
+                            "name": "mirror-0",
+                            "vdev_type": "mirror",
+                            "guid": 4606135860361373533,
+                            "class": "normal",
+                            "state": "ONLINE",
+                            "alloc_space": 1211180777472,
+                            "total_space": 3985729650688,
+                            "def_space": 3985729650688,
+                            "read_errors": 0,
+                            "write_errors": 0,
+                            "checksum_errors": 4,
+                            "vdevs": {
+                                "ata-ST2000DM008-2FR102_ZFL0001": {
+                                    "name": "ata-ST2000DM008-2FR102_ZFL0001",
+                                    "vdev_type": "disk",
+                                    "guid": 7623677883265325429,
+                                    "path": "/dev/disk/by-id/ata-ST2000DM008-2FR102_ZFL0001-part1",
+                                    "devid": "ata-ST2000DM008-2FR102_ZFL0001-part1",
+                                    "class": "normal",
+                                    "state": "ONLINE",
+                                    "rep_dev_size": 4000776830976,
+                                    "phys_space": 4000787030016,
+                                    "read_errors": 0,
+                                    "write_errors": 0,
+                                    "checksum_errors": 4,
+                                    "slow_ios": 0
+                                },
+                                "ata-ST2000DM008-2FR102_ZFL0002": {
+                                    "name": "ata-ST2000DM008-2FR102_ZFL0002",
+                                    "vdev_type": "disk",
+                                    "guid": 2771715086077612703,
+                                    "path": "/dev/disk/by-id/ata-ST2000DM008-2FR102_ZFL0002-part1",
+                                    "devid": "ata-ST2000DM008-2FR102_ZFL0002-part1",
+                                    "class": "normal",
+                                    "state": "ONLINE",
+                                    "rep_dev_size": 4000776830976,
+                                    "phys_space": 4000787030016,
+                                    "read_errors": 0,
+                                    "write_errors": 0,
+                                    "checksum_errors": 4,
+                                    "slow_ios": 0
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "logs": {
+                "nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0001-part4": {
+                    "name": "nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0001-part4",
+                    "vdev_type": "disk",
+                    "guid": 7909139180282291313,
+                    "path": "/dev/disk/by-id/nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0001-part4-part1",
+                    "devid": "nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0001-part4-part1",
+                    "class": "normal",
+                    "state": "ONLINE",
+                    "rep_dev_size": 4000776830976,
+                    "phys_space": 4000787030016,
+                    "read_errors": 0,
+                    "write_errors": 0,
+                    "checksum_errors": 0,
+                    "slow_ios": 0
+                }
+            },
+            "error_count": 2
+        }
+    }
+}

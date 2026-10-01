@@ -1,0 +1,130 @@
+{
+    "output_version": {
+        "command": "zpool status",
+        "vers_major": 0,
+        "vers_minor": 1
+    },
+    "pools": {
+        "media": {
+            "name": "media",
+            "state": "DEGRADED",
+            "pool_guid": 1496707004522307979,
+            "txg": 4114437,
+            "spa_version": 5000,
+            "zpl_version": 5,
+            "status": "One or more devices is currently being resilvered.  The pool will\n\tcontinue to function, possibly in a degraded state.\n",
+            "action": "Wait for the resilver to complete.\n",
+            "scan_stats": {
+                "function": "RESILVER",
+                "state": "SCANNING",
+                "start_time": 1790604131,
+                "end_time": 0,
+                "to_examine": 0,
+                "examined": 0,
+                "skipped": 0,
+                "processed": 687194767360,
+                "errors": 0,
+                "bytes_per_scan": 0,
+                "pass_start": 0,
+                "scrub_pause": 0,
+                "scrub_spent_paused": 0,
+                "issued_bytes_per_scan": 0,
+                "issued": 0
+            },
+            "vdevs": {
+                "media": {
+                    "name": "media",
+                    "vdev_type": "root",
+                    "guid": 5284374068711108847,
+                    "class": "normal",
+                    "state": "DEGRADED",
+                    "alloc_space": 1211180777472,
+                    "total_space": 3985729650688,
+                    "def_space": 3985729650688,
+                    "read_errors": 0,
+                    "write_errors": 0,
+                    "checksum_errors": 0,
+                    "vdevs": {
+                        "mirror-0": {
+                            "name": "mirror-0",
+                            "vdev_type": "mirror",
+                            "guid": 7731609219678422183,
+                            "class": "normal",
+                            "state": "DEGRADED",
+                            "alloc_space": 1211180777472,
+                            "total_space": 3985729650688,
+                            "def_space": 3985729650688,
+                            "read_errors": 0,
+                            "write_errors": 0,
+                            "checksum_errors": 0,
+                            "vdevs": {
+                                "ata-ST4000VN008-2DR166_ZDH0001": {
+                                    "name": "ata-ST4000VN008-2DR166_ZDH0001",
+                                    "vdev_type": "disk",
+                                    "guid": 2362484832342707769,
+                                    "path": "/dev/disk/by-id/ata-ST4000VN008-2DR166_ZDH0001-part1",
+                                    "devid": "ata-ST4000VN008-2DR166_ZDH0001-part1",
+                                    "class": "normal",
+                                    "state": "ONLINE",
+                                    "rep_dev_size": 4000776830976,
+                                    "phys_space": 4000787030016,
+                                    "read_errors": 0,
+                                    "write_errors": 0,
+                                    "checksum_errors": 0,
+                                    "slow_ios": 0
+                                },
+                                "replacing-1": {
+                                    "name": "replacing-1",
+                                    "vdev_type": "replacing",
+                                    "guid": 7472875550533908795,
+                                    "class": "normal",
+                                    "state": "DEGRADED",
+                                    "alloc_space": 1211180777472,
+                                    "total_space": 3985729650688,
+                                    "def_space": 3985729650688,
+                                    "read_errors": 0,
+                                    "write_errors": 0,
+                                    "checksum_errors": 0,
+                                    "vdevs": {
+                                        "ata-ST4000VN008-2DR166_ZDH0002": {
+                                            "name": "ata-ST4000VN008-2DR166_ZDH0002",
+                                            "vdev_type": "disk",
+                                            "guid": 3098483876195564849,
+                                            "path": "/dev/disk/by-id/ata-ST4000VN008-2DR166_ZDH0002-part1",
+                                            "devid": "ata-ST4000VN008-2DR166_ZDH0002-part1",
+                                            "class": "normal",
+                                            "state": "FAULTED",
+                                            "rep_dev_size": 4000776830976,
+                                            "phys_space": 4000787030016,
+                                            "read_errors": 0,
+                                            "write_errors": 37,
+                                            "checksum_errors": 0,
+                                            "slow_ios": 0,
+                                            "aux": "ERR_EXCEEDED"
+                                        },
+                                        "ata-ST4000VN008-2DR166_ZDH0009": {
+                                            "name": "ata-ST4000VN008-2DR166_ZDH0009",
+                                            "vdev_type": "disk",
+                                            "guid": 5836469606009778989,
+                                            "path": "/dev/disk/by-id/ata-ST4000VN008-2DR166_ZDH0009-part1",
+                                            "devid": "ata-ST4000VN008-2DR166_ZDH0009-part1",
+                                            "class": "normal",
+                                            "state": "ONLINE",
+                                            "rep_dev_size": 4000776830976,
+                                            "phys_space": 4000787030016,
+                                            "read_errors": 0,
+                                            "write_errors": 0,
+                                            "checksum_errors": 0,
+                                            "slow_ios": 0
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "error_count": 0
+        }
+    }
+}

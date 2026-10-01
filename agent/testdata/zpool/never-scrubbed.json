@@ -1,0 +1,50 @@
+{
+    "output_version": {
+        "command": "zpool status",
+        "vers_major": 0,
+        "vers_minor": 1
+    },
+    "pools": {
+        "scratch": {
+            "name": "scratch",
+            "state": "ONLINE",
+            "pool_guid": 6032492780195598901,
+            "txg": 4114437,
+            "spa_version": 5000,
+            "zpl_version": 5,
+            "vdevs": {
+                "scratch": {
+                    "name": "scratch",
+                    "vdev_type": "root",
+                    "guid": 4966988634657678271,
+                    "class": "normal",
+                    "state": "ONLINE",
+                    "alloc_space": 1211180777472,
+                    "total_space": 3985729650688,
+                    "def_space": 3985729650688,
+                    "read_errors": 0,
+                    "write_errors": 0,
+                    "checksum_errors": 0,
+                    "vdevs": {
+                        "nvme-Samsung_SSD_980_1TB_S64ANS0001": {
+                            "name": "nvme-Samsung_SSD_980_1TB_S64ANS0001",
+                            "vdev_type": "disk",
+                            "guid": 8967330137637216731,
+                            "path": "/dev/disk/by-id/nvme-Samsung_SSD_980_1TB_S64ANS0001-part1",
+                            "devid": "nvme-Samsung_SSD_980_1TB_S64ANS0001-part1",
+                            "class": "normal",
+                            "state": "ONLINE",
+                            "rep_dev_size": 4000776830976,
+                            "phys_space": 4000787030016,
+                            "read_errors": 0,
+                            "write_errors": 0,
+                            "checksum_errors": 0,
+                            "slow_ios": 0
+                        }
+                    }
+                }
+            },
+            "error_count": 0
+        }
+    }
+}

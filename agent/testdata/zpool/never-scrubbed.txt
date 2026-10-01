@@ -1,0 +1,9 @@
+  pool: scratch
+ state: ONLINE
+config:
+
+	NAME                                   STATE     READ WRITE CKSUM
+	scratch                                ONLINE       0     0     0
+	  nvme-Samsung_SSD_980_1TB_S64ANS0001  ONLINE       0     0     0
+
+errors: No known data errors

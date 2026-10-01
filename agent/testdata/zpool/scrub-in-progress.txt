@@ -1,0 +1,17 @@
+  pool: archive
+ state: ONLINE
+  scan: scrub in progress since Wed Sep 30 02:00:01 2026
+	3.41T / 9.12T scanned at 1.02G/s, 2.97T / 9.12T issued at 912M/s
+	0B repaired, 32.57% done, 01:57:44 to go
+config:
+
+	NAME                               STATE     READ WRITE CKSUM
+	archive                            ONLINE       0     0     0
+	  raidz1-0                         ONLINE       0     0     0
+	    ata-TOSHIBA_MG08ACA16TE_Y0001  ONLINE       0     0     0
+	    ata-TOSHIBA_MG08ACA16TE_Y0002  ONLINE       0     0     0
+	    ata-TOSHIBA_MG08ACA16TE_Y0003  ONLINE       0     0     0
+	cache                            
+	  nvme-WD_Red_SN700_500GB_22001    ONLINE       0     0     0
+
+errors: No known data errors

@@ -1,0 +1,77 @@
+  pool: raid10
+ state: ONLINE
+status: Some supported and requested features are not enabled on the pool.
+        The pool can still be used, but some features are unavailable.
+action: Enable all features using 'zpool upgrade'. Once this is done,
+        the pool may no longer be accessible by software that does not support
+        the features. See zpool-features(7) for details.
+  scan: scrub repaired 0B in 00:05:32 with 0 errors on Tue Sep  1 03:05:34 2026
+config:
+
+        NAME                                            STATE     READ WRITE CKSUM
+        raid10                                          ONLINE       0     0     0
+          mirror-0                                      ONLINE       0     0     0
+            ata-Hitachi_xxxxxxxx         ONLINE       0     0     0
+            ata-TOSHIBA_xxxx            ONLINE       0     0     0
+          mirror-1                                      ONLINE       0     0     0
+            ata-ST500LM000xxxx              ONLINE       0     0     0
+            ata-TOSHIBA_Mxxxxx              ONLINE       0     0     0
+          mirror-2                                      ONLINE       0     0     0
+            ata-TOSHIBA_xxxx            ONLINE       0     0     0
+            ata-Hitachi_xxxxxx            ONLINE       0     0     0
+          mirror-3                                      ONLINE       0     0     0
+            ata-ST500LM000-xxxx              ONLINE       0     0     0
+            ata-ST500LM000-xxxx              ONLINE       0     0     0
+          mirror-4                                      ONLINE       0     0     0
+            ata-ST500LM000-xxxx              ONLINE       0     0     0
+            ata-ST500LM000-xxxx              ONLINE       0     0     0
+          mirror-5                                      ONLINE       0     0     0
+            ata-WDC_WD5xxxxxxx     ONLINE       0     0     0
+            ata-Hitachi_Hxxxxxxxx      ONLINE       0     0     0
+
+errors: No known data errors
+
+  pool: rpool
+ state: ONLINE
+status: Some supported and requested features are not enabled on the pool.
+        The pool can still be used, but some features are unavailable.
+action: Enable all features using 'zpool upgrade'. Once this is done,
+        the pool may no longer be accessible by software that does not support
+        the features. See zpool-features(7) for details.
+  scan: scrub repaired 0B in 00:00:32 with 0 errors on Tue Sep  1 01:00:33 2026
+config:
+
+        NAME                                                      STATE     READ WRITE CKSUM
+        rpool                                                     ONLINE       0     0     0
+          mirror-0                                                ONLINE       0     0     0
+            wwn-0x5axxxxxxxxxxxx-part3                      ONLINE       0     0     0
+            ata-ADATA_xxxxxx-part3                              ONLINE       0     0     0
+
+errors: No known data errors
+
+  pool: storage
+ state: ONLINE
+status: Some supported and requested features are not enabled on the pool.
+        The pool can still be used, but some features are unavailable.
+action: Enable all features using 'zpool upgrade'. Once this is done,
+        the pool may no longer be accessible by software that does not support
+        the features. See zpool-features(7) for details.
+  scan: scrub repaired 0B in 03:39:30 with 0 errors on Tue Sep  1 09:39:32 2026
+config:
+
+        NAME                        STATE     READ WRITE CKSUM
+        storage                     ONLINE       0     0     0
+          raidz1-0                  ONLINE       0     0     0
+            scsi-35000c500xxxxxxx  ONLINE       0     0     0
+            scsi-35000c500xxxxxxx  ONLINE       0     0     0
+            scsi-35000c500xxxxxxx  ONLINE       0     0     0
+            scsi-35000c500xxxxxxx  ONLINE       0     0     0
+            wwn-0x5000cxxxxxxxxx  ONLINE       0     0     0
+          raidz1-1                  ONLINE       0     0     0
+            scsi-35000c500xxxxxxx  ONLINE       0     0     0
+            scsi-35000c500xxxxxxx  ONLINE       0     0     0
+            scsi-35000c500xxxxxxx  ONLINE       0     0     0
+            scsi-35000c500xxxxxxx  ONLINE       0     0     0
+            scsi-35000c500xxxxxxx  ONLINE       0     0     0
+
+errors: No known data errors
