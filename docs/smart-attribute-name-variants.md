@@ -132,7 +132,6 @@ The table below summarises which manufacturers have been confirmed for each of t
 | Name String                   | Manufacturers / Notes                                                    |
 |-------------------------------|--------------------------------------------------------------------------|
 | `Wear_Leveling_Count`         | Samsung SSDs (ID 177) — 870 EVO, 860, 860 EVO, 850 Pro/EVO, etc. Reports remaining erase cycles (higher = newer) |
-| `Wear_Range_Delta`            | Some Samsung SSD variants                                                |
 | `Media_Wearout_Indicator`     | Intel SSDs (ID 233), some WD/SanDisk SSDs. 100 = new, 0 = worn out     |
 | `SSD_Life_Left`               | Intel 520, 530 series; some Kingston SSDs (ID 231)                       |
 | `Remaining_Lifetime_Perc`     | Kingston SSDs (ID 231)                                                   |
@@ -140,6 +139,8 @@ The table below summarises which manufacturers have been confirmed for each of t
 | `Perc_Rated_Life_Remain`      | Some Micron enterprise SSD variants                                      |
 | `Percent_Life_Remaining`      | Some SanDisk SSDs                                                        |
 | `Drive_Life_Protection_Stat`  | Some WD Blue SSDs (ID 230)                                               |
+
+`Wear_Range_Delta` (ID 177 on SandForce and some Seagate SSDs) is not used: it is the spread between the most and least worn blocks, not life remaining. A row named above whose normalized value, worst, threshold and flags are all 0 is not a gauge and is skipped; if no other row is left, the drive has no wear reading.
 
 **NVMe path:** `nvme_smart_health_information_log.percentage_used` (0% = new, 100% = fully worn)
 
