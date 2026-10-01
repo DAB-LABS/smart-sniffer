@@ -96,7 +96,8 @@ _COMMAND_TIMEOUT_WARN_THRESHOLD = 100
 # percentage_used threshold.
 _ATA_WEAR_NAMES: set[str] = {
     "Wear_Leveling_Count",
-    "Wear_Range_Delta",
+    # Not Wear_Range_Delta: block wear spread, not life remaining (GH #55).
+    # Keep in step with ATA_NAME_MAP["wear_leveling_count"] in sensor.py.
     "Media_Wearout_Indicator",
     "SSD_Life_Left",
     "Remaining_Lifetime_Perc",

@@ -260,7 +260,11 @@ ATA_NAME_MAP: dict[str, list[str]] = {
         ],
         "wear_leveling_count": [
             "Wear_Leveling_Count",
-            "Wear_Range_Delta",
+            # Not Wear_Range_Delta (177 on SandForce and some Seagate SSDs):
+            # it is the spread between the most and least worn blocks, not
+            # life remaining, and a normal reading of 0 turned into "100%
+            # used" (GH #55).  Keep in step with _ATA_WEAR_NAMES in
+            # attention.py.
             "Media_Wearout_Indicator",
             "SSD_Life_Left",
             "Remaining_Lifetime_Perc",
