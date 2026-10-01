@@ -12,14 +12,20 @@ the ones smartmontools drivedb.h gives the SandForce entry. See its _comment.
 
 sensor.py imports Home Assistant, which this suite does not have, so the
 sensor's name list is read from the source with ast and its selection rule
-(first row in drive-table order whose name is in the list, reported as
-100 - normalized value) is restated here. The attention side runs the real
-module.
+(first row in drive-table order whose name is in the list and which is not a
+dead row, reported as 100 - normalized value) is restated here, using the
+shared predicate from attention.py. The attention side runs the real module.
+
+Round 2: the reporter's real smartctl JSON (ata_sandforce_force_gt_smartctl,
+serial replaced) shows his drive is not in drivedb, so 177 arrives as
+Wear_Leveling_Count and 233 as Media_Wearout_Indicator, both 0/0/0 with flags
+0. Such a row is not a gauge and is skipped (attention.is_dead_wear_attr).
 """
 
 from __future__ import annotations
 
 import ast
+import copy
 from pathlib import Path
 from typing import Any
 
@@ -43,11 +49,20 @@ def _sensor_wear_names() -> list[str]:
 SENSOR_WEAR_NAMES = _sensor_wear_names()
 
 
+def _load_att():
+    from tests.conftest import attention
+
+    return attention
+
+
 def _sensor_wear(payload: dict[str, Any]) -> int | None:
     """The ATA wear value as sensor._extract_attribute computes it."""
+    is_dead = _load_att().is_dead_wear_attr
     table = (payload["smart_data"].get("ata_smart_attributes") or {}).get("table", [])
     for attr in table:
         if attr.get("name") in SENSOR_WEAR_NAMES:
+            if is_dead(attr):
+                continue
             normalized = attr.get("value")
             return None if normalized is None else max(0, 100 - normalized)
     return None
@@ -116,6 +131,7 @@ def test_samsung_wear_leveling_count_unchanged(att, drive, add_ata_attr):
 def test_existing_fixtures_keep_their_wear_value(att, drive):
     """Values recorded on the base commit, before the list changed."""
     expected = {
+        "ata_sandforce_force_gt": 0,  # round 1 constructed fixture
         "ata_healthy": None,
         "ata_reallocated": None,
         "ata_skhynix": 1,  # 231 SSD_Life_Left at 99
@@ -127,3 +143,121 @@ def test_existing_fixtures_keep_their_wear_value(att, drive):
         assert att.current_readings(payload).get(att.LABEL_SSD_WEAR) == value, name
         if not name.startswith("nvme"):
             assert _sensor_wear(payload) == value, name
+
+
+# ---------------------------------------------------------------------------
+# Round 2: a wear-named row at 0/0/0 with flags 0 is not a gauge
+# ---------------------------------------------------------------------------
+
+_DEAD = {
+    "id": 177,
+    "name": "Wear_Leveling_Count",
+    "value": 0,
+    "worst": 0,
+    "thresh": 0,
+    "flags": {"value": 0, "string": "------ "},
+    "raw": {"value": 8, "string": "8"},
+}
+
+
+def test_predicate_all_zero_is_dead(att):
+    assert att.is_dead_wear_attr(_DEAD) is True
+
+
+def test_predicate_any_nonzero_is_kept(att):
+    for field in ("value", "worst", "thresh"):
+        row = copy.deepcopy(_DEAD)
+        row[field] = 1
+        assert att.is_dead_wear_attr(row) is False, field
+    row = copy.deepcopy(_DEAD)
+    row["flags"]["value"] = 0x13  # Samsung 177 flags, also when worn out
+    assert att.is_dead_wear_attr(row) is False
+
+
+def test_predicate_missing_keys_are_kept(att):
+    for field in ("value", "worst", "thresh", "flags"):
+        row = copy.deepcopy(_DEAD)
+        del row[field]
+        assert att.is_dead_wear_attr(row) is False, field
+    row = copy.deepcopy(_DEAD)
+    del row["flags"]["value"]
+    assert att.is_dead_wear_attr(row) is False
+    row = copy.deepcopy(_DEAD)
+    row["flags"] = None
+    assert att.is_dead_wear_attr(row) is False
+    row = copy.deepcopy(_DEAD)
+    row["value"] = False  # a bool is not the integer 0
+    assert att.is_dead_wear_attr(row) is False
+
+
+def test_real_force_gt_capture_has_no_wear_reading(att, drive):
+    """The reporter's real smartctl JSON: 177 and 233 are dead, 231 is
+    unnamed, so there is no wear reading and no wear warning."""
+    payload = drive("ata_sandforce_force_gt_smartctl")
+    assert _sensor_wear(payload) is None
+    readings = att.current_readings(payload)
+    assert att.LABEL_SSD_WEAR not in readings
+    assert _wear_reasons(att, payload) == []
+    state, _, reasons, _ = att.evaluate_attention(payload)
+    assert state == "NO", reasons
+    assert reasons == []
+
+
+def test_real_force_gt_capture_attention_otherwise_unchanged(att, drive):
+    """Apart from wear, the readings are the ones the base code produced."""
+    payload = drive("ata_sandforce_force_gt_smartctl")
+    readings = att.current_readings(payload)
+    assert readings == {
+        "Reallocated Sector Count": 0,
+        "Reported Uncorrectable Errors": 0,
+        "Reallocated Event Count": 0,
+    }
+
+
+def test_dead_row_is_skipped_for_the_next_candidate(att, drive, add_ata_attr):
+    """A dead 177 followed by a live 231 SSD_Life_Left reads from 231."""
+    payload = drive("ata_healthy")
+    table = payload["smart_data"].setdefault(
+        "ata_smart_attributes", {"revision": 16, "table": []}
+    )["table"]
+    table.append(copy.deepcopy(_DEAD))
+    add_ata_attr(payload, 231, "SSD_Life_Left", 0)
+    table[-1]["value"] = 92
+    table[-1]["thresh"] = 10
+    assert _sensor_wear(payload) == 8
+    assert att.current_readings(payload)[att.LABEL_SSD_WEAR] == 8
+    assert _wear_reasons(att, payload) == []
+    table[-1]["value"] = 4
+    assert _sensor_wear(payload) == 96
+    assert _wear_reasons(att, payload) == [
+        "SSD wear at 96% of rated life -- consider scheduling replacement"
+    ]
+
+
+def test_worn_samsung_177_still_reads_worn(att, drive):
+    """A worn-out Samsung 177 (850 EVO and PM830 reports: flags 0x0013,
+    value 1, thresh 0 or 10) stays a reading, and value 0 with those flags
+    would too."""
+    payload = drive("ata_healthy")
+    table = payload["smart_data"].setdefault(
+        "ata_smart_attributes", {"revision": 16, "table": []}
+    )["table"]
+    row = copy.deepcopy(_DEAD)
+    row["flags"] = {"value": 0x13, "string": "PO--C- "}
+    table.append(row)
+    assert _sensor_wear(payload) == 100
+    assert att.current_readings(payload)[att.LABEL_SSD_WEAR] == 100
+    assert len(_wear_reasons(att, payload)) == 1
+
+
+def test_sensor_py_uses_the_shared_predicate():
+    """sensor.py cannot be imported here, so check by source that both the
+    value lookup and the covered-row logic call the shared predicate."""
+    tree = ast.parse(_SENSOR_PY.read_text(encoding="utf-8"))
+    users = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for sub in ast.walk(node):
+                if isinstance(sub, ast.Name) and sub.id == "is_dead_wear_attr":
+                    users.add(node.name)
+    assert {"_extract_attribute", "async_setup_entry"} <= users
