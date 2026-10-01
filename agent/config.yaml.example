@@ -71,3 +71,16 @@ mdns: true
 # an issue. The --verbose flag also enables this; the flag can turn verbose on
 # but does not turn off a "verbose: true" set here.
 # verbose: false
+
+# ZFS pool health (optional, default: true).
+# When a zpool binary is present, the agent reads "zpool status" on every
+# scan and reports each pool's state, read/write/checksum error totals, data
+# errors and last scrub at /api/pools. Machines without ZFS are unaffected:
+# no zpool, no pools, nothing logged. Set to false to turn it off entirely.
+# zfs_pool_status: true
+
+# Path to the zpool binary (optional).
+# Leave unset to look on PATH, then in /usr/sbin, /sbin and the other usual
+# locations, the same way smartctl is found. Set it when zpool lives
+# somewhere else. Any executable that prints zpool status output works.
+# zpool_path: /usr/sbin/zpool

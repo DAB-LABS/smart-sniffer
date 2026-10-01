@@ -44,6 +44,8 @@ type Config struct {
 	Verbose            bool               `yaml:"verbose"`             // log every poll cycle instead of suppressing repeats; --verbose enables (never disables a file setting)
 	DeviceOverrides    []DeviceOverride   `yaml:"device_overrides"`    // manual protocol overrides per device path
 	ExcludeDevices     []string           `yaml:"exclude_devices"`     // device paths to skip during scan
+	ZFSPoolStatus      *bool              `yaml:"zfs_pool_status"`     // report ZFS pool health when zpool is present (default: true); pointer to tell "not set" from false
+	ZpoolPath          string             `yaml:"zpool_path"`          // zpool binary to run; empty = PATH, then the usual sbin locations
 	Discover           bool               `yaml:"-"`                   // set by --discover flag; not read from config file
 	NoWrite            bool               `yaml:"-"`                   // set by --no-write flag; skips config write in discover mode
 	SmartctlPath       string             `yaml:"-"`                   // resolved path to smartctl binary; set by resolveSmartctlPath()
@@ -318,6 +320,15 @@ func (c *Config) MDNSEnabled() bool {
 		return true // default on
 	}
 	return *c.MDNS
+}
+
+// PoolStatusEnabled returns true unless zfs_pool_status is set to false.
+// Pool status still needs a zpool binary; see NewPoolCacheFromConfig.
+func (c *Config) PoolStatusEnabled() bool {
+	if c.ZFSPoolStatus == nil {
+		return true // default on
+	}
+	return *c.ZFSPoolStatus
 }
 
 // ResolveAdvertiseInterfaces returns the list of net.Interface to pass to

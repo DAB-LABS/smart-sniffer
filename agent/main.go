@@ -123,6 +123,18 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 		}
 	}
 
+	// --- ZFS pool status (only when enabled and a zpool binary exists) ---
+	if pc := NewPoolCacheFromConfig(cfg); pc != nil {
+		cache.poolCache = pc
+		// Initial population, bounded: a zpool stuck in the kernel must not
+		// hold up startup. The read keeps running in the background if so.
+		select {
+		case <-pc.Refresh():
+		case <-time.After(zpoolTimeout + 3*time.Second):
+		}
+		log.Printf("ZFS pool status: using %s", pc.zpoolPath)
+	}
+
 	// --- HTTP server ---
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/health", handleHealth(cache))
@@ -130,6 +142,9 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 	mux.HandleFunc("/api/drives/", cache.HandleDrive) // trailing slash catches /api/drives/{id}
 	if fsCache != nil {
 		mux.HandleFunc("/api/filesystems", fsCache.HandleFilesystems)
+	}
+	if cache.poolCache != nil {
+		mux.HandleFunc("/api/pools", cache.poolCache.HandlePools)
 	}
 
 	var handler http.Handler = mux
@@ -527,6 +542,7 @@ type healthResponse struct {
 	Endpoints   []string `json:"endpoints"`
 	Drives      int      `json:"drives"`
 	Filesystems int      `json:"filesystems"`
+	Pools       *int     `json:"pools,omitempty"` // present only when ZFS pool status is on
 }
 
 // handleHealth serves GET /api/health — includes available endpoints and counts.
@@ -538,6 +554,13 @@ func handleHealth(cache *DriveCache) http.HandlerFunc {
 		if cache.fsCache != nil {
 			endpoints = append(endpoints, "/api/filesystems")
 			fsCount = len(cache.fsCache.configs)
+		}
+
+		var poolCount *int
+		if cache.poolCache != nil {
+			endpoints = append(endpoints, "/api/pools")
+			n := cache.poolCache.Count()
+			poolCount = &n
 		}
 
 		cache.mu.RLock()
@@ -552,6 +575,7 @@ func handleHealth(cache *DriveCache) http.HandlerFunc {
 			Endpoints:   endpoints,
 			Drives:      driveCount,
 			Filesystems: fsCount,
+			Pools:       poolCount,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -624,6 +648,7 @@ type DriveCache struct {
 	drives        map[string]DriveInfo // keyed by slug id
 	driveOrder    []string             // preserve discovery order
 	fsCache       *FilesystemCache     // refreshed alongside drive data (nil = disabled)
+	poolCache     *PoolCache           // ZFS pool status, refreshed alongside drive data in the background (nil = disabled or no zpool)
 	logs          *logThrottle         // suppresses repeated log lines (per-device and per scan-step keys)
 	standbyMode   string               // never, standby, sleep, idle
 	firstPoll     bool                 // true until first Refresh() completes; uses --scan-open on first poll
@@ -859,6 +884,13 @@ func (dc *DriveCache) Refresh() {
 	// Refresh filesystem data on the same cycle.
 	if dc.fsCache != nil {
 		dc.fsCache.Refresh()
+	}
+
+	// Start a ZFS pool read on the same cycle. It runs in the background and
+	// is not waited for: a zpool stuck in the kernel must not stall SMART
+	// polling. HTTP requests are served from the last completed read.
+	if dc.poolCache != nil {
+		dc.poolCache.Refresh()
 	}
 }
 
