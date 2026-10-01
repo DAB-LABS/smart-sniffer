@@ -1009,7 +1009,7 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bo
 		// is SCSI, retry with -d sat. Bit 1 = device open failed (Synology),
 		// bit 2 = command failed/checksum error (QNAP). Both indicate a protocol
 		// mismatch on NAS HBAs where SATA drives present as SCSI.
-		if code&0x07 != 0 && strings.EqualFold(protocol, "scsi") {
+		if smartctlWantsSATRetry(code) && strings.EqualFold(protocol, "scsi") {
 			satArgs := []string{"--json", "-a", "-d", "sat"}
 			if dc.standbyMode != "never" && !skipStandby {
 				satArgs = append(satArgs, "-n", dc.standbyMode)
@@ -1017,7 +1017,7 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bo
 			satArgs = append(satArgs, devicePath)
 
 			satOut, satCode, satExecErr := runSmartctl(dc.cfg.SmartctlPath, satArgs)
-			if satExecErr == nil && satCode&0x07 == 0 {
+			if satExecErr == nil && !smartctlWantsSATRetry(satCode) {
 				log.Printf("INFO: %s reports as SCSI but SAT succeeded -- using SAT for this drive", devicePath)
 				dc.mu.Lock()
 				dc.protocolCache[devicePath] = "sat"
@@ -1046,7 +1046,7 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bo
 			// immediately; an unchanged code reminds at most hourly.
 			var msg string
 			switch {
-			case code&0x03 != 0:
+			case !smartctlReadable(code):
 				msg = fmt.Sprintf("ERROR: smartctl -a %s failed (exit code %d: %s)",
 					devicePath, code, describeExitCode(code))
 			case code&0x18 != 0:
@@ -1067,7 +1067,7 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bo
 			// as a new device while the real serial-keyed one disappears from
 			// /api/drives and its entities go unavailable. Never publish a
 			// drive we could not read. See smart-sniffer-app#7.
-			if code&0x03 != 0 {
+			if !smartctlReadable(code) {
 				return DriveInfo{DevicePath: devicePath, Protocol: protocol}, fetchUnreadable
 			}
 		}

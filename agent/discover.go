@@ -21,6 +21,40 @@ type discoverDriveResult struct {
 	model       string
 	serial      string
 	needsConfig bool // requires a device_override entry
+	// partialCode is the smartctl exit code behind a readable verdict when bit
+	// 2 was set in it (some SMART or ATA commands failed, the drive was still
+	// read). Zero when there is nothing to note.
+	partialCode int
+}
+
+// smartctl exit statuses are a bitmask. The two helpers below are the single
+// definition of how the agent reads the low bits, shared by the runtime poll
+// (fetchDriveInfo) and --discover (probeOneDrive) so the two cannot disagree
+// again (they did, GH #51). They are pure so they can be tested directly.
+//
+// They deliberately cover different bits:
+//
+//   - Readability looks at bits 0-1 only (command line did not parse; device
+//     open failed). Bit 2 means some SMART or other ATA command failed, but
+//     the drive WAS read, so it is not a reason to call the drive unreadable.
+//   - The SAT retry trigger looks at bits 0-2. On NAS HBAs that present SATA
+//     drives as SCSI, bit 2 is how QNAP signals the protocol mismatch, so a
+//     SCSI drive is retried with -d sat when any of the three is set, and a
+//     SAT result is only accepted when all three are clear. If the SAT retry
+//     does not come back clean, the original exit code stands and
+//     smartctlReadable decides.
+
+// smartctlReadable reports whether smartctl actually read the drive, given
+// its exit code: true unless bit 0 or bit 1 is set.
+func smartctlReadable(code int) bool {
+	return code&0x03 == 0
+}
+
+// smartctlWantsSATRetry reports whether an exit code from a SCSI-reported
+// drive should trigger a -d sat retry, and (negated) whether a SAT attempt
+// came back clean enough to use: true when any of bits 0-2 is set.
+func smartctlWantsSATRetry(code int) bool {
+	return code&0x07 != 0
 }
 
 // RunDiscover probes all drives, reports protocols and SMART accessibility, and
@@ -175,7 +209,12 @@ func RunDiscover(cfg *Config, noWrite bool) error {
 }
 
 // probeOneDrive attempts to read SMART data from a single drive path, trying
-// SAT fallback if the initial protocol fails. Returns a discoverDriveResult.
+// SAT fallback the way the runtime poll does. Returns a discoverDriveResult.
+//
+// The verdict must match fetchDriveInfo for every exit code: a SCSI-reported
+// drive with any of bits 0-2 set is retried with -d sat, a clean SAT result
+// wins, and otherwise the ORIGINAL exit code decides readability (bits 0-1).
+// The runtime's standby branch does not apply here: discover never passes -n.
 func probeOneDrive(smartctlPath, path, protocol string) discoverDriveResult {
 	r := discoverDriveResult{path: path, scanProto: protocol}
 
@@ -193,21 +232,9 @@ func probeOneDrive(smartctlPath, path, protocol string) discoverDriveResult {
 		}
 	}
 
-	// Execution failure bits (0-2). Any set = smartctl could not read the drive.
-	openFailed := code&0x07 != 0
-
-	if !openFailed {
-		r.smartOK = true
-		r.model, r.serial = extractSmartModelSerial(out)
-		// Synology paths always need a device_override (not found by regular scan).
-		if strings.HasPrefix(path, "/dev/sata") {
-			r.needsConfig = true
-		}
-		return r
-	}
-
-	// SCSI open failed -- try SAT.
-	if strings.EqualFold(protocol, "scsi") || strings.EqualFold(protocol, "sat") {
+	// SCSI (or SAT) reported and something in bits 0-2 failed -- try SAT.
+	if smartctlWantsSATRetry(code) &&
+		(strings.EqualFold(protocol, "scsi") || strings.EqualFold(protocol, "sat")) {
 		r.satRetried = true
 		satArgs := []string{"--json", "-a", "-d", "sat", path}
 		satOut, satErr := exec.Command(smartctlPath, satArgs...).CombinedOutput()
@@ -217,12 +244,27 @@ func probeOneDrive(smartctlPath, path, protocol string) discoverDriveResult {
 				satCode = satExitErr.ExitCode()
 			}
 		}
-		if satCode&0x07 == 0 {
+		if !smartctlWantsSATRetry(satCode) {
 			r.satOK = true
 			r.model, r.serial = extractSmartModelSerial(satOut)
 			// SAT auto-fallback handled at runtime -- only needs config if it won't
 			// be reached via scan (i.e. path not found by --scan-open).
 			return r
+		}
+		// SAT did not come back clean. The runtime keeps the original
+		// protocol and exit code in this case, so fall through and let the
+		// original code decide.
+	}
+
+	if smartctlReadable(code) {
+		r.smartOK = true
+		r.model, r.serial = extractSmartModelSerial(out)
+		if code&0x04 != 0 {
+			r.partialCode = code
+		}
+		// Synology paths always need a device_override (not found by regular scan).
+		if strings.HasPrefix(path, "/dev/sata") {
+			r.needsConfig = true
 		}
 	}
 
@@ -240,7 +282,11 @@ func printDriveResult(r discoverDriveResult, cfg *Config) {
 
 	if r.satRetried {
 		fmt.Printf("    Scan protocol: %s\n", r.scanProto)
-		fmt.Printf("    SMART data:    No\n")
+		if r.smartOK {
+			fmt.Printf("    SMART data:    Yes\n")
+		} else {
+			fmt.Printf("    SMART data:    No\n")
+		}
 		if r.satOK {
 			fmt.Printf("    SAT retry:     Yes -- SMART data available\n")
 			if r.model != "" {
@@ -250,6 +296,22 @@ func printDriveResult(r discoverDriveResult, cfg *Config) {
 				fmt.Printf("    Serial:        %s\n", r.serial)
 			}
 			fmt.Printf("    Result:        OK (agent will auto-detect SAT at runtime)\n")
+		} else if r.smartOK {
+			fmt.Printf("    SAT retry:     No -- keeping scan protocol\n")
+			if r.model != "" {
+				fmt.Printf("    Model:         %s\n", r.model)
+			}
+			if r.serial != "" {
+				fmt.Printf("    Serial:        %s\n", r.serial)
+			}
+			if r.partialCode != 0 {
+				fmt.Printf("    Note:          %s\n", partialReadNote(r.partialCode))
+			}
+			if r.needsConfig {
+				fmt.Printf("    Result:        Needs device_override (not found by standard scan)\n")
+			} else {
+				fmt.Printf("    Result:        OK\n")
+			}
 		} else {
 			fmt.Printf("    SAT retry:     No -- drive not readable\n")
 			fmt.Printf("    Result:        WARNING: could not read SMART data\n")
@@ -267,6 +329,9 @@ func printDriveResult(r discoverDriveResult, cfg *Config) {
 		if r.serial != "" {
 			fmt.Printf("    Serial:     %s\n", r.serial)
 		}
+		if r.partialCode != 0 {
+			fmt.Printf("    Note:       %s\n", partialReadNote(r.partialCode))
+		}
 		if r.needsConfig {
 			fmt.Printf("    Result:     Needs device_override (not found by standard scan)\n")
 		} else {
@@ -277,6 +342,12 @@ func printDriveResult(r discoverDriveResult, cfg *Config) {
 		fmt.Printf("    SMART data: No\n")
 		fmt.Printf("    Result:     WARNING: could not read SMART data\n")
 	}
+}
+
+// partialReadNote is the informational line printed under a drive that the
+// agent reads normally even though smartctl set exit bit 2.
+func partialReadNote(code int) string {
+	return fmt.Sprintf("smartctl reported some commands unsupported (exit code %d); the agent reads this drive normally", code)
 }
 
 // detectPlatform returns "synology", "qnap", or "" for standard Linux/other.
