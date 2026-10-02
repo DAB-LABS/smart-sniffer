@@ -1,0 +1,57 @@
+{
+  "json_format_version": [
+    1,
+    0
+  ],
+  "smartctl": {
+    "version": [
+      7,
+      5
+    ],
+    "exit_status": 0
+  },
+  "device": {
+    "name": "/dev/fixture",
+    "info_name": "/dev/fixture",
+    "type": "nvme",
+    "protocol": "NVMe"
+  },
+  "serial_number": "FIXTURE-m02-nvme0n1",
+  "model_name": "Sabrent Rocket 4.0 1TB",
+  "logical_block_size": 512,
+  "smart_status": {
+    "passed": true,
+    "nvme": {
+      "value": 0
+    }
+  },
+  "power_on_time": {
+    "hours": 54511
+  },
+  "power_cycle_count": 13,
+  "temperature": {
+    "op_limit_max": 90,
+    "critical_limit_max": 95,
+    "current": 28
+  },
+  "nvme_smart_health_information_log": {
+    "nsid": -1,
+    "critical_warning": 0,
+    "temperature": 28,
+    "available_spare": 100,
+    "available_spare_threshold": 5,
+    "percentage_used": 49,
+    "data_units_read": 574897532,
+    "data_units_written": 402690849,
+    "host_reads": 3319871225,
+    "host_writes": 14388403442,
+    "controller_busy_time": 86474,
+    "power_cycles": 13,
+    "power_on_hours": 54511,
+    "unsafe_shutdowns": 8,
+    "media_errors": 0,
+    "num_err_log_entries": 21,
+    "warning_temp_time": 0,
+    "critical_comp_time": 0
+  }
+}

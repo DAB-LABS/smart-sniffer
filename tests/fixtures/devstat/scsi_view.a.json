@@ -1,0 +1,29 @@
+{
+  "json_format_version": [
+    1,
+    0
+  ],
+  "smartctl": {
+    "version": [
+      7,
+      5
+    ],
+    "exit_status": 4
+  },
+  "device": {
+    "name": "/dev/fixture",
+    "info_name": "/dev/fixture",
+    "type": "scsi",
+    "protocol": "SCSI"
+  },
+  "serial_number": "FIXTURE-m05-sda",
+  "model_name": "HGST HDN721010ALE604",
+  "logical_block_size": 512,
+  "smart_status": {
+    "passed": true
+  },
+  "temperature": {
+    "current": 30,
+    "drive_trip": 25
+  }
+}
