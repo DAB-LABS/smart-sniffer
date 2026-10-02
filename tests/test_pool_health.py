@@ -487,6 +487,44 @@ def test_a_change_in_the_devices_updates_the_notification():
     assert actions == []
 
 
+# --- No count stated twice in a notification (v0.8.0) --------------------------
+
+
+def test_a_total_from_one_device_is_said_once():
+    """degraded-faulted: read 18 and write 3 all on one disk, checksum 2 all
+    on another. Each pool total equals one device's count, so the notification
+    keeps only the State line and the device lines; the reasons keep all."""
+    pool = one("degraded-faulted")
+    assert ph.notification_pool_lines(pool) == ["State: DEGRADED"]
+    assert ph.pool_level_problems(pool) == [
+        "State: DEGRADED", "Read errors: 18", "Write errors: 3", "Checksum errors: 2",
+    ]
+    _, state = _poll({}, [{**pool, "state": "ONLINE", "read_errors": 0, "write_errors": 0,
+                            "checksum_errors": 0, "problem_vdevs": []}])
+    actions, _ = _poll(state, [pool])
+    assert actions[0].reasons == ph.pool_problems(pool)
+    assert actions[0].pool_lines == ["State: DEGRADED"]
+    _, message = ph.build_notification("tank", "nas", actions[0].pool_lines, actions[0].device_lines)
+    assert "Read errors" not in message and "18 read errors" in message
+
+
+def test_a_total_spread_over_devices_or_not_matching_stays():
+    two = {
+        "name": "tank", "state": "ONLINE", "read_errors": 5, "write_errors": 4,
+        "checksum_errors": 0, "data_errors": 2,
+        "problem_vdevs": [
+            {"name": "sda", "state": "ONLINE", "read_errors": 3},
+            {"name": "sdb", "state": "ONLINE", "read_errors": 2, "write_errors": 1},
+        ],
+    }
+    # read: two devices; write: one device but 1 != 4; data errors always.
+    assert ph.notification_pool_lines(two) == [
+        "Read errors: 5", "Write errors: 4", "Data errors: 2",
+    ]
+    no_devices = {**two, "problem_vdevs": []}
+    assert ph.notification_pool_lines(no_devices) == ph.pool_level_problems(no_devices)
+
+
 # --- Missing pools (round 2) ---------------------------------------------------
 
 

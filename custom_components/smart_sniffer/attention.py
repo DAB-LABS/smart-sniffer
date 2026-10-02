@@ -106,7 +106,6 @@ _ATA_WEAR_NAMES: set[str] = {
     "Percent_Lifetime_Remain",
     "Perc_Rated_Life_Remain",
     "Percent_Life_Remaining",
-    "Drive_Life_Protection_Stat",
 }
 _ATA_WEAR_WARN_THRESHOLD = 90  # percentage used
 
@@ -287,7 +286,7 @@ def reading_placeholders(
     readings: dict[str, int],
     drive_label: str,
 ) -> dict[str, str]:
-    """Placeholders behind each field's "Currently: N. Default: M." line.
+    """Placeholders behind each field's "Currently: N" and "Default: M" lines.
 
     Home Assistant sources data_description from translations, so a per-drive
     value cannot be passed directly and has to arrive as a placeholder. Each

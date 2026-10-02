@@ -82,6 +82,13 @@ def test_wear_range_delta_is_in_neither_list(att):
     assert "Wear_Range_Delta" not in att._ATA_WEAR_NAMES
 
 
+def test_drive_life_protection_stat_is_in_neither_list(att):
+    """In no drivedb entry and over smartctl's 23-character name limit, so no
+    drive can report it (v0.8.0 tidy list)."""
+    assert "Drive_Life_Protection_Stat" not in SENSOR_WEAR_NAMES
+    assert "Drive_Life_Protection_Stat" not in att._ATA_WEAR_NAMES
+
+
 def test_sandforce_force_gt_reads_new(att, drive):
     """Constructed fixture (CrystalDiskInfo values, drivedb names): 177 at 0,
     231 at 100. The drive is new, so 0 % used and no wear warning."""

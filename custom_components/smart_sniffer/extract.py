@@ -128,7 +128,6 @@ ATA_NAME_MAP: dict[str, list[str]] = {
             "Percent_Lifetime_Remain",
             "Perc_Rated_Life_Remain",
             "Percent_Life_Remaining",
-            "Drive_Life_Protection_Stat",
         ],
     }
 
