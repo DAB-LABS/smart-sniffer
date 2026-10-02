@@ -37,6 +37,8 @@ import json
 import logging
 from typing import Any
 
+from .devstat import devstat_gap_readings, effective_devstat, with_devstat_suffix
+
 _LOGGER = logging.getLogger(__name__)
 
 # --- Attention states (the sensor's primary state value) ---
@@ -246,7 +248,19 @@ def current_readings(drive_data: dict[str, Any]) -> dict[str, int]:
                 readings[LABEL_SSD_WEAR] = max(0, 100 - normalized)
             break
 
+    # Device Statistics fill the labels the attribute table cannot (D4).
+    for reading, value in devstat_gap_readings(smart_data, effective_devstat(drive_data)):
+        readings.setdefault(_GAP_LABELS[reading], value)
+
     return readings
+
+
+# The label each Device Statistics gap reading fills (devstat.py).
+_GAP_LABELS: dict[str, str] = {
+    "unc": _CRITICAL_ATA["Reported_Uncorrect"],
+    "realloc": _CRITICAL_ATA["Reallocated_Sector_Ct"],
+    "wear_used": LABEL_SSD_WEAR,
+}
 
 
 # The two gauges measure how much life the drive has left and are meant to
@@ -763,6 +777,39 @@ def evaluate_attention(
                         # rather than the label, so mark it here too.
                         seen_labels.add("SSD wear")
                 break  # one wear attribute per drive
+
+    # Device Statistics, only where the attribute table has a gap (D4). After
+    # the attribute pass, so a drive without devstat gets exactly the reasons
+    # it always did; only these reasons carry the suffix.
+    for reading, value in devstat_gap_readings(smart_data, effective_devstat(drive_data)):
+        label = _GAP_LABELS[reading]
+        if reading == "wear_used":
+            if "SSD wear" in seen_labels:
+                continue
+            breached, was_accepted, limit = _evaluate_label(label, value, thresholds)
+            if breached:
+                warning_reasons.append(with_devstat_suffix(
+                    f"SSD wear at {value}% of rated life -- "
+                    "consider scheduling replacement"
+                    if limit == default_threshold(label)
+                    else f"SSD wear at {value}% of rated life (accepted {limit}%)"
+                ))
+                seen_labels.add("SSD wear")
+            elif was_accepted:
+                accepted.append(with_devstat_suffix(
+                    f"SSD wear at {value}% of rated life (accepted {limit}%)"
+                ))
+                seen_labels.add("SSD wear")
+            continue
+        if label in seen_labels:
+            continue
+        breached, was_accepted, limit = _evaluate_label(label, value, thresholds)
+        if breached:
+            critical_reasons.append(with_devstat_suffix(_breach_text(label, value, limit)))
+            seen_labels.add(label)
+        elif was_accepted:
+            accepted.append(with_devstat_suffix(f"{label}: {value} (accepted {limit})"))
+            seen_labels.add(label)
 
     return _assemble(critical_reasons, warning_reasons, accepted)
 

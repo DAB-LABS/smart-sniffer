@@ -1,17 +1,19 @@
 """Shared fixtures for the SMART Sniffer integration tests.
 
-Why attention.py is loaded by path
-----------------------------------
-``attention.py`` imports nothing from Home Assistant, which is what makes these
-tests runnable under plain pytest with no harness. Importing it the obvious way
-(``from custom_components.smart_sniffer.attention import ...``) does not work,
-because Python executes the package's ``__init__.py`` first and
+How the integration's modules are imported
+------------------------------------------
+``attention.py`` and the other HA-free modules import nothing from Home
+Assistant, which is what makes these tests runnable under plain pytest with no
+harness. Importing them the obvious way does not work on its own, because
+Python executes the package's ``__init__.py`` first and
 ``custom_components/smart_sniffer/__init__.py`` *does* import Home Assistant.
 
-So the module is loaded directly from its file, which runs no package
-``__init__``. This mirrors how ``evaluate_attention`` was exercised by hand
-during the #27 investigation, where the shipped and fixed modules were loaded
-side by side to prove a behaviour change.
+So this file registers a synthetic ``custom_components.smart_sniffer``
+package (a bare module whose ``__path__`` is the integration directory) before
+anything is imported. ``from custom_components.smart_sniffer.devstat import
+...`` then loads the module itself, its relative imports resolve, and no
+package ``__init__`` runs. Before v0.8.0 attention.py was loaded straight from
+its file; it now imports devstat.py, so it needs the package too.
 
 The payload wrapper
 -------------------
@@ -25,7 +27,8 @@ applied in exactly one place.
 from __future__ import annotations
 
 import copy
-import importlib.util
+import importlib
+import sys
 import json
 from pathlib import Path
 from types import ModuleType
@@ -35,23 +38,25 @@ import pytest
 
 _TESTS_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _TESTS_DIR.parent
-_ATTENTION_PY = _REPO_ROOT / "custom_components" / "smart_sniffer" / "attention.py"
+_COMPONENT = _REPO_ROOT / "custom_components" / "smart_sniffer"
 _FIXTURE_DIR = _TESTS_DIR / "fixtures"
 
 
-def _load_attention() -> ModuleType:
-    """Load attention.py from its path, bypassing the package __init__."""
-    spec = importlib.util.spec_from_file_location(
-        "smart_sniffer_attention", _ATTENTION_PY
-    )
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"could not load attention.py from {_ATTENTION_PY}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+def _register_package() -> None:
+    """Make custom_components.smart_sniffer importable without its __init__."""
+    if "custom_components.smart_sniffer" in sys.modules:
+        return
+    if "custom_components" not in sys.modules:
+        parent = ModuleType("custom_components")
+        parent.__path__ = [str(_COMPONENT.parent)]
+        sys.modules["custom_components"] = parent
+    package = ModuleType("custom_components.smart_sniffer")
+    package.__path__ = [str(_COMPONENT)]
+    sys.modules["custom_components.smart_sniffer"] = package
 
 
-attention = _load_attention()
+_register_package()
+attention = importlib.import_module("custom_components.smart_sniffer.attention")
 
 # Every fixture file, so the shape canary can walk them without a hardcoded list.
 FIXTURE_NAMES = sorted(p.stem for p in _FIXTURE_DIR.glob("*.json"))

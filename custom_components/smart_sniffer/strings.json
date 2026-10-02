@@ -147,6 +147,12 @@
   },
   "entity": {
     "sensor": {
+      "data_written": {
+        "name": "Data Written"
+      },
+      "data_read": {
+        "name": "Data Read"
+      },
       "pool_state": {
         "name": "State"
       },

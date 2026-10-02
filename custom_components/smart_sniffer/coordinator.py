@@ -22,6 +22,12 @@ Transition rules:
 
 Notification IDs are stable: smart_sniffer_attention_{drive_id}
 
+One exception to the first-poll rule (D11, v0.8.0): a reason that only the
+drive's Device Statistics could give (it ends "from device statistics") and
+that was never announced for that drive raises the notification on the first
+poll too, with a line saying so. Announcements are kept in the entry's Store,
+so a restart does not repeat them.
+
 ZFS pools (GH #50) follow the same rules through pool_health.py: a pool that
 goes from healthy to unhealthy raises a notification, a change in its reasons
 updates it, and recovery dismisses it. A registered pool the agent stops
@@ -53,6 +59,7 @@ from homeassistant.helpers.issue_registry import (
     async_create_issue,
     async_delete_issue,
 )
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .attention import (
@@ -73,7 +80,18 @@ from .const import (
     MIN_AGENT_VERSION,
     POOLS_KEY,
     POOLS_MISSING_KEY,
+    STORE_SAVE_DELAY,
 )
+from .devstat import (
+    ANNOUNCEMENT_LINE,
+    DEVSTAT_KEY,
+    announcement_records,
+    baseline_announcement,
+    forget_serial,
+    merge_devstat,
+    normalize_store,
+)
+from .entity_plan import DriveClass, EntitySpec, forget_device as forget_created
 from .pool_health import (
     advertises_pools,
     build_missing_notification as build_pool_missing_notification,
@@ -143,7 +161,13 @@ def _build_notification(
 class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Fetch SMART drive data from the agent and make it available to entities."""
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        store: Store | None = None,
+        stored: Any = None,
+    ) -> None:
         self.host:  str = entry.data[CONF_HOST]
         self.port:  int = entry.data[CONF_PORT]
         self.token: str = entry.data.get(CONF_TOKEN, "")
@@ -172,6 +196,17 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # The same for ZFS pools: pool name -> its problem reasons at the last
         # poll that could read them ([] = healthy). A name absent = not seen.
         self._prev_pool_reasons: dict[str, list[str]] = {}
+
+        # Device Statistics (devstat.py): the held readings per drive and the
+        # D11 announcement records, loaded from the entry's Store before the
+        # first refresh and written back, delayed, when they change.
+        self._store = store
+        self._devstat = normalize_store(stored)
+
+        # Entity plan (entity_plan.py): what each platform has created, by
+        # unique id, and each drive's class from its first plan.
+        self.created: dict[str, dict[str, EntitySpec]] = {}
+        self.drive_classes: dict[str, DriveClass] = {}
 
     @property
     def _base_url(self) -> str:
@@ -312,11 +347,57 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 f"Error communicating with SMART Sniffer agent: {err}"
             ) from err
 
+        self._merge_devstat(result)
         await self._handle_attention_notifications(result)
         self._handle_pool_notifications(
             result.get(POOLS_KEY), result.get(POOLS_MISSING_KEY)
         )
         return result
+
+    def _merge_devstat(self, result: dict[str, Any]) -> None:
+        """Merge each drive's Device Statistics with the held copy (6.3).
+
+        Stores the effective readings on the drive as ``_devstat``, which
+        attention, the threshold form and the Data Written / Read sensors all
+        read, and schedules a delayed save when a held value changed.
+        """
+        held = self._devstat["held"]
+        changed = False
+        for drive_id, drive_data in result.items():
+            if drive_id.startswith("_") or not isinstance(drive_data, dict):
+                continue
+            effective, new_held = merge_devstat(drive_data, held.get(drive_id))
+            drive_data[DEVSTAT_KEY] = effective
+            if new_held and new_held != held.get(drive_id):
+                held[drive_id] = new_held
+                changed = True
+        if changed:
+            self._save_devstat()
+
+    def _save_devstat(self) -> None:
+        if self._store is not None:
+            self._store.async_delay_save(lambda: self._devstat, STORE_SAVE_DELAY)
+
+    def _record_announced(self, records: list[str]) -> None:
+        announced = self._devstat["announced"]
+        new = [r for r in records if r not in announced]
+        if new:
+            announced.extend(new)
+            self._save_devstat()
+
+    def forget_device(self, identifier: str, serial: str | None = None) -> None:
+        """A device the user removed: forget what was created for it, its
+        class, and, for a drive, its held readings and announcement records,
+        so it starts afresh if it comes back."""
+        forget_created(self.created, identifier)
+        self.drive_classes.pop(identifier, None)
+        changed = self._devstat["held"].pop(identifier, None) is not None
+        announced = forget_serial(self._devstat["announced"], serial)
+        if announced != self._devstat["announced"]:
+            self._devstat["announced"] = announced
+            changed = True
+        if changed:
+            self._save_devstat()
 
     def registered_pool_names(self) -> list[str]:
         """Pools with a device in the registry for this config entry.
@@ -392,6 +473,25 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
                 self._prev_state[drive_id] = state
                 self._prev_reasons[drive_id] = reasons
+                # Except (D11): a reason only Device Statistics could give,
+                # never announced for this drive, is news even on the first
+                # poll; otherwise a combined agent and integration upgrade
+                # would turn a drive YES with nobody told. Announced once per
+                # drive and reading, across restarts.
+                announce, records = baseline_announcement(
+                    reasons, drive_data.get("serial"), self._devstat["announced"]
+                )
+                if announce:
+                    _LOGGER.warning(
+                        "SMART Sniffer: %s now requires attention: %s",
+                        drive_id, "; ".join(reasons),
+                    )
+                    title, message = _build_notification(
+                        drive_data, state, severity, reasons,
+                    )
+                    pn_create(self.hass, message=f"{message}\n\n{ANNOUNCEMENT_LINE}",
+                              title=title, notification_id=_notif_id(drive_id))
+                    self._record_announced(records)
                 continue
 
             prev_reasons = self._prev_reasons.get(drive_id, [])
@@ -442,6 +542,10 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
                 pn_create(self.hass, message=message, title=title,
                           notification_id=notif_id)
+                # A gap-filled reason told this way counts as announced.
+                self._record_announced(
+                    announcement_records(reasons, drive_data.get("serial"))
+                )
 
             self._prev_state[drive_id] = state
             self._prev_reasons[drive_id] = reasons

@@ -232,3 +232,13 @@ def test_no_translation_string_contains_a_url():
         if _URL.search(text)
     ]
     assert offenders == []
+
+
+# v0.8.0
+# -------------------------------------------------------------------------
+
+
+def test_the_data_volume_sensors_have_names():
+    names = _load("strings.json")["entity"]["sensor"]
+    assert names["data_written"] == {"name": "Data Written"}
+    assert names["data_read"] == {"name": "Data Read"}

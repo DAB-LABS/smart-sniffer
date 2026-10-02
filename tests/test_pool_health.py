@@ -624,6 +624,9 @@ def _entity_keys_in_source() -> dict[str, set[str]]:
         found = set(re.findall(r'super\(\).__init__\(coordinator, pool_name, "(pool_\w+)"\)', source))
         if 'f"pool_{key}"' in source:
             found |= {f"pool_{key}" for key in ph.ERROR_KEYS}
+        # Entity descriptions that take their name from a translation (the
+        # v0.8.0 Data Written and Data Read sensors).
+        found |= set(re.findall(r'translation_key="(\w+)"', source))
         keys[platform] = found
     return keys
 
