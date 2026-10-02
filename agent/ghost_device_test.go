@@ -132,7 +132,7 @@ func TestFetchDriveInfoExecFailureIsUnreadable(t *testing.T) {
 
 	t.Run("binary missing", func(t *testing.T) {
 		dc := newCache("/nonexistent/smartctl")
-		info, outcome := dc.fetchDriveInfo("/dev/nvme0", "nvme", true)
+		info, outcome, _ := dc.fetchDriveInfo("/dev/nvme0", "nvme", true, false)
 		if outcome != fetchUnreadable {
 			t.Fatalf("outcome = %v, want fetchUnreadable", outcome)
 		}
@@ -153,7 +153,7 @@ func TestFetchDriveInfoExecFailureIsUnreadable(t *testing.T) {
 
 		dc := newCache(hung)
 		start := time.Now()
-		info, outcome := dc.fetchDriveInfo("/dev/sda", "ata", true)
+		info, outcome, _ := dc.fetchDriveInfo("/dev/sda", "ata", true, false)
 		if elapsed := time.Since(start); elapsed > 3*time.Second {
 			t.Fatalf("timeout did not fire: took %v", elapsed)
 		}
@@ -174,7 +174,7 @@ func TestFetchDriveInfoExecFailureIsUnreadable(t *testing.T) {
 			t.Fatal(err)
 		}
 		dc := newCache(fake)
-		info, outcome := dc.fetchDriveInfo("/dev/sda", "ata", true)
+		info, outcome, _ := dc.fetchDriveInfo("/dev/sda", "ata", true, false)
 		if outcome != fetchOK {
 			t.Fatalf("outcome = %v, want fetchOK", outcome)
 		}

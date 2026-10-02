@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -71,10 +70,19 @@ func RunDiscover(cfg *Config, noWrite bool) error {
 	fmt.Println("Scanning drives...")
 
 	// Always use --scan-open in discover mode for best protocol detection.
-	scanOut, err := exec.Command(cfg.SmartctlPath, "--json", "--scan-open").CombinedOutput()
+	// Both scans are bounded like the runtime's: --scan-open 600 s, --scan
+	// 60 s. A --scan-open that fails or times out falls back to --scan, as at
+	// runtime; a --scan that times out is a clear error.
+	scanOut, err := runScan(cfg.SmartctlPath, []string{"--json", "--scan-open"}, scanOpenTimeout)
 	if err != nil {
+		if isScanTimeout(err) {
+			fmt.Printf("  smartctl --scan-open timed out after %s; trying --scan\n", seconds(scanOpenTimeout))
+		}
 		// Fall back to --scan if --scan-open is unsupported.
-		scanOut, err = exec.Command(cfg.SmartctlPath, "--json", "--scan").CombinedOutput()
+		scanOut, err = runScan(cfg.SmartctlPath, []string{"--json", "--scan"}, scanTimeout)
+		if isScanTimeout(err) {
+			return fmt.Errorf("smartctl --scan timed out after %s", seconds(scanTimeout))
+		}
 		if err != nil {
 			return fmt.Errorf("smartctl --scan failed: %v", err)
 		}

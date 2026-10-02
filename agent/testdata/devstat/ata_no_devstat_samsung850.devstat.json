@@ -1,0 +1,22 @@
+{
+  "json_format_version": [
+    1,
+    0
+  ],
+  "smartctl": {
+    "version": [
+      7,
+      5
+    ],
+    "exit_status": 0
+  },
+  "device": {
+    "name": "/dev/fixture",
+    "info_name": "/dev/fixture",
+    "type": "sat",
+    "protocol": "ATA"
+  },
+  "model_name": "Samsung SSD 850 PRO 1TB",
+  "serial_number": "FIXTURE-m02-sda",
+  "logical_block_size": 512
+}

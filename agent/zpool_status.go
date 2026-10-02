@@ -183,6 +183,7 @@ type PoolCache struct {
 	mode      int
 	running   bool
 	ok        bool // the last completed read succeeded; false before the first
+	done      bool // at least one read has completed
 	logs      *logThrottle
 }
 
@@ -254,6 +255,26 @@ func (pc *PoolCache) Count() int {
 	return len(pc.pools)
 }
 
+// Pool read states reported as pools_status in /api/health.
+const (
+	poolsStatusPending = "pending" // no read has completed yet
+	poolsStatusOK      = "ok"      // the last read succeeded
+	poolsStatusFailed  = "failed"  // the last read failed; /api/pools answers 503
+)
+
+// Status reports the state of the last pool read.
+func (pc *PoolCache) Status() string {
+	pc.mu.RLock()
+	defer pc.mu.RUnlock()
+	switch {
+	case !pc.done:
+		return poolsStatusPending
+	case pc.ok:
+		return poolsStatusOK
+	}
+	return poolsStatusFailed
+}
+
 // Pools returns a copy of the last read.
 func (pc *PoolCache) Pools() []PoolInfo {
 	pc.mu.RLock()
@@ -314,6 +335,7 @@ func (pc *PoolCache) refreshNow() {
 	pc.mu.Lock()
 	pc.mode = mode
 	pc.ok = err == nil
+	pc.done = true
 	if err != nil {
 		pc.pools = nil
 	} else {
@@ -325,7 +347,7 @@ func (pc *PoolCache) refreshNow() {
 		// Stable discriminator: a zpool that keeps failing logs once and then
 		// hourly, even if its error text varies between polls.
 		if pc.logs.shouldLog("zpool", "failed") {
-			log.Printf("WARNING: zfs pool status: %v; reporting no pools", err)
+			log.Printf("WARNING: zfs pool status: %v; pool status unavailable (/api/pools answers 503 until zpool succeeds)", err)
 		}
 		return
 	}

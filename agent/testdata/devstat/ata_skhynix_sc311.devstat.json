@@ -1,0 +1,22 @@
+{
+  "json_format_version": [
+    1,
+    0
+  ],
+  "smartctl": {
+    "version": [
+      7,
+      4
+    ],
+    "exit_status": 0
+  },
+  "device": {
+    "name": "/dev/fixture",
+    "info_name": "/dev/fixture",
+    "type": "sat",
+    "protocol": "ATA"
+  },
+  "model_name": "SK hynix SC311 SATA 128GB",
+  "serial_number": "FIXTURE-gh51",
+  "logical_block_size": 512
+}
