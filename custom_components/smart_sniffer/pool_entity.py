@@ -1,7 +1,10 @@
 """Shared base for the ZFS pool entities (GH #50).
 
-One Home Assistant device per pool, named "ZFS pool <name>", nested under the
-agent device the same way the drive and Disk Usage devices are. The pool's
+One Home Assistant device per pool, named "ZFS pool <name> (<host>)", nested
+under the agent device the same way the drive and Disk Usage devices are. The
+host is in the name because two machines often have a pool of the same name
+(rpool on every Proxmox box): without it the devices were indistinguishable in
+the device list and the second host's entity ids got a "_2" suffix (GH #50). The pool's
 entities read their pool out of the coordinator's ``_pools`` list on every
 update, and go unavailable when the agent stops reporting the pool or the last
 pool fetch failed. A missing pool (registered, but left out of a pool list that
@@ -34,7 +37,7 @@ class ZfsPoolEntity(CoordinatorEntity[SmartSnifferCoordinator]):
         self._attr_unique_id = f"{pool_identifier(entry_id, pool_name)}_{key}"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, pool_identifier(entry_id, pool_name))},
-            "name": f"ZFS pool {pool_name}",
+            "name": f"ZFS pool {pool_name} ({coordinator._hostname})",
             "manufacturer": "SMART Sniffer",
             "model": "ZFS Pool",
             # Nest under the agent alongside the drive devices (#24).
