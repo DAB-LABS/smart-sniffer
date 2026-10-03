@@ -36,6 +36,10 @@ Key behaviors:
   an error count; such reasons end "from device statistics". Needs the v0.8.0 agent;
   older agents show no new sensors. Served in /api/drives/{id} as device_statistics and
   derived. HA-free modules: devstat.py (merge, gap-fill), entity_plan.py, extract.py.
+- Also v0.8.0+: new drives, pools and filesystems appear without a reload; an NVMe
+  media_errors value at or above 2^64 reads as unknown and does not trigger Attention
+  (integration side, so it covers older agents); the installers wait up to 90 s for
+  the agent's first drive pass. v0.8.1+: pool devices are named "ZFS pool <name> (<host>)".
 - Per-drive alert thresholds (v0.6.3+): Configure > Alert thresholds lets a user raise the
   limit for an attribute on one drive, so old stable damage stops alerting while new
   damage still does.
@@ -104,7 +108,8 @@ companion HAOS add-on: https://github.com/DAB-LABS/smart-sniffer-app
 
 - [README](https://github.com/DAB-LABS/smart-sniffer/blob/main/README.md): Full setup
   guide, feature overview, entity reference table, config options (including
-  standby_mode, advertise_interface, filesystems), API endpoints, and service
+  standby_mode, advertise_interface, filesystems, zfs_pool_status, device_statistics),
+  API endpoints, and service
   management commands for Linux, macOS, and Windows.
 - [Attention Severity Logic](https://github.com/DAB-LABS/smart-sniffer/blob/main/docs/attention-severity-logic.md):
   Complete state machine specification, classification rules, trigger thresholds, and

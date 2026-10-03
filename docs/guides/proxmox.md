@@ -75,7 +75,7 @@ Once connected, every physical drive on the Proxmox host appears as its own devi
 
 ## ZFS pools
 
-Proxmox hosts often run ZFS. Since v0.7.0 the agent on the host also reports pool health: each pool shows up in Home Assistant as its own device with its state, error counts and last scrub, and you get a notification when a pool degrades or disappears. Nothing to configure; the agent finds `zpool` on its own. After updating the agent, reload the integration so the pool devices appear.
+Proxmox hosts often run ZFS. Since v0.7.0 the agent on the host also reports pool health: each pool shows up in Home Assistant as its own device with its state, error counts and last scrub, and you get a notification when a pool degrades or disappears. Nothing to configure; the agent finds `zpool` on its own. New pools appear on the first poll after the agent update; no reload needed since v0.8.0. Pool devices are named for the host, "ZFS pool rpool (pve-nas)", so several nodes with an rpool stay apart (v0.8.1).
 
 ## Troubleshooting
 

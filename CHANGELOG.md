@@ -2,6 +2,23 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.8.1 -- 2026-10-03
+
+**Integration only.** Update through HACS; no agent update.
+
+### Changed
+- **ZFS pool devices are named for their host** -- "ZFS pool rpool (pve-nas)"
+  instead of "ZFS pool rpool", the same way the Disk Usage device is. Two
+  machines with a pool of the same name no longer look identical in the device
+  list, and new pool entities get the host in their ids instead of a "_2"
+  suffix. Reported by @Telejunky and @spry-salt in
+  [#50](https://github.com/DAB-LABS/smart-sniffer/issues/50).
+
+### Upgrade notes
+- Existing pool devices pick up the new name on the next restart. Existing
+  entity ids stay as they are; rename them from the entity settings if you
+  want the host in them.
+
 ## v0.8.0 -- 2026-10-03
 
 **Agent, integration and installers.** Update the integration through HACS,
@@ -16,8 +33,9 @@ and from the health log on NVMe.
 - **Data Written sensor** -- lifetime bytes written per drive, shown in TB, with
   long-term statistics. SATA drives report it from the standard Device
   Statistics log, NVMe drives from their health log. A drive with no Device
-  Statistics log falls back to a vendor attribute only when that attribute
-  states its unit. Requested by @Mad-Hat in
+  Statistics log falls back to a vendor attribute that states its unit, or
+  to `Total_LBAs_Written` when the drive has 512-byte sectors and is in the
+  smartctl database. Requested by @Mad-Hat in
   [#49](https://github.com/DAB-LABS/smart-sniffer/issues/49) and built from the
   drive captures in [#56](https://github.com/DAB-LABS/smart-sniffer/issues/56).
 - **Data Read sensor** -- the same for reads, disabled by default.
@@ -44,11 +62,11 @@ and from the health log on NVMe.
   so it covers older agents too.
 - **Installer gave up on hosts with many or sleeping disks** -- `install.sh` and
   `install.ps1` now wait up to 90 s for the agent's first pass over the drives,
-  with a progress line at 10 s. Reported by @Telejunky in
+  with a progress line at about 10 s. Reported by @Telejunky in
   [#50](https://github.com/DAB-LABS/smart-sniffer/issues/50).
 - **SATA drives behind a NAS controller were asked twice per poll** -- once the
   SAT protocol is learned it is kept through standby and rescans, so each poll
-  is one call.
+  makes one SMART read instead of a failed SCSI read followed by a SAT retry.
 - **Pool notifications stated the disk count twice.**
 - **A `zpool status` that fails is reported as a failure** (`pools_status:
   failed` on `/api/health`) instead of as no pools.
@@ -67,11 +85,12 @@ and from the health log on NVMe.
   appear on the first poll after the agent update, no reload needed.
 - Each SATA drive gets one extra short smartctl call per poll for the Device
   Statistics log. A drive without the log is asked once; a drive whose log fails
-  three times running is left alone until the agent restarts.
+  three times running, or times out once, is left alone until the agent
+  restarts.
 - Data Written long-term statistics start at zero on the entity's first day,
   not at the drive's lifetime total. The state itself shows the lifetime total.
 - Temperature sensors gain `lifetime_max` and `lifetime_min` attributes from
-  Device Statistics, in your configured unit.
+  Device Statistics, in your configured unit, and `time_over_limit_minutes`.
 - Turning Device Statistics off removes any reason ending "from device
   statistics", which can clear an Attention state and dismiss its notification.
 

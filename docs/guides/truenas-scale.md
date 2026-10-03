@@ -55,6 +55,10 @@ ZFS has its own disk health monitoring (`zpool status`, scrubs, checksums). SMAR
 
 Running both gives you two layers of visibility: SMART catches the drive starting to degrade, ZFS catches the data integrity impact.
 
+Since v0.7.0 the agent on the TrueNAS host also reports pool health: each pool shows up in Home Assistant as its own device with its state, error counts and last scrub, and you get a notification when a pool degrades or disappears. Nothing to configure; the agent finds `zpool` on its own, and new pools appear without a reload (v0.8.0). Pool devices are named for the host, "ZFS pool tank (truenas)" (v0.8.1).
+
+SAS drives, and any drive read over plain SCSI, have no Device Statistics log and so no Data Written sensor; SATA drives behind the HBA get one as long as smartctl reads them as ATA (v0.8.0).
+
 Since v0.7.0 SMART Sniffer also reports what `zpool status` says: each pool appears in Home Assistant with its state, error counts and last scrub, and you get a notification when a pool degrades or disappears. Nothing to configure; the agent finds `zpool` on its own.
 
 ## Drive passthrough vs. RAID
