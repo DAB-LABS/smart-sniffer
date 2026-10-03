@@ -1,0 +1,60 @@
+{
+  "json_format_version": [
+    1,
+    0
+  ],
+  "smartctl": {
+    "version": [
+      7,
+      5
+    ],
+    "platform_info": "x86_64-w64-mingw32-w11-b26200",
+    "uint128_precision_bits": 128,
+    "exit_status": 0
+  },
+  "device": {
+    "name": "/dev/sda",
+    "info_name": "/dev/sda",
+    "type": "nvme",
+    "protocol": "NVMe"
+  },
+  "model_name": "SAMSUNG MZVLQ512HBLU-00BH1",
+  "serial_number": "FIXTURE-nvme-unreadable",
+  "firmware_version": "HPS1NFAV",
+  "power_on_time": {
+    "hours": 10733
+  },
+  "smart_status": {
+    "passed": true
+  },
+  "nvme_smart_health_information_log": {
+    "critical_warning": 0,
+    "temperature": 21,
+    "available_spare": 95,
+    "available_spare_threshold": 5,
+    "percentage_used": 8,
+    "data_units_read": 120269435,
+    "data_units_written": 72595696,
+    "power_on_hours": 10733,
+    "unsafe_shutdowns": 76,
+    "media_errors": 1.4494000050359518e+33,
+    "num_err_log_entries": 18294,
+    "media_errors_s": "1449400005035951791936293027446784",
+    "media_errors_le": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      118,
+      71
+    ]
+  }
+}

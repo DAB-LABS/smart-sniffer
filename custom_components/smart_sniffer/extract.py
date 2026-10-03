@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .attention import coerce_smart_data, is_dead_wear_attr
+from .attention import coerce_smart_data, is_dead_wear_attr, nvme_counter
 
 # ---------------------------------------------------------------------------
 # Drive-type gate sets
@@ -272,9 +272,9 @@ def _extract_attribute(drive_data: dict[str, Any], key: str) -> Any | None:
             "power_on_hours":               lambda: nvme_log.get("power_on_hours"),
             "power_cycle_count":            lambda: nvme_log.get("power_cycles"),
             "wear_leveling_count":          lambda: nvme_log.get("percentage_used"),
-            "reported_uncorrectable_errors":lambda: nvme_log.get("media_errors"),
+            "reported_uncorrectable_errors":lambda: nvme_counter(nvme_log, "media_errors"),
             "critical_warning":             lambda: nvme_log.get("critical_warning"),
-            "media_errors":                 lambda: nvme_log.get("media_errors"),
+            "media_errors":                 lambda: nvme_counter(nvme_log, "media_errors"),
             "available_spare":              lambda: nvme_log.get("available_spare"),
             "available_spare_threshold":    lambda: nvme_log.get("available_spare_threshold"),
         }

@@ -59,6 +59,9 @@ _register_package()
 attention = importlib.import_module("custom_components.smart_sniffer.attention")
 
 # Every fixture file, so the shape canary can walk them without a hardcoded list.
+# Top level only: these are also the v0.7.0 golden set (golden_payloads.py).
+# A fixture whose reading changed on purpose in a later release lives in a
+# subfolder named for it (v080/) and is loaded as drive("v080/<name>").
 FIXTURE_NAMES = sorted(p.stem for p in _FIXTURE_DIR.glob("*.json"))
 
 

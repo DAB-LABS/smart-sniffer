@@ -150,6 +150,52 @@ LABEL_SSD_WEAR = "SSD Wear Percent Used"
 LABEL_NVME_MEDIA_ERRORS = "NVMe Media Errors"
 LABEL_NVME_SPARE_WARN = "NVMe Spare Warn Below"
 
+# NVMe health counters are 128-bit little-endian. When one exceeds 64 bits
+# smartctl emits the number as a float plus "<key>_s" (the digits) and
+# "<key>_le" (the bytes). No drive reaches 2^64 of anything, so such a value is
+# not a count: it is the log decoded wrongly on the way in (seen from a Windows
+# NVMe passthrough, where the next field's bytes landed inside media_errors).
+# It is unreadable: the sensor shows unknown and it is never a reason for
+# Attention. One rule for every drive, no per-model exceptions.
+NVME_COUNTER_LIMIT = 1 << 64
+
+# Drives already logged as unreadable (by id), so the debug line is written
+# once per drive per Home Assistant run rather than every poll.
+_UNREADABLE_LOGGED: set[str] = set()
+
+
+def nvme_counter(nvme_log: dict[str, Any], key: str) -> int | None:
+    """``key`` from the NVMe health log as an int, or None when it is absent or
+    unreadable (not a number, negative, or at or above 2^64)."""
+    if f"{key}_le" in nvme_log:
+        return None
+    raw = nvme_log.get(f"{key}_s")
+    if raw is None:
+        raw = nvme_log.get(key)
+    if raw is None or isinstance(raw, bool):
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if value < 0 or value >= NVME_COUNTER_LIMIT:
+        return None
+    return value
+
+
+def _note_unreadable(drive_data: dict[str, Any], key: str) -> None:
+    drive_id = str(drive_data.get("id", "unknown"))
+    if drive_id in _UNREADABLE_LOGGED:
+        return
+    _UNREADABLE_LOGGED.add(drive_id)
+    nvme_log = coerce_smart_data(drive_data).get("nvme_smart_health_information_log") or {}
+    _LOGGER.debug(
+        "Drive %s: NVMe %s is not readable (%s), shown as unknown and not counted",
+        drive_id,
+        key,
+        nvme_log.get(f"{key}_s", nvme_log.get(key)),
+    )
+
 # Every label defaults to 0 (zero tolerance) unless listed here.
 _THRESHOLD_DEFAULTS: dict[str, int] = {
     "Command Timeout":      _COMMAND_TIMEOUT_WARN_THRESHOLD,
@@ -218,7 +264,9 @@ def current_readings(drive_data: dict[str, Any]) -> dict[str, int]:
 
     nvme_log = smart_data.get("nvme_smart_health_information_log") or {}
     if nvme_log:
-        readings[LABEL_NVME_MEDIA_ERRORS] = int(nvme_log.get("media_errors", 0) or 0)
+        media_errors = nvme_counter(nvme_log, "media_errors")
+        if media_errors is not None:
+            readings[LABEL_NVME_MEDIA_ERRORS] = media_errors
         spare = nvme_log.get("available_spare")
         if spare is not None:
             readings[LABEL_NVME_SPARE_WARN] = int(spare)
@@ -629,10 +677,15 @@ def evaluate_attention(
                 f"NVMe critical warning flag set (0x{cw:02x})"
             )
 
-        # CRITICAL — unrecoverable media errors
-        media_errors = nvme_log.get("media_errors", 0) or 0
-        breached, was_accepted, limit = _evaluate_label(
-            LABEL_NVME_MEDIA_ERRORS, media_errors, thresholds
+        # CRITICAL — unrecoverable media errors. An unreadable counter (see
+        # nvme_counter) is not evidence of anything and is skipped.
+        media_errors = nvme_counter(nvme_log, "media_errors")
+        if media_errors is None and "media_errors" in nvme_log:
+            _note_unreadable(drive_data, "media_errors")
+        breached, was_accepted, limit = (
+            (False, False, 0)
+            if media_errors is None
+            else _evaluate_label(LABEL_NVME_MEDIA_ERRORS, media_errors, thresholds)
         )
         if breached:
             critical_reasons.append(
