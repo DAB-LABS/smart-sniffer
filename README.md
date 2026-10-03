@@ -30,7 +30,9 @@ SMART Sniffer follows the trail, sniffing out the [early warning signs](https://
 
 **Disk usage monitoring** — Opt-in filesystem tracking during install. Monitor storage utilization on any mountpoint — the agent reports total, used, available bytes and percentage via a dedicated API endpoint.
 
-**ZFS pool health** -- On a machine with ZFS, each pool appears as its own device with its state, error counts and last scrub. A notification names the pool and the failing disks when a pool degrades, and tells you when a pool disappears.
+**ZFS pool health** -- On a machine with ZFS, each pool appears as its own device with its state, error counts and last scrub. A notification names the pool and the failing disks when a pool degrades, and tells you when a pool disappears. Pool devices are named for their host, "ZFS pool rpool (pve-nas)", so two machines with the same pool name stay apart (v0.8.1).
+
+**Data Written** -- Each drive reports how much the host has written to it over its life, in TB, from the drive's own Device Statistics log on SATA and the health log on NVMe, with long-term statistics so you can see the write rate per day or month. Needs the v0.8.0 agent.
 
 **Multi-machine monitoring** — Install a lightweight Go agent on each machine. Each drive appears as its own HA device with full sensor entities and diagnostics.
 
@@ -55,7 +57,7 @@ Each machine runs a lightweight `smartha-agent` binary that wraps `smartctl` and
 
 <br>
 
-Each drive gets its own HA device. Entities are created dynamically — if a drive doesn't report an attribute, the sensor is simply not created.
+Each drive gets its own HA device. Entities are created dynamically — if a drive doesn't report an attribute, the sensor is simply not created. A drive that was asleep at setup, a pool created later or a newly configured mountpoint is added when the agent first reports it; no reload needed (v0.8.0).
 
 **Disk Usage** (per agent host, requires agent v0.5.0+ with filesystems configured):
 
@@ -72,18 +74,18 @@ Attributes: `mountpoint`, `device`, `fstype`, `total_gb`, `used_gb`, `available_
 | Attention Needed | Proactive health alert — `NO` / `MAYBE` / `YES` / `UNSUPPORTED` |
 | Health | SMART pass/fail — OK, Problem, or Unknown |
 | Standby | Whether the drive is currently spun down. When On, exposes a `data_as_of` attribute showing when the cached SMART readings were last refreshed. |
-| Temperature | Current drive temp (°C) |
+| Temperature | Current drive temp (°C). On a SATA drive with a Device Statistics log, attributes `lifetime_max` and `lifetime_min` (in your Home Assistant temperature unit) and `time_over_limit_minutes` (v0.8.0). |
 | Power-On Hours | Total hours powered on |
 | SMART Status | Raw SMART verdict (PASSED / FAILED) |
-| Data Written | Total data the host has written to the drive over its life, in TB (v0.8.0, needs the v0.8.0 agent). Read from the drive's Device Statistics log on SATA and the health log on NVMe; on a drive with no Device Statistics log, only from a vendor attribute that states its unit. Unknown when none of those exists (SCSI and SAS views). |
+| Data Written | Total data the host has written to the drive over its life, in TB (v0.8.0, needs the v0.8.0 agent). Read from the drive's Device Statistics log on SATA and the health log on NVMe; on a drive with no Device Statistics log, from a vendor attribute that states its unit, or from `Total_LBAs_Written` when the drive has 512-byte sectors and is in the smartctl database. Not created for a drive with no source (SCSI and SAS views). Attributes: `source`, plus `attribute_id` and `attribute_name` when a vendor attribute is used, and `held: true` when the value is the last Device Statistics reading Home Assistant kept. |
 | Data Read | The same for data read. Disabled by default. |
 
 **Diagnostic sensors** (conditional):
 
 | Entity | Description |
 |--------|-------------|
-| Reallocated Sector Count | Bad sectors remapped to spares (ATA) |
-| Reported Uncorrectable Errors | Unrecoverable read/write errors (ATA) |
+| Reallocated Sector Count | Bad sectors remapped to spares (ATA). Attribute `device_statistics_logical_sectors` from the Device Statistics log when the drive keeps one (v0.8.0). |
+| Reported Uncorrectable Errors | Unrecoverable read/write errors (ATA). Attribute `device_statistics_count` from the Device Statistics log when the drive keeps one (v0.8.0); when the attribute table has no such row, that count is what Attention uses. |
 | Wear Leveling / Percentage Used | SSD endurance indicator |
 | Power Cycle Count | Total power on/off cycles |
 | Reallocated Event Count | Individual reallocation events (ATA) |
@@ -95,7 +97,7 @@ Attributes: `mountpoint`, `device`, `fstype`, `total_gb`, `used_gb`, `available_
 
 **Vendor-specific SMART attributes** (ATA/SATA drives in smartctl database, disabled by default):
 
-For drives recognized by smartctl's database (`drivedb.h`), every named SMART attribute not already covered by the sensors above is created as a diagnostic entity. These are disabled by default -- enable what you need from the device page. Examples: erase counts, host writes/reads, program/erase fail counts, available reserved space, remaining lifetime percentage. The exact attributes vary by drive manufacturer and model.
+For drives recognized by smartctl's database (`drivedb.h`), every named SMART attribute not already covered by the sensors above is created as a diagnostic entity. These are disabled by default -- enable what you need from the device page. Examples: erase counts, host writes/reads, program/erase fail counts, available reserved space, remaining lifetime percentage. The exact attributes vary by drive manufacturer and model. Data Written and Data Read above are the curated versions of the host write and read attributes; the raw vendor rows stay here, disabled.
 
 </details>
 
@@ -140,7 +142,7 @@ The Attention Needed sensor evaluates individual SMART attributes every poll cyc
 | **YES** | Data integrity at risk | **Back up immediately** |
 | **UNSUPPORTED** | No usable SMART data | Common with USB enclosures |
 
-**Critical triggers (→ YES):** Reallocated sectors, pending sectors, uncorrectable errors, NVMe critical_warning, NVMe media_errors, spare depletion below threshold.
+**Critical triggers (→ YES):** Reallocated sectors, pending sectors, uncorrectable errors, NVMe critical_warning, NVMe media_errors, spare depletion below threshold. Where a SATA drive's attribute table has no uncorrectable, reallocated or wear row but its Device Statistics log does, the log's count is used and the reason ends "from device statistics" (v0.8.0). An NVMe media_errors value at or above 2^64 is not a count; it reads as unknown and does not trigger.
 
 **Warning triggers (→ MAYBE):** Reallocated events, spin retry count, command timeouts, NVMe spare < 20%, NVMe percentage_used ≥ 90%.
 
@@ -203,7 +205,7 @@ The equivalent config file setting is `mount_prefix: /host`. Configured mountpoi
 
 **ZFS pool health:** On a machine with ZFS the agent reads `zpool status` on every scan and reports each pool at `/api/pools`. Nothing to configure; machines without ZFS are unaffected. Set `zfs_pool_status: false` to turn it off, or `zpool_path: /path/to/zpool` if `zpool` is not on the usual paths. Pool level only: the error counts add up every disk in the pool, and the disks with problems are named in the Problem sensor and the notification.
 
-**Device Statistics:** On every poll the agent reads each SATA drive's ATA Device Statistics log in a second, short `smartctl` call, which is where Data Written comes from and where some drives keep an error count their attribute table does not show. A drive without the log is asked once; a drive whose log fails three times running is left alone until the agent restarts. `device_statistics: false` (or `--no-device-statistics`) stops the second call. Data Written then comes only from an allowlisted vendor attribute, or is unknown, and any Attention reason ending "from device statistics" goes away, which can clear an Attention Needed state and dismiss its notification. Home Assistant keeps the last Device Statistics readings it held and uses them again if the option is turned back on. On macOS the log cannot be read, so Device Statistics is always off there and Data Written comes from the NVMe health log or a vendor attribute only.
+**Device Statistics:** On every poll the agent reads each SATA drive's ATA Device Statistics log in a second, short `smartctl` call, which is where Data Written comes from and where some drives keep an error count their attribute table does not show. A drive without the log is asked once; a drive whose log fails three times running, or times out once, is left alone until the agent restarts. `device_statistics: false` (or `--no-device-statistics`) stops the second call. Data Written then comes only from an allowlisted vendor attribute (one that states its unit, or `Total_LBAs_Written` on a drive with 512-byte sectors that is in the smartctl database), or the sensor is not created, and any Attention reason ending "from device statistics" goes away, which can clear an Attention Needed state and dismiss its notification. Home Assistant keeps the last Device Statistics readings it held and uses them again if the option is turned back on. On macOS the log cannot be read, so Device Statistics is always off there and Data Written comes from the NVMe health log or a vendor attribute only.
 
 **Scan interval:** Uses Go duration syntax -- `30s`, `5m`, `1h`, `24h` are all valid. When `standby_mode` is set, the agent skips sleeping drives and serves cached data, so the interval does not cause unnecessary wake-ups. When `standby_mode` is `never` (the default), each poll wakes any drive that is spun down. This is the *agent-side* read cadence and is separate from the HA Poll Interval entity, which reflects how often Home Assistant pulls fresh data from the agent itself.
 
@@ -229,7 +231,7 @@ The equivalent config file setting is `mount_prefix: /host`. Configured mountpoi
 | `GET /api/filesystems` | Disk usage for all configured mountpoints (only registered when filesystems are configured) |
 | `GET /api/pools` | ZFS pool health: state, error counts, problem disks, last scrub (only registered when `zpool` is found and `zfs_pool_status` is not false) |
 
-`/api/drives/{id}` carries two fields added in v0.8.0 beside the unchanged `smart_data`: `device_statistics` says whether the drive's ATA Device Statistics log was read this poll (`present` with the raw pages, `absent`, `unavailable` with a reason, `not_applicable` for NVMe and SCSI, or `off` with `config` or `os`), and `derived` holds `host_writes` and `host_reads` in bytes with their `source`, or `host_writes_omitted` / `host_reads_omitted` with the reason. `/api/health` reports `pools_status` (`pending`, `ok` or `failed`) when pool status is on.
+`/api/drives/{id}` carries two fields added in v0.8.0 beside the unchanged `smart_data`: `device_statistics` says whether the drive's ATA Device Statistics log was read this poll (`present` with the raw pages, `absent`, `unavailable` with a reason, `not_applicable` for NVMe and SCSI, or `off` with `config` or `os`), and `derived` holds `host_writes` and `host_reads` in bytes with their `source`, or `host_writes_omitted` / `host_reads_omitted` with the reason. `unavailable` reasons are `failed`, `timeout`, `standby`, `mismatch` and `stopped`; `source` is `ata_device_statistics`, `ata_attribute` (with `attribute_id` and `attribute_name`) or `nvme`. `/api/health` reports `pools_status` (`pending`, `ok` or `failed`) when pool status is on.
 
 **Service management:**
 
@@ -352,7 +354,7 @@ VERSION=0.1.0 curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer
 
 </details>
 
-The installer detects your OS and architecture, downloads the correct binary from [GitHub Releases](https://github.com/DAB-LABS/smart-sniffer/releases), verifies the SHA256 checksum, installs `smartmontools` if missing, prompts for configuration (port, token, scan interval, disk usage monitoring, mDNS interface), and sets up a system service.
+The installer detects your OS and architecture, downloads the correct binary from [GitHub Releases](https://github.com/DAB-LABS/smart-sniffer/releases), verifies the SHA256 checksum, installs `smartmontools` if missing, prompts for configuration (port, token, scan interval, disk usage monitoring, mDNS interface), and sets up a system service. It then waits up to 90 s for the agent's first pass over the drives before reporting the health check; hosts with many or sleeping disks take longer, and a progress line appears at 10 s.
 
 Disk usage monitoring is opt-in. During a fresh install or upgrade to v0.5.0+, the installer asks which mountpoints to monitor. Select the mountpoints you care about. The agent will report usage percentage, total/used/available bytes for each.
 
@@ -423,7 +425,7 @@ Paste the `--discover` output into a GitHub issue if you need help -- it gives u
 
 ### Raw SMART data
 
-Need the full SMART dump for a drive? The integration includes everything smartctl returns in the diagnostics download. Go to **Settings > Devices & Services > SMART Sniffer > three-dot menu > Download Diagnostics**. The downloaded JSON file contains the complete raw SMART data for every drive on that agent, along with the attention evaluation and agent metadata. Useful for debugging unexpected sensor values, sharing in bug reports, or passing to an AI for deeper analysis.
+Need the full SMART dump for a drive? The integration includes everything smartctl returns in the diagnostics download. Go to **Settings > Devices & Services > SMART Sniffer > three-dot menu > Download Diagnostics**. The downloaded JSON file contains the complete raw SMART data for every drive on that agent, along with the attention evaluation and agent metadata and, from a v0.8.0 agent, each drive's `device_statistics` and `derived` blocks. Useful for debugging unexpected sensor values, sharing in bug reports, or passing to an AI for deeper analysis.
 
 The agent also exposes raw data via its REST API at `http://<agent-ip>:9099/api/drives` (summary) and `http://<agent-ip>:9099/api/drives/{id}` (full SMART JSON for a single drive).
 
@@ -450,7 +452,7 @@ SMART Sniffer includes a `smart_sniffer.get_drive_data` service call that return
 | Key | Content |
 |-----|---------|
 | `agent` | Name, host, OS, uptime, version |
-| `drives` | Per-drive: model, serial, protocol, device path, attention state/severity/reasons, full SMART JSON |
+| `drives` | Per-drive: model, serial, protocol, device path, attention state/severity/reasons/accepted, full SMART JSON, and from a v0.8.0 agent the `device_statistics` and `derived` blocks |
 | `filesystems` | Per-mount: mountpoint, total bytes, used bytes, percentage |
 
 **Example use case: automated weekly health report.** Create an HA automation that runs every Monday morning, calls `smart_sniffer.get_drive_data` for each agent, passes the JSON to a conversation agent (Google AI, OpenAI, Claude, Ollama) with a prompt like "Analyze these SMART readings and flag anything concerning," then emails you the AI's response. The AI can catch patterns like rising reallocated sector counts, aging drives approaching end-of-life, or storage filling up -- things the raw sensor values alone don't always make obvious.
@@ -544,6 +546,8 @@ Step-by-step setup for NAS devices, hypervisors, and containerized environments.
 | [Hardware RAID Controllers](docs/guides/raid-controllers.md) | MegaRAID, HP SmartArray, 3ware, Areca -- manual `device_overrides` |
 
 ## Testing
+
+Unit tests: `pip install -r requirements_test.txt && pytest tests/` for the integration (no Home Assistant needed; the attention rules, the Device Statistics merge and gap-fill, the entity plan and pool health run against captured drive payloads), and `cd agent && go test ./...` for the agent. CI runs both, plus the suite against the declared Home Assistant floor.
 
 The integration has been tested against the included [Mock Agent](docs/mock-agent.md) — a standalone Python tool that simulates a `smartha-agent` with fully controllable fake drives. It serves the same API as the real agent, with a web dashboard for changing SMART attributes in real time. Useful for validating attention state transitions, notification behavior, and new drive types without waiting for real hardware to degrade.
 

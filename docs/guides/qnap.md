@@ -60,7 +60,7 @@ After install, check that the agent found your drives with the correct protocol:
 sudo smartha-agent --discover
 ```
 
-Since v0.5.5, the agent uses `--scan-open` on its first poll cycle, which detects SATA drives behind SCSI-reporting HBAs. If a drive still comes back as SCSI, the agent retries with SAT automatically. You should see output like:
+Since v0.5.5, the agent uses `--scan-open` on its first poll cycle, which detects SATA drives behind SCSI-reporting HBAs. If a drive still comes back as SCSI, the agent retries with SAT automatically, and since v0.8.0 it remembers a working SAT result so each poll is one SMART read plus the short Device Statistics read. Data Written works on these drives, because the SAT read presents them as ATA. You should see output like:
 
 ```
 /dev/sda -- Seagate IronWolf 4TB (ZDH1ABCD)

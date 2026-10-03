@@ -36,6 +36,8 @@ All of these should read **0** on a healthy drive. Any non-zero value triggers t
 | **Command Timeout** | 188 | > 100 | Moderate | Drive internally timed out on a command. Low counts (1~100) are common from USB sleep/wake cycles, SATA power management (ALPM), and NCQ reordering ~ not failure indicators. Counts above 100 suggest controller or interconnect degradation. Seagate/OEM drives pack three 16-bit counters into the 48-bit raw value; the integration decodes to the lower 16 bits automatically (v0.4.26+). Backblaze lists attribute 188 as one of five failure-correlated attributes, but 84% of drives show non-zero values at some point ~ the correlation is with elevated counts, not merely non-zero. |
 | **SSD Wear Level** | varies (177, 202, 230, 231, 233) | >= 90% used | Moderate | ATA SSD endurance indicator. The normalized VALUE from the drive represents "life remaining" (100 = new, 0 = worn); SMART Sniffer inverts this to "percentage used" for consistency with NVMe. Warning triggers at >= 90% used, matching NVMe threshold. Added in v0.5.6. |
 
+**Device Statistics as a source (v0.8.0+):** some SATA drives keep Reported Uncorrectable Errors, Reallocated Logical Sectors and Percentage Used Endurance in their ATA Device Statistics log but not in the attribute table (a WDC Ultrastar without attribute 187, for example). Where the table has no row, SMART Sniffer reads the log's count instead and the reason ends "from device statistics". The log is read by the v0.8.0 agent in a second smartctl call; `device_statistics: false` turns it off.
+
 ### NVMe Drives
 
 NVMe drives use a different health log structure. The following map to the `attention_needed` sensor:
@@ -43,7 +45,7 @@ NVMe drives use a different health log structure. The following map to the `atte
 | Field | Alert condition | Notes |
 |---|---|---|
 | **critical_warning** | Any bit set (≠ 0) | Bitmask. Bits indicate: spare below threshold, temperature out of range, NVM subsystem reliability degraded, read-only mode, volatile backup device failed. |
-| **media_errors** | > 0 | Cumulative unrecoverable media errors. Equivalent to Offline Uncorrectable for ATA. Should always be 0. |
+| **media_errors** | > 0 | Cumulative unrecoverable media errors. Equivalent to Offline Uncorrectable for ATA. Should always be 0. A value at or above 2^64 is not a count (some Windows NVMe drivers hand back the log with the next field's bytes inside this one); it reads as unknown and does not trigger (v0.8.0). |
 | **available_spare** | ≤ available_spare_threshold OR < 20% | Percentage of spare NVMe blocks remaining. The drive reports its own threshold; SMART Sniffer also warns at < 20% as an early heads-up before the official threshold is reached. |
 | **percentage_used** | >= 90% | 0% = new drive, 100% = fully worn. At 90%+ the drive is nearing end of rated write endurance. As of v0.5.6, ATA SSDs use the same unified scale and threshold. |
 
@@ -128,16 +130,7 @@ automation:
 
 Note: The integration already fires persistent notifications automatically on state changes, so this automation is only needed if you want additional custom alerting (e.g., mobile push, Slack, email).
 
-For suppressing repeat notifications on a known-stable degraded drive:
-
-```yaml
-# Create an input_boolean helper: input_boolean.drive_xyz_acknowledged
-# Add a condition to the above automation:
-condition:
-  - condition: state
-    entity_id: input_boolean.drive_xyz_acknowledged
-    state: "off"
-```
+To accept old, stable damage on one drive, raise its threshold instead of suppressing the alert: Settings > Devices & Services > SMART Sniffer > Configure > Alert thresholds (v0.6.3+). New damage above the threshold still alerts.
 
 ---
 
