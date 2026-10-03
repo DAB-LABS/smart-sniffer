@@ -374,16 +374,19 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if changed:
             self._save_devstat()
 
-    def _save_devstat(self) -> None:
+    def _save_devstat(self, delay: float = STORE_SAVE_DELAY) -> None:
         if self._store is not None:
-            self._store.async_delay_save(lambda: self._devstat, STORE_SAVE_DELAY)
+            self._store.async_delay_save(lambda: self._devstat, delay)
 
     def _record_announced(self, records: list[str]) -> None:
         announced = self._devstat["announced"]
         new = [r for r in records if r not in announced]
         if new:
             announced.extend(new)
-            self._save_devstat()
+            # An announcement is rare and must survive an unclean stop, or the
+            # drive is announced again on the next start. Held readings can
+            # wait for the long delay; this record is written straight away.
+            self._save_devstat(delay=1)
 
     def forget_device(self, identifier: str, serial: str | None = None) -> None:
         """A device the user removed: forget what was created for it, its

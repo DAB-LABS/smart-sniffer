@@ -58,7 +58,7 @@ from .extract import (  # noqa: F401 - re-exported under the names they always h
     _extract_attribute,
 )
 from .device_link import agent_link
-from .devstat import data_volume, page_attributes
+from .devstat import data_volume, page_attributes, temperature_attrs_in_unit
 from .entity_plan import (
     KIND_AGENT_IP,
     KIND_AGENT_LAST_SEEN,
@@ -499,7 +499,12 @@ class SmartSnifferSensor(CoordinatorEntity[SmartSnifferCoordinator], SensorEntit
         if drive_data.get("in_standby"):
             attrs["in_standby"] = True
             attrs["data_as_of"] = drive_data.get("last_updated", "unknown")
-        attrs.update(page_attributes(drive_data, self.entity_description.key))
+        page_attrs = page_attributes(drive_data, self.entity_description.key)
+        if page_attrs and self.hass is not None:
+            page_attrs = temperature_attrs_in_unit(
+                page_attrs, self.hass.config.units.temperature_unit
+            )
+        attrs.update(page_attrs)
         return attrs
 
 

@@ -251,7 +251,9 @@ def test_d11_announces_once_across_a_restart(monkeypatch):
     )
     assert notes[0]["title"] == "🔴 Drive Attention Required — WDC  WUH721414ALE604 (FIXTURE-m01-sdl)"
     stored, delay = coord._store.saves[-1]
-    assert delay == 600
+    # An announcement record is written straight away, not on the 600 s
+    # delayed save, so an unclean stop cannot lose it and re-announce.
+    assert delay == 1
     assert stored["announced"] == ["FIXTURE-m01-sdl|unc"]
     assert stored["held"]["fx-ata-devstat-wdc-unc"]["unc"] == 18
     # Next poll, same reasons: nothing.

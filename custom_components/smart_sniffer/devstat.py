@@ -264,6 +264,28 @@ def page_attributes(drive_data: dict[str, Any], sensor_key: str) -> dict[str, An
     return attrs
 
 
+# Devstat temperatures are always Celsius. Sensor states are converted by
+# Home Assistant to the user's unit, attributes are not, so these two are
+# converted here to match the state they sit beside.
+TEMPERATURE_ATTRIBUTES: tuple[str, ...] = ("lifetime_max", "lifetime_min")
+
+
+def temperature_attrs_in_unit(attrs: dict[str, Any], unit: str) -> dict[str, Any]:
+    """Return attrs with the devstat temperatures in ``unit``.
+
+    ``unit`` is Home Assistant's temperature unit string ("°C" or "°F").
+    Anything other than Fahrenheit leaves the Celsius values as they are.
+    """
+    if unit != "°F":
+        return attrs
+    out = dict(attrs)
+    for key in TEMPERATURE_ATTRIBUTES:
+        value = out.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            out[key] = round(value * 9 / 5 + 32, 1)
+    return out
+
+
 def devstat_gap_readings(
     smart_data: dict[str, Any],
     effective: dict[str, Any],
