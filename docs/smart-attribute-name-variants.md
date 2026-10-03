@@ -138,7 +138,6 @@ The table below summarises which manufacturers have been confirmed for each of t
 | `Percent_Lifetime_Remain`     | Crucial/Micron SSDs (ID 202)                                             |
 | `Perc_Rated_Life_Remain`      | Some Micron enterprise SSD variants                                      |
 | `Percent_Life_Remaining`      | Some SanDisk SSDs                                                        |
-| `Drive_Life_Protection_Stat`  | Some WD Blue SSDs (ID 230)                                               |
 
 `Wear_Range_Delta` (ID 177 on SandForce and some Seagate SSDs) is not used: it is the spread between the most and least worn blocks, not life remaining. A row named above whose normalized value, worst, threshold and flags are all 0 is not a gauge and is skipped; if no other row is left, the drive has no wear reading.
 
@@ -181,5 +180,5 @@ NVMe drives use a completely different data structure: `nvme_smart_health_inform
 
 1. **SK Hynix wear leveling:** Attribute ID 177 is expected but the exact name string in `smartctl` output has not been confirmed. A sample `smartctl -a /dev/sdX` from an SK Hynix SSD is needed.
 2. **SAS/SCSI drives:** Not covered. These use an entirely different SMART data structure in `smartctl` JSON output — a future `sensor.py` extension will be needed.
-3. **Western Digital Blue/Green SSDs:** Some models report via the ATA attribute table differently than WD Black/Red HDDs. `Drive_Life_Protection_Stat` (ID 230) is confirmed for WD Blue SSDs but coverage is not exhaustive.
+3. **Western Digital Blue/Green SSDs:** Some models report via the ATA attribute table differently than WD Black/Red HDDs. WD Blue's ID 230 arrives from smartctl as `Media_Wearout_Indicator`, which is already in the list; coverage is not exhaustive.
 4. **Seagate Barracuda SSDs:** Seagate's SSD lineup uses attribute names inherited from their HDD firmware team — confirmation that all HDD names listed here apply equally to their SSDs is pending.

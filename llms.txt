@@ -29,6 +29,13 @@ Key behaviors:
   sensor whose problem_devices attribute names the failing disks. A notification fires
   when a pool degrades or disappears (state MISSING). On by default when zpool exists;
   zfs_pool_status: false turns it off. Machines without ZFS are unaffected.
+- Data Written and Data Read (v0.8.0+): per-drive lifetime totals in TB, from the ATA
+  Device Statistics log on SATA (a second short smartctl call per poll, device_statistics:
+  false or --no-device-statistics turns it off; always off on macOS) and the health log on
+  NVMe. Device Statistics also fill Attention gaps for drives whose attribute table lacks
+  an error count; such reasons end "from device statistics". Needs the v0.8.0 agent;
+  older agents show no new sensors. Served in /api/drives/{id} as device_statistics and
+  derived. HA-free modules: devstat.py (merge, gap-fill), entity_plan.py, extract.py.
 - Per-drive alert thresholds (v0.6.3+): Configure > Alert thresholds lets a user raise the
   limit for an attribute on one drive, so old stable damage stops alerting while new
   damage still does.

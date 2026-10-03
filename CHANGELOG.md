@@ -2,6 +2,79 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.8.0 -- 2026-10-03
+
+**Agent, integration and installers.** Update the integration through HACS,
+then update the agent on each machine to get the Data Written sensor. Older
+agents keep working and simply show no new sensors.
+
+Data Written arrives: each drive gets a lifetime total of what the host has
+written to it, in TB, read from the drive's own Device Statistics log on SATA
+and from the health log on NVMe.
+
+### Added
+- **Data Written sensor** -- lifetime bytes written per drive, shown in TB, with
+  long-term statistics. SATA drives report it from the standard Device
+  Statistics log, NVMe drives from their health log. A drive with no Device
+  Statistics log falls back to a vendor attribute only when that attribute
+  states its unit. Requested by @Mad-Hat in
+  [#49](https://github.com/DAB-LABS/smart-sniffer/issues/49) and built from the
+  drive captures in [#56](https://github.com/DAB-LABS/smart-sniffer/issues/56).
+- **Data Read sensor** -- the same for reads, disabled by default.
+- **Device Statistics fill gaps in Attention** -- some drives keep an error count
+  in their Device Statistics log that their SMART attribute table does not show.
+  Where the table has no Reported Uncorrectable Errors, Reallocated Sector Count
+  or wear attribute, the log's reading is used and the reason says so, for
+  example "Reported Uncorrectable Errors: 18 (expected 0; from device
+  statistics)". A drive with historical errors, or whose last self-test failed,
+  can turn from NO to YES on the first poll after this update, with one
+  notification.
+- **New drives, pools and filesystems appear without a reload** -- a drive that
+  was asleep at setup, or a pool created later, is added when the agent first
+  reports it.
+- **Device Statistics can be turned off** -- `device_statistics: false` in
+  `config.yaml`, or `--no-device-statistics`. It is always off on macOS, which
+  does not allow the log to be read.
+
+### Fixed
+- **A false "NVMe media errors" alert on some Windows machines** -- the NVMe
+  health log can arrive with the next field's bytes inside the media errors
+  counter, giving a number no drive can reach (1.4e33). Such a value now reads
+  as unknown and does not count toward Attention. The fix is in the integration,
+  so it covers older agents too.
+- **Installer gave up on hosts with many or sleeping disks** -- `install.sh` and
+  `install.ps1` now wait up to 90 s for the agent's first pass over the drives,
+  with a progress line at 10 s. Reported by @Telejunky in
+  [#50](https://github.com/DAB-LABS/smart-sniffer/issues/50).
+- **SATA drives behind a NAS controller were asked twice per poll** -- once the
+  SAT protocol is learned it is kept through standby and rescans, so each poll
+  is one call.
+- **Pool notifications stated the disk count twice.**
+- **A `zpool status` that fails is reported as a failure** (`pools_status:
+  failed` on `/api/health`) instead of as no pools.
+
+### Changed
+- The thresholds form shows "Currently" and "Default" on two lines per field.
+- `Drive_Life_Protection_Stat` is no longer read as a wear gauge (it is not
+  one; follow-up to [#55](https://github.com/DAB-LABS/smart-sniffer/issues/55)).
+- Drive scans have timeouts, so an unresponsive drive no longer stalls a scan.
+- `/api/drives/{id}` gains `device_statistics` and `derived`. Every existing
+  field is unchanged.
+
+### Upgrade notes
+- **Data Written and Data Read need the v0.8.0 agent.** With an older agent the
+  integration works exactly as before and shows no new sensors. The new sensors
+  appear on the first poll after the agent update, no reload needed.
+- Each SATA drive gets one extra short smartctl call per poll for the Device
+  Statistics log. A drive without the log is asked once; a drive whose log fails
+  three times running is left alone until the agent restarts.
+- Data Written long-term statistics start at zero on the entity's first day,
+  not at the drive's lifetime total. The state itself shows the lifetime total.
+- Temperature sensors gain `lifetime_max` and `lifetime_min` attributes from
+  Device Statistics, in your configured unit.
+- Turning Device Statistics off removes any reason ending "from device
+  statistics", which can clear an Attention state and dismiss its notification.
+
 ## v0.7.0 -- 2026-10-01
 
 **Agent and integration.** Update the integration through HACS. Update the agent
