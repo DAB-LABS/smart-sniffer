@@ -109,6 +109,10 @@ async def async_get_config_entry_diagnostics(
                 "thresholds": get_thresholds(entry, drive_id),
             },
             "smart_data": redacted_smart,
+            # v0.8.0 agents; absent from older ones. The pages carry no
+            # identifiers (the -i identity keys are not published).
+            "device_statistics": drive_data.get("device_statistics"),
+            "derived": drive_data.get("derived"),
         }
 
     return {

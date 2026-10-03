@@ -909,13 +909,13 @@ try {
     # Health check
     # ---------------------------------------------------------------------------
     #
-    # Extended to 30 seconds (15 x 2s) to match the Go binary's 20s
-    # ready-watchdog plus margin. On boxes with many disks the preflight
-    # smartctl --scan can burn most of that window before the HTTP
-    # listener binds, so the previous 10s cap would flag false negatives.
+    # Up to 90 seconds (45 x 2s). The agent answers /api/health only after
+    # its first pass over the drives, and on boxes with many disks the
+    # preflight smartctl --scan can take well past the old 30s window (GH #50).
+    # A progress line at the 10s mark says why the wait is longer.
     Write-Step "Waiting for agent to start..."
     $Healthy = $false
-    for ($i = 1; $i -le 15; $i++) {
+    for ($i = 1; $i -le 45; $i++) {
         Start-Sleep -Seconds 2
         try {
             $null = Invoke-WebRequest -Uri "http://localhost:$Port/api/health" -UseBasicParsing -TimeoutSec 3
@@ -925,9 +925,12 @@ try {
         } catch {
             # Keep trying
         }
+        if ($i -eq 6) {
+            Write-Step "Still reading drives (hosts with many disks take longer). Waiting up to 90s..."
+        }
     }
     if (-not $Healthy) {
-        Write-Warn "Health check didn't respond after 30s."
+        Write-Warn "Health check didn't respond after 90s."
         Write-Warn "Check service status: Get-Service $ServiceName"
         Write-Warn "Check Event Log    : Get-WinEvent -LogName Application -FilterXPath '*[System[Provider[@Name=""$ServiceName""]]]' -MaxEvents 20"
     }

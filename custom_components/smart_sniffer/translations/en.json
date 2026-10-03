@@ -87,18 +87,18 @@
           "Uncorrectable Error Count": "Uncorrectable Error Count"
         },
         "data_description": {
-          "Command Timeout": "Currently: {command_timeout}. Default: {command_timeout_default}.",
-          "Current Pending Sector Count": "Currently: {current_pending_sector_count}. Default: {current_pending_sector_count_default}.",
-          "NVMe Media Errors": "Currently: {nvme_media_errors}. Default: {nvme_media_errors_default}.",
-          "NVMe Spare Warn Below": "Currently: {nvme_spare_warn_below}. Default: {nvme_spare_warn_below_default}.",
-          "Offline Uncorrectable Errors": "Currently: {offline_uncorrectable_errors}. Default: {offline_uncorrectable_errors_default}.",
-          "Reallocated Event Count": "Currently: {reallocated_event_count}. Default: {reallocated_event_count_default}.",
-          "Reallocated Sector Count": "Currently: {reallocated_sector_count}. Default: {reallocated_sector_count_default}.",
-          "Reported Uncorrectable Errors": "Currently: {reported_uncorrectable_errors}. Default: {reported_uncorrectable_errors_default}.",
-          "SSD Wear Percent Used": "Currently: {ssd_wear_percent_used}. Default: {ssd_wear_percent_used_default}.",
-          "Spin Retry Count": "Currently: {spin_retry_count}. Default: {spin_retry_count_default}.",
-          "Total Offline Uncorrectable": "Currently: {total_offline_uncorrectable}. Default: {total_offline_uncorrectable_default}.",
-          "Uncorrectable Error Count": "Currently: {uncorrectable_error_count}. Default: {uncorrectable_error_count_default}."
+          "Command Timeout": "Currently: **{command_timeout}**\nDefault: {command_timeout_default}",
+          "Current Pending Sector Count": "Currently: **{current_pending_sector_count}**\nDefault: {current_pending_sector_count_default}",
+          "NVMe Media Errors": "Currently: **{nvme_media_errors}**\nDefault: {nvme_media_errors_default}",
+          "NVMe Spare Warn Below": "Currently: **{nvme_spare_warn_below}**\nDefault: {nvme_spare_warn_below_default}",
+          "Offline Uncorrectable Errors": "Currently: **{offline_uncorrectable_errors}**\nDefault: {offline_uncorrectable_errors_default}",
+          "Reallocated Event Count": "Currently: **{reallocated_event_count}**\nDefault: {reallocated_event_count_default}",
+          "Reallocated Sector Count": "Currently: **{reallocated_sector_count}**\nDefault: {reallocated_sector_count_default}",
+          "Reported Uncorrectable Errors": "Currently: **{reported_uncorrectable_errors}**\nDefault: {reported_uncorrectable_errors_default}",
+          "SSD Wear Percent Used": "Currently: **{ssd_wear_percent_used}**\nDefault: {ssd_wear_percent_used_default}",
+          "Spin Retry Count": "Currently: **{spin_retry_count}**\nDefault: {spin_retry_count_default}",
+          "Total Offline Uncorrectable": "Currently: **{total_offline_uncorrectable}**\nDefault: {total_offline_uncorrectable_default}",
+          "Uncorrectable Error Count": "Currently: **{uncorrectable_error_count}**\nDefault: {uncorrectable_error_count_default}"
         }
       }
     },
@@ -147,6 +147,12 @@
   },
   "entity": {
     "sensor": {
+      "data_written": {
+        "name": "Data Written"
+      },
+      "data_read": {
+        "name": "Data Read"
+      },
       "pool_state": {
         "name": "State"
       },

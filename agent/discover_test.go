@@ -209,7 +209,7 @@ func runtimeVerdict(t *testing.T, fake, protocol string) (readable, viaSAT bool)
 	t.Helper()
 	cfg := &Config{ScanInterval: time.Minute, SmartctlPath: fake, StandbyMode: "never"}
 	dc := NewDriveCache(cfg)
-	_, outcome := dc.fetchDriveInfo("/dev/sda", protocol, true)
+	_, outcome, _ := dc.fetchDriveInfo("/dev/sda", protocol, true, false)
 	dc.mu.RLock()
 	viaSAT = dc.protocolCache["/dev/sda"] == "sat"
 	dc.mu.RUnlock()

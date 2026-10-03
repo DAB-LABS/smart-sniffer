@@ -333,6 +333,37 @@ def pool_level_problems(pool: dict[str, Any]) -> list[str]:
     return reasons
 
 
+def notification_pool_lines(pool: dict[str, Any]) -> list[str]:
+    """The pool-level lines as a notification shows them: no count twice.
+
+    zpool totals each error counter up the tree, so a pool whose only
+    erroring disk has 18 read errors also reports 18 at pool level, and the
+    notification said it twice. A pool-level Read, Write or Checksum line is
+    dropped when exactly one problem device has a non-zero count for that
+    counter and it equals the pool total; the device line says it. Otherwise
+    it stays, and the State and Data errors lines always stay. Only the
+    notification text: the reasons, the Problem sensor and the change
+    detection keep every line.
+    """
+    devices = problem_devices(pool)
+    lines: list[str] = []
+    state = pool.get("state")
+    if state != STATE_ONLINE:
+        lines.append(f"State: {state or STATE_UNKNOWN}")
+    for key in ERROR_KEYS:
+        value = error_total(pool, key)
+        if not value:
+            continue
+        counts = [c for c in (error_total(v, key) for v in devices) if c]
+        if len(counts) == 1 and counts[0] == value:
+            continue
+        lines.append(f"{_ERROR_LABELS[key]}: {value}")
+    errors = data_errors(pool)
+    if errors:
+        lines.append(f"Data errors: {errors}")
+    return lines
+
+
 def is_unhealthy(pool: dict[str, Any]) -> bool:
     return bool(pool_problems(pool))
 
@@ -348,7 +379,8 @@ class PoolAction(NamedTuple):
     kind: str  # "create" (raise or update), "missing", or "dismiss"
     name: str
     reasons: list[str]
-    # For "create": the pool-level lines and the device lines of reasons.
+    # For "create": the pool-level lines as the notification shows them (see
+    # notification_pool_lines) and the device lines of reasons.
     pool_lines: list[str] = []
     device_lines: list[str] = []
 
@@ -429,7 +461,9 @@ def notification_actions(
         if sorted(reasons) == sorted(before):
             continue
         if reasons:
-            actions.append(PoolAction("create", name, reasons, pool_lines, device_lines))
+            actions.append(
+                PoolAction("create", name, reasons, notification_pool_lines(pool), device_lines)
+            )
         else:
             actions.append(PoolAction("dismiss", name, before))
 

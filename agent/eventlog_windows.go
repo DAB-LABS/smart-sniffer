@@ -32,11 +32,11 @@ import (
 // Event IDs — exported as typed constants so handlers log consistent
 // numbers. uint32 matches the debug.Log interface signature.
 const (
-	evtStarted         uint32 = 1
-	evtStopped         uint32 = 2
-	evtStartupFailure  uint32 = 100
-	evtRuntimeFailure  uint32 = 101
-	evtShutdownError   uint32 = 102
+	evtStarted        uint32 = 1
+	evtStopped        uint32 = 2
+	evtStartupFailure uint32 = 100
+	evtRuntimeFailure uint32 = 101
+	evtShutdownError  uint32 = 102
 )
 
 // openEventLog returns a debug.Log bound to the Windows Event Log under

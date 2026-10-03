@@ -75,6 +75,8 @@ Attributes: `mountpoint`, `device`, `fstype`, `total_gb`, `used_gb`, `available_
 | Temperature | Current drive temp (°C) |
 | Power-On Hours | Total hours powered on |
 | SMART Status | Raw SMART verdict (PASSED / FAILED) |
+| Data Written | Total data the host has written to the drive over its life, in TB (v0.8.0, needs the v0.8.0 agent). Read from the drive's Device Statistics log on SATA and the health log on NVMe; on a drive with no Device Statistics log, only from a vendor attribute that states its unit. Unknown when none of those exists (SCSI and SAS views). |
+| Data Read | The same for data read. Disabled by default. |
 
 **Diagnostic sensors** (conditional):
 
@@ -177,6 +179,7 @@ advertise_interface: eth0      # optional -- restrict mDNS to this interface
 exclude_devices:               # optional -- set by installer's drive picker
   - /dev/sdb
 zfs_pool_status: true          # optional -- report ZFS pool health when zpool is found
+device_statistics: true        # optional -- read each SATA drive's Device Statistics log (always off on macOS)
 filesystems:                   # optional -- set by installer's disk usage picker
   - path: /
     uuid: a1b2c3d4-5678-90ab-cdef-1234567890ab
@@ -184,7 +187,7 @@ filesystems:                   # optional -- set by installer's disk usage picke
     fstype: ext4
 ```
 
-All options can also be set via CLI flags: `--port`, `--token`, `--scan-interval`, `--interface`, `--config`, `--verbose`.
+All options can also be set via CLI flags: `--port`, `--token`, `--scan-interval`, `--interface`, `--config`, `--verbose`, `--no-device-statistics`.
 
 **Verbose logging:** By default the agent logs a repeated message once, again if its text changes, and otherwise at most hourly, so a drive with a persistent condition does not fill the log with identical lines every poll. Pass `--verbose` (or set `verbose: true` in `config.yaml`) to restore per-cycle logging while diagnosing something. The flag can only enable verbose mode; it never disables a setting from the config file.
 
@@ -199,6 +202,8 @@ The equivalent config file setting is `mount_prefix: /host`. Configured mountpoi
 **Exclude devices:** Device paths listed in `exclude_devices` are skipped during every scan. The agent resolves symlinks at startup, so `/dev/disk/by-id/...` paths and their `/dev/sdX` equivalents both match. The installer's drive picker (Linux) shows all detected drives and lets you choose which ones to monitor -- useful for excluding iSCSI LUNs, USB backup drives, or anything you don't want polled. Drives with remote-storage transports (iSCSI, Fibre Channel) are flagged in yellow and excluded from the default selection. You can also add paths manually and restart the service. If a device appears in both `exclude_devices` and `device_overrides`, the exclusion wins and a warning is logged.
 
 **ZFS pool health:** On a machine with ZFS the agent reads `zpool status` on every scan and reports each pool at `/api/pools`. Nothing to configure; machines without ZFS are unaffected. Set `zfs_pool_status: false` to turn it off, or `zpool_path: /path/to/zpool` if `zpool` is not on the usual paths. Pool level only: the error counts add up every disk in the pool, and the disks with problems are named in the Problem sensor and the notification.
+
+**Device Statistics:** On every poll the agent reads each SATA drive's ATA Device Statistics log in a second, short `smartctl` call, which is where Data Written comes from and where some drives keep an error count their attribute table does not show. A drive without the log is asked once; a drive whose log fails three times running is left alone until the agent restarts. `device_statistics: false` (or `--no-device-statistics`) stops the second call. Data Written then comes only from an allowlisted vendor attribute, or is unknown, and any Attention reason ending "from device statistics" goes away, which can clear an Attention Needed state and dismiss its notification. Home Assistant keeps the last Device Statistics readings it held and uses them again if the option is turned back on. On macOS the log cannot be read, so Device Statistics is always off there and Data Written comes from the NVMe health log or a vendor attribute only.
 
 **Scan interval:** Uses Go duration syntax -- `30s`, `5m`, `1h`, `24h` are all valid. When `standby_mode` is set, the agent skips sleeping drives and serves cached data, so the interval does not cause unnecessary wake-ups. When `standby_mode` is `never` (the default), each poll wakes any drive that is spun down. This is the *agent-side* read cadence and is separate from the HA Poll Interval entity, which reflects how often Home Assistant pulls fresh data from the agent itself.
 
@@ -223,6 +228,8 @@ The equivalent config file setting is `mount_prefix: /host`. Configured mountpoi
 | `GET /api/drives/{id}` | Full SMART data for a single drive |
 | `GET /api/filesystems` | Disk usage for all configured mountpoints (only registered when filesystems are configured) |
 | `GET /api/pools` | ZFS pool health: state, error counts, problem disks, last scrub (only registered when `zpool` is found and `zfs_pool_status` is not false) |
+
+`/api/drives/{id}` carries two fields added in v0.8.0 beside the unchanged `smart_data`: `device_statistics` says whether the drive's ATA Device Statistics log was read this poll (`present` with the raw pages, `absent`, `unavailable` with a reason, `not_applicable` for NVMe and SCSI, or `off` with `config` or `os`), and `derived` holds `host_writes` and `host_reads` in bytes with their `source`, or `host_writes_omitted` / `host_reads_omitted` with the reason. `/api/health` reports `pools_status` (`pending`, `ok` or `failed`) when pool status is on.
 
 **Service management:**
 

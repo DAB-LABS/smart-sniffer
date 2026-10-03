@@ -18,10 +18,19 @@ from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry
+from homeassistant.helpers.storage import Store
 
 from .attention import evaluate_attention, get_thresholds
-from .const import AGENT_DEVICE_ID, DOMAIN, FILESYSTEMS_KEY, SERVICE_GET_DRIVE_DATA
+from .const import (
+    AGENT_DEVICE_ID,
+    DOMAIN,
+    FILESYSTEMS_KEY,
+    SERVICE_GET_DRIVE_DATA,
+    STORE_KEY_PREFIX,
+    STORE_VERSION,
+)
 from .device_removal import (
+    our_identifier,
     refusal_placeholders,
     removable,
     reported_drive_ids,
@@ -37,7 +46,11 @@ PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up SMART Sniffer from a config entry."""
-    coordinator = SmartSnifferCoordinator(hass, entry)
+    # The Device Statistics hold and announcement records (devstat.py), loaded
+    # before the first refresh so that refresh already merges against them and
+    # a drive announced before a restart is not announced again.
+    store = Store(hass, STORE_VERSION, _store_key(entry.entry_id))
+    coordinator = SmartSnifferCoordinator(hass, entry, store, await store.async_load())
     await coordinator.async_config_entry_first_refresh()
 
     health_coordinator = AgentHealthCoordinator(hass, entry)
@@ -98,6 +111,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         "accepted": accepted,
                     },
                     "smart_data": drive_data.get("smart_data"),
+                    # v0.8.0 agents; absent from older ones. No identifiers.
+                    "device_statistics": drive_data.get("device_statistics"),
+                    "derived": drive_data.get("derived"),
                 }
 
             raw_filesystems: list[dict[str, Any]] = coord.data.get(FILESYSTEMS_KEY, [])
@@ -181,6 +197,12 @@ async def async_remove_config_entry_device(
         pool = refusal_placeholders(device_entry.identifiers, config_entry.entry_id).get("pool")
         if pool is not None and coordinator is not None:
             coordinator.forget_pool(pool)
+        # Whatever it was, forget what was created for it, so it is built
+        # again if it comes back; a drive also loses its held Device
+        # Statistics readings and its announcement records.
+        identifier = our_identifier(device_entry.identifiers)
+        if identifier is not None and coordinator is not None:
+            coordinator.forget_device(identifier, device_entry.serial_number)
         return True
 
     _LOGGER.warning("Refusing to remove device %s: %s", name, decision.reason)
@@ -216,6 +238,15 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not hass.data[DOMAIN]:
             hass.services.async_remove(DOMAIN, SERVICE_GET_DRIVE_DATA)
     return unload_ok
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """The entry is deleted: delete its Device Statistics Store with it."""
+    await Store(hass, STORE_VERSION, _store_key(entry.entry_id)).async_remove()
+
+
+def _store_key(entry_id: str) -> str:
+    return f"{STORE_KEY_PREFIX}.{entry_id}"
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:

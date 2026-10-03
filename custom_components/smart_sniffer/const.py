@@ -44,3 +44,11 @@ POOLS_MISSING_KEY = "_pools_missing"
 
 # Service name for the get_drive_data action.
 SERVICE_GET_DRIVE_DATA = "get_drive_data"
+
+# Device Statistics (v0.8.0): one Store per config entry, holding the readings
+# kept across polls and which drives have been announced (D11). The key is
+# STORE_KEY_PREFIX + "." + entry_id; removed with the entry. A changed hold is
+# written at most once per STORE_SAVE_DELAY seconds; HA flushes it at stop.
+STORE_KEY_PREFIX = "smart_sniffer.devstat"
+STORE_VERSION = 1
+STORE_SAVE_DELAY = 600

@@ -37,6 +37,8 @@ import json
 import logging
 from typing import Any
 
+from .devstat import devstat_gap_readings, effective_devstat, with_devstat_suffix
+
 _LOGGER = logging.getLogger(__name__)
 
 # --- Attention states (the sensor's primary state value) ---
@@ -104,7 +106,6 @@ _ATA_WEAR_NAMES: set[str] = {
     "Percent_Lifetime_Remain",
     "Perc_Rated_Life_Remain",
     "Percent_Life_Remaining",
-    "Drive_Life_Protection_Stat",
 }
 _ATA_WEAR_WARN_THRESHOLD = 90  # percentage used
 
@@ -148,6 +149,52 @@ _NVME_SPARE_WARN_BELOW = 20  # percent remaining
 LABEL_SSD_WEAR = "SSD Wear Percent Used"
 LABEL_NVME_MEDIA_ERRORS = "NVMe Media Errors"
 LABEL_NVME_SPARE_WARN = "NVMe Spare Warn Below"
+
+# NVMe health counters are 128-bit little-endian. When one exceeds 64 bits
+# smartctl emits the number as a float plus "<key>_s" (the digits) and
+# "<key>_le" (the bytes). No drive reaches 2^64 of anything, so such a value is
+# not a count: it is the log decoded wrongly on the way in (seen from a Windows
+# NVMe passthrough, where the next field's bytes landed inside media_errors).
+# It is unreadable: the sensor shows unknown and it is never a reason for
+# Attention. One rule for every drive, no per-model exceptions.
+NVME_COUNTER_LIMIT = 1 << 64
+
+# Drives already logged as unreadable (by id), so the debug line is written
+# once per drive per Home Assistant run rather than every poll.
+_UNREADABLE_LOGGED: set[str] = set()
+
+
+def nvme_counter(nvme_log: dict[str, Any], key: str) -> int | None:
+    """``key`` from the NVMe health log as an int, or None when it is absent or
+    unreadable (not a number, negative, or at or above 2^64)."""
+    if f"{key}_le" in nvme_log:
+        return None
+    raw = nvme_log.get(f"{key}_s")
+    if raw is None:
+        raw = nvme_log.get(key)
+    if raw is None or isinstance(raw, bool):
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if value < 0 or value >= NVME_COUNTER_LIMIT:
+        return None
+    return value
+
+
+def _note_unreadable(drive_data: dict[str, Any], key: str) -> None:
+    drive_id = str(drive_data.get("id", "unknown"))
+    if drive_id in _UNREADABLE_LOGGED:
+        return
+    _UNREADABLE_LOGGED.add(drive_id)
+    nvme_log = coerce_smart_data(drive_data).get("nvme_smart_health_information_log") or {}
+    _LOGGER.debug(
+        "Drive %s: NVMe %s is not readable (%s), shown as unknown and not counted",
+        drive_id,
+        key,
+        nvme_log.get(f"{key}_s", nvme_log.get(key)),
+    )
 
 # Every label defaults to 0 (zero tolerance) unless listed here.
 _THRESHOLD_DEFAULTS: dict[str, int] = {
@@ -217,7 +264,9 @@ def current_readings(drive_data: dict[str, Any]) -> dict[str, int]:
 
     nvme_log = smart_data.get("nvme_smart_health_information_log") or {}
     if nvme_log:
-        readings[LABEL_NVME_MEDIA_ERRORS] = int(nvme_log.get("media_errors", 0) or 0)
+        media_errors = nvme_counter(nvme_log, "media_errors")
+        if media_errors is not None:
+            readings[LABEL_NVME_MEDIA_ERRORS] = media_errors
         spare = nvme_log.get("available_spare")
         if spare is not None:
             readings[LABEL_NVME_SPARE_WARN] = int(spare)
@@ -246,7 +295,19 @@ def current_readings(drive_data: dict[str, Any]) -> dict[str, int]:
                 readings[LABEL_SSD_WEAR] = max(0, 100 - normalized)
             break
 
+    # Device Statistics fill the labels the attribute table cannot (D4).
+    for reading, value in devstat_gap_readings(smart_data, effective_devstat(drive_data)):
+        readings.setdefault(_GAP_LABELS[reading], value)
+
     return readings
+
+
+# The label each Device Statistics gap reading fills (devstat.py).
+_GAP_LABELS: dict[str, str] = {
+    "unc": _CRITICAL_ATA["Reported_Uncorrect"],
+    "realloc": _CRITICAL_ATA["Reallocated_Sector_Ct"],
+    "wear_used": LABEL_SSD_WEAR,
+}
 
 
 # The two gauges measure how much life the drive has left and are meant to
@@ -273,7 +334,7 @@ def reading_placeholders(
     readings: dict[str, int],
     drive_label: str,
 ) -> dict[str, str]:
-    """Placeholders behind each field's "Currently: N. Default: M." line.
+    """Placeholders behind each field's "Currently: N" and "Default: M" lines.
 
     Home Assistant sources data_description from translations, so a per-drive
     value cannot be passed directly and has to arrive as a placeholder. Each
@@ -616,10 +677,15 @@ def evaluate_attention(
                 f"NVMe critical warning flag set (0x{cw:02x})"
             )
 
-        # CRITICAL — unrecoverable media errors
-        media_errors = nvme_log.get("media_errors", 0) or 0
-        breached, was_accepted, limit = _evaluate_label(
-            LABEL_NVME_MEDIA_ERRORS, media_errors, thresholds
+        # CRITICAL — unrecoverable media errors. An unreadable counter (see
+        # nvme_counter) is not evidence of anything and is skipped.
+        media_errors = nvme_counter(nvme_log, "media_errors")
+        if media_errors is None and "media_errors" in nvme_log:
+            _note_unreadable(drive_data, "media_errors")
+        breached, was_accepted, limit = (
+            (False, False, 0)
+            if media_errors is None
+            else _evaluate_label(LABEL_NVME_MEDIA_ERRORS, media_errors, thresholds)
         )
         if breached:
             critical_reasons.append(
@@ -763,6 +829,39 @@ def evaluate_attention(
                         # rather than the label, so mark it here too.
                         seen_labels.add("SSD wear")
                 break  # one wear attribute per drive
+
+    # Device Statistics, only where the attribute table has a gap (D4). After
+    # the attribute pass, so a drive without devstat gets exactly the reasons
+    # it always did; only these reasons carry the suffix.
+    for reading, value in devstat_gap_readings(smart_data, effective_devstat(drive_data)):
+        label = _GAP_LABELS[reading]
+        if reading == "wear_used":
+            if "SSD wear" in seen_labels:
+                continue
+            breached, was_accepted, limit = _evaluate_label(label, value, thresholds)
+            if breached:
+                warning_reasons.append(with_devstat_suffix(
+                    f"SSD wear at {value}% of rated life -- "
+                    "consider scheduling replacement"
+                    if limit == default_threshold(label)
+                    else f"SSD wear at {value}% of rated life (accepted {limit}%)"
+                ))
+                seen_labels.add("SSD wear")
+            elif was_accepted:
+                accepted.append(with_devstat_suffix(
+                    f"SSD wear at {value}% of rated life (accepted {limit}%)"
+                ))
+                seen_labels.add("SSD wear")
+            continue
+        if label in seen_labels:
+            continue
+        breached, was_accepted, limit = _evaluate_label(label, value, thresholds)
+        if breached:
+            critical_reasons.append(with_devstat_suffix(_breach_text(label, value, limit)))
+            seen_labels.add(label)
+        elif was_accepted:
+            accepted.append(with_devstat_suffix(f"{label}: {value} (accepted {limit})"))
+            seen_labels.add(label)
 
     return _assemble(critical_reasons, warning_reasons, accepted)
 

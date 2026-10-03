@@ -10,8 +10,8 @@ The Corsair Force GT fixture is CONSTRUCTED from the reporter's CrystalDiskInfo
 dump, not captured with smartctl: the values are his, the attribute names are
 the ones smartmontools drivedb.h gives the SandForce entry. See its _comment.
 
-sensor.py imports Home Assistant, which this suite does not have, so the
-sensor's name list is read from the source with ast and its selection rule
+The sensor's name list (ATA_NAME_MAP, in extract.py since v0.8.0, re-imported
+by sensor.py) is read from the source with ast and its selection rule
 (first row in drive-table order whose name is in the list and which is not a
 dead row, reported as 100 - normalized value) is restated here, using the
 shared predicate from attention.py. The attention side runs the real module.
@@ -29,12 +29,11 @@ import copy
 from pathlib import Path
 from typing import Any
 
-_SENSOR_PY = (
-    Path(__file__).resolve().parents[1]
-    / "custom_components"
-    / "smart_sniffer"
-    / "sensor.py"
-)
+_COMPONENT = Path(__file__).resolve().parents[1] / "custom_components" / "smart_sniffer"
+# ATA_NAME_MAP and _extract_attribute moved here from sensor.py in v0.8.0.
+_SENSOR_PY = _COMPONENT / "extract.py"
+# The covered-row logic moved from sensor.async_setup_entry in v0.8.0.
+_PLAN_PY = _COMPONENT / "entity_plan.py"
 
 
 def _sensor_wear_names() -> list[str]:
@@ -43,7 +42,7 @@ def _sensor_wear_names() -> list[str]:
         target = getattr(node, "target", None)
         if isinstance(node, ast.AnnAssign) and getattr(target, "id", "") == "ATA_NAME_MAP":
             return ast.literal_eval(node.value)["wear_leveling_count"]
-    raise AssertionError("ATA_NAME_MAP not found in sensor.py")
+    raise AssertionError("ATA_NAME_MAP not found in extract.py")
 
 
 SENSOR_WEAR_NAMES = _sensor_wear_names()
@@ -81,6 +80,13 @@ def test_the_two_wear_lists_agree(att):
 def test_wear_range_delta_is_in_neither_list(att):
     assert "Wear_Range_Delta" not in SENSOR_WEAR_NAMES
     assert "Wear_Range_Delta" not in att._ATA_WEAR_NAMES
+
+
+def test_drive_life_protection_stat_is_in_neither_list(att):
+    """In no drivedb entry and over smartctl's 23-character name limit, so no
+    drive can report it (v0.8.0 tidy list)."""
+    assert "Drive_Life_Protection_Stat" not in SENSOR_WEAR_NAMES
+    assert "Drive_Life_Protection_Stat" not in att._ATA_WEAR_NAMES
 
 
 def test_sandforce_force_gt_reads_new(att, drive):
@@ -251,13 +257,15 @@ def test_worn_samsung_177_still_reads_worn(att, drive):
 
 
 def test_sensor_py_uses_the_shared_predicate():
-    """sensor.py cannot be imported here, so check by source that both the
-    value lookup and the covered-row logic call the shared predicate."""
-    tree = ast.parse(_SENSOR_PY.read_text(encoding="utf-8"))
+    """Check by source that both the value lookup (extract.py, re-imported by
+    sensor.py) and the covered-row logic (entity_plan.py, moved out of
+    sensor.async_setup_entry) call the shared predicate."""
     users = set()
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for sub in ast.walk(node):
-                if isinstance(sub, ast.Name) and sub.id == "is_dead_wear_attr":
-                    users.add(node.name)
-    assert {"_extract_attribute", "async_setup_entry"} <= users
+    for path in (_SENSOR_PY, _PLAN_PY):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                for sub in ast.walk(node):
+                    if isinstance(sub, ast.Name) and sub.id == "is_dead_wear_attr":
+                        users.add(node.name)
+    assert {"_extract_attribute", "_covered_rows"} <= users

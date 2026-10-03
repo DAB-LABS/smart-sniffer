@@ -100,9 +100,15 @@ These indicate early degradation but don't necessarily mean data has been lost y
 
 | SMART Attribute Name(s) | Condition | What it means |
 |---|---|---|
-| `Wear_Leveling_Count`, `Media_Wearout_Indicator`, `SSD_Life_Left`, `Remaining_Lifetime_Perc`, `Percent_Lifetime_Remain`, `Perc_Rated_Life_Remain`, `Percent_Life_Remaining`, `Drive_Life_Protection_Stat` | >= 90% used (after inversion from normalized VALUE) | SSD nearing end of rated write endurance. ATA normalized VALUE is inverted to "percentage used" for consistency with NVMe. Added in v0.5.6. A row whose normalized value, worst, threshold and flags are all 0 is not a gauge and is skipped, so a drive with no other wear row raises no wear warning. |
+| `Wear_Leveling_Count`, `Media_Wearout_Indicator`, `SSD_Life_Left`, `Remaining_Lifetime_Perc`, `Percent_Lifetime_Remain`, `Perc_Rated_Life_Remain`, `Percent_Life_Remaining` (WD Blue's ID 230 arrives as `Media_Wearout_Indicator`) | >= 90% used (after inversion from normalized VALUE) | SSD nearing end of rated write endurance. ATA normalized VALUE is inverted to "percentage used" for consistency with NVMe. Added in v0.5.6. A row whose normalized value, worst, threshold and flags are all 0 is not a gauge and is skipped, so a drive with no other wear row raises no wear warning. |
 
 > **Note:** When both critical and warning triggers are active, the state is **YES** (critical wins) and all reasons are combined in the reasons list -- critical reasons first, warning reasons appended.
+
+#### Device Statistics fill gaps (v0.8.0+)
+
+Some drives keep a count in their Device Statistics log that their SMART attribute table does not show: a WDC Ultrastar without attribute 187 still counts reported uncorrectable errors there. When the table has no attribute 187 (or 5, or no usable wear attribute), SMART Sniffer reads Reported Uncorrectable Errors (or Reallocated Sector Count, or SSD Wear Percent Used) from the log instead, and the reason says so: "Reported Uncorrectable Errors: 18 (expected 0; from device statistics)". Thresholds apply as usual. The first time this turns a drive to attention you get one notification, even if it is the first poll after an upgrade. Run a long self-test (`smartctl -t long`); if it passes and the count does not grow, set the threshold to the current reading to accept it.
+
+Data Written and Data Read keep long-term statistics as a `total`. The long-term graph starts at zero on the entity's first day, not at the drive's lifetime total, and if short-term statistics are purged the sum restarts at zero. A change of source (for example turning Device Statistics off) shows as one step, not a dip.
 
 ---
 
@@ -113,7 +119,7 @@ These indicate early degradation but don't necessarily mean data has been lost y
 | Field | Condition | What it means |
 |---|---|---|
 | `critical_warning` | ≠ 0 | Bitmask. Any set bit = act now. Bits: spare below threshold, temp out of range, reliability degraded, read-only mode, volatile backup failed. |
-| `media_errors` | > 0 | Cumulative unrecoverable media errors. Should always be 0. |
+| `media_errors` | > 0 | Cumulative unrecoverable media errors. Should always be 0. A value at or above 2^64 is not a count (NVMe counters are 128-bit, and some Windows drivers hand back the log with the next field's bytes inside this one); it reads as unknown and is not a trigger (v0.8.0+). |
 | `available_spare` | ≤ `available_spare_threshold` | Drive's reserve block pool at or below manufacturer threshold. |
 
 #### WARNING (state: MAYBE)

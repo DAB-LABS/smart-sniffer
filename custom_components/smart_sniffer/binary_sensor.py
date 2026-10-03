@@ -35,14 +35,27 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .attention import _has_usable_smart_data, coerce_smart_data
-from .const import CONF_TOKEN, DOMAIN
+from .const import CONF_FORCE_UPDATE, CONF_TOKEN, DEFAULT_FORCE_UPDATE, DOMAIN
 from .device_link import agent_link
+from .entity_plan import (
+    BINARY_SENSOR,
+    KIND_AGENT_STATUS,
+    KIND_AUTH_ACTIVE,
+    KIND_HEALTH,
+    KIND_POOL_DATA_ERRORS,
+    KIND_POOL_PROBLEM,
+    KIND_STANDBY,
+    EntitySpec,
+    binary_sensor_specs,
+    guarded_listener,
+    take_new,
+    wants_force_update,
+)
 from .coordinator import AgentHealthCoordinator, SmartSnifferCoordinator
 from .pool_entity import ZfsPoolEntity, ZfsPoolMissingAwareEntity
 from .pool_health import (
     MISSING_REASON,
     data_errors,
-    pool_names_for_setup,
     pool_problems,
     problem_devices,
 )
@@ -106,36 +119,68 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up SMART Sniffer binary sensor entities from a config entry."""
+    """Set up SMART Sniffer binary sensor entities from a config entry.
+
+    As in sensor.py: the entity plan decides, at setup and after every poll,
+    and each entity is added once.
+    """
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator: SmartSnifferCoordinator = data["coordinator"]
     health_coordinator: AgentHealthCoordinator = data["health_coordinator"]
+    created = coordinator.created.setdefault(BINARY_SENSOR, {})
+    force = bool(entry.data.get(CONF_FORCE_UPDATE, DEFAULT_FORCE_UPDATE))
 
-    entities: list[BinarySensorEntity] = []
+    def build(specs: list[EntitySpec]) -> list[BinarySensorEntity]:
+        entities = []
+        for spec in specs:
+            entity = _build_binary_sensor(spec, coordinator, health_coordinator, entry)
+            if entity is None:
+                continue
+            if wants_force_update(spec, force):
+                entity._attr_force_update = True
+            entities.append(entity)
+        return entities
 
-    # Per-drive health + standby sensors.
-    for drive_id, drive_data in coordinator.data.items():
-        if drive_id.startswith("_"):
-            continue  # skip internal keys like _filesystems
-        if drive_data.get("readable") is False:
-            # Matches sensor.py: never build a device for a drive the agent
-            # could not read. See smart-sniffer-app#7.
-            _LOGGER.debug("Skipping unreadable drive %s at setup", drive_id)
-            continue
-        entities.append(SmartSnifferHealthSensor(coordinator, drive_id, drive_data))
-        entities.append(DriveStandbySensor(coordinator, drive_id, drive_data))
+    plan = binary_sensor_specs(
+        coordinator.data, entry.entry_id, coordinator.registered_pool_names()
+    )
+    async_add_entities(build(take_new(plan, created)), update_before_add=False)
 
-    # ZFS pool problem sensors (one device per pool, GH #50), for every pool
-    # reported now and every pool device already registered.
-    for name in pool_names_for_setup(coordinator.data, coordinator.registered_pool_names()):
-        entities.append(ZfsPoolDataErrorsSensor(coordinator, name))
-        entities.append(ZfsPoolProblemSensor(coordinator, name))
+    def _add_new() -> None:
+        later = binary_sensor_specs(coordinator.data, entry.entry_id, ())
+        new = take_new(later, created)
+        if new:
+            async_add_entities(build(new), update_before_add=False)
 
-    # Agent-level connectivity and auth sensors.
-    entities.append(AgentStatusBinarySensor(health_coordinator, entry))
-    entities.append(AuthActiveBinarySensor(health_coordinator, entry))
+    entry.async_on_unload(
+        coordinator.async_add_listener(guarded_listener(_add_new, _LOGGER))
+    )
 
-    async_add_entities(entities, update_before_add=False)
+
+def _build_binary_sensor(
+    spec: EntitySpec,
+    coordinator: SmartSnifferCoordinator,
+    health: AgentHealthCoordinator,
+    entry: ConfigEntry,
+) -> BinarySensorEntity | None:
+    """The entity for one spec. The one place binary sensors are constructed."""
+    kind = spec.kind
+    if kind == KIND_AGENT_STATUS:
+        return AgentStatusBinarySensor(health, entry)
+    if kind == KIND_AUTH_ACTIVE:
+        return AuthActiveBinarySensor(health, entry)
+    if kind == KIND_POOL_DATA_ERRORS:
+        return ZfsPoolDataErrorsSensor(coordinator, spec.subject)
+    if kind == KIND_POOL_PROBLEM:
+        return ZfsPoolProblemSensor(coordinator, spec.subject)
+    drive_data = coordinator.data.get(spec.subject)
+    if drive_data is None:
+        return None
+    if kind == KIND_HEALTH:
+        return SmartSnifferHealthSensor(coordinator, spec.subject, drive_data)
+    if kind == KIND_STANDBY:
+        return DriveStandbySensor(coordinator, spec.subject, drive_data)
+    return None
 
 
 class SmartSnifferHealthSensor(

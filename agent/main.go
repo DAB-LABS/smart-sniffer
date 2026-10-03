@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -77,7 +78,7 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 	cfg.SmartctlPath = smartctlPath
 	log.Printf("using smartctl: %s (version %s)", smartctlPath, smartctlVer)
 
-	drives, err := preflightScanDrives(cfg.SmartctlPath)
+	drives, scanTimedOut, err := preflightScanDrives(cfg.SmartctlPath)
 	if err != nil {
 		return err
 	}
@@ -96,12 +97,21 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 	}
 	log.Printf("SMART Sniffer Agent v%s", version)
 	log.Printf("smartctl version: %s", smartctlVer)
-	log.Printf("Drives detected: %d", len(drives))
+	if scanTimedOut {
+		log.Printf("Drives detected: unknown (scan timed out)")
+	} else {
+		log.Printf("Drives detected: %d", len(drives))
+	}
 	log.Printf("Listening on: 0.0.0.0:%d", cfg.Port)
 	log.Printf("Auth: %s", authLabel)
 	log.Printf("mDNS: %s", mdnsLabel)
 	if cfg.StandbyMode != "never" {
 		log.Printf("Standby mode: %s", cfg.StandbyMode)
+	}
+	if !cfg.DeviceStatisticsEnabled() {
+		log.Printf("Device statistics: off (config)")
+	} else if devstatGOOS == "darwin" {
+		log.Printf("Device statistics: off (not available on macOS)")
 	}
 	if len(cfg.ExcludeDevices) > 0 {
 		log.Printf("Excluding %d device(s): %s", len(cfg.ExcludeDevices), strings.Join(cfg.ExcludeDevices, ", "))
@@ -451,32 +461,38 @@ func getSmartctlVersion(path string) string {
 }
 
 // preflightScanDrives runs "smartctl --scan" and checks for permission errors
-// or zero drives.
-func preflightScanDrives(smartctlPath string) ([]string, error) {
-	out, err := exec.Command(smartctlPath, "--scan").CombinedOutput()
+// or zero drives. A scan that times out is not fatal: it is logged, the drive
+// list is unknown (timedOut true, no drives), and the agent starts anyway;
+// the first poll scans again. Permission and other errors stay fatal.
+func preflightScanDrives(smartctlPath string) (drives []string, timedOut bool, err error) {
+	out, err := runScan(smartctlPath, []string{"--scan"}, scanTimeout)
+	if isScanTimeout(err) {
+		log.Printf("WARNING: smartctl --scan timed out after %s at startup; continuing", seconds(scanTimeout))
+		return nil, true, nil
+	}
 	outStr := string(out)
 
 	// Permission errors surface in different ways depending on OS.
 	// Check the output text first (smartctl may exit 0 but still warn),
 	// then fall back to the generic exec error.
 	if containsPermissionError(outStr) {
-		return nil, fmt.Errorf(`ERROR: smartctl requires elevated privileges to read drive data.
+		return nil, false, fmt.Errorf(`ERROR: smartctl requires elevated privileges to read drive data.
 
 Run the agent with sufficient permissions:
   Linux/macOS:  sudo ./smartha-agent
   Windows:      Run as Administrator`)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("ERROR: smartctl --scan failed: %v\nOutput: %s", err, outStr)
+		return nil, false, fmt.Errorf("ERROR: smartctl --scan failed: %v\nOutput: %s", err, outStr)
 	}
 
-	drives := parseScanOutput(outStr)
+	drives = parseScanOutput(outStr)
 	if len(drives) == 0 {
 		log.Println("WARNING: smartctl detected no drives. The agent will start but no data will be available.")
 		log.Println("Check that your drives support SMART and are visible to the OS.")
 	}
 
-	return drives, nil
+	return drives, false, nil
 }
 
 // containsPermissionError is a best-effort heuristic for permission problems.
@@ -542,7 +558,8 @@ type healthResponse struct {
 	Endpoints   []string `json:"endpoints"`
 	Drives      int      `json:"drives"`
 	Filesystems int      `json:"filesystems"`
-	Pools       *int     `json:"pools,omitempty"` // present only when ZFS pool status is on
+	Pools       *int     `json:"pools,omitempty"`        // present only when ZFS pool status is on and the last read succeeded
+	PoolsStatus string   `json:"pools_status,omitempty"` // pending, ok or failed; present only when ZFS pool status is on
 }
 
 // handleHealth serves GET /api/health — includes available endpoints and counts.
@@ -557,10 +574,14 @@ func handleHealth(cache *DriveCache) http.HandlerFunc {
 		}
 
 		var poolCount *int
+		var poolsStatus string
 		if cache.poolCache != nil {
 			endpoints = append(endpoints, "/api/pools")
-			n := cache.poolCache.Count()
-			poolCount = &n
+			poolsStatus = cache.poolCache.Status()
+			if poolsStatus == poolsStatusOK {
+				n := cache.poolCache.Count()
+				poolCount = &n
+			}
 		}
 
 		cache.mu.RLock()
@@ -576,6 +597,7 @@ func handleHealth(cache *DriveCache) http.HandlerFunc {
 			Drives:      driveCount,
 			Filesystems: fsCount,
 			Pools:       poolCount,
+			PoolsStatus: poolsStatus,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -654,7 +676,14 @@ type DriveCache struct {
 	firstPoll     bool                 // true until first Refresh() completes; uses --scan-open on first poll
 	protocolCache map[string]string    // per-device-path detected or overridden protocol
 	overrideProto map[string]bool      // true when the protocol came from device_overrides (always pass -d)
+	satLearned    map[string]bool      // paths whose clean SAT retry is remembered; the scan no longer overwrites their protocol (D9)
 	cfg           *Config              // full agent config (for device_overrides access)
+
+	// Device Statistics (devstat.go). devstatMemory is touched only by
+	// Refresh and never persisted; goos and devstatRun are injectable for tests.
+	devstatMemory map[string]*devstatMem
+	goos          string
+	devstatRun    smartctlRunner
 }
 
 // DriveInfo is the per-drive cached payload.
@@ -667,7 +696,12 @@ type DriveInfo struct {
 	InStandby   bool            `json:"in_standby,omitempty"`   // true when drive was skipped due to standby
 	Readable    bool            `json:"readable"`               // false when smartctl could not read the drive this cycle; data is stale
 	LastUpdated string          `json:"last_updated,omitempty"` // ISO 8601 timestamp of last successful SMART fetch
-	RawJSON     json.RawMessage `json:"smart_data"`
+	RawJSON     json.RawMessage `json:"smart_data"`             // the -a call's output, exactly as v0.7.0 published it
+
+	// From the separate devstat call and the derivation (devstat.go). Never
+	// fed back into anything above.
+	DeviceStatistics *DeviceStatistics `json:"device_statistics,omitempty"`
+	Derived          *Derived          `json:"derived,omitempty"`
 }
 
 // fetchOutcome explains why fetchDriveInfo returned without fresh SMART data.
@@ -703,7 +737,10 @@ func NewDriveCache(cfg *Config) *DriveCache {
 		firstPoll:     true,
 		protocolCache: make(map[string]string),
 		overrideProto: make(map[string]bool),
+		satLearned:    make(map[string]bool),
 		cfg:           cfg,
+		devstatMemory: make(map[string]*devstatMem),
+		goos:          devstatGOOS,
 	}
 }
 
@@ -730,10 +767,27 @@ func (dc *DriveCache) Refresh() {
 	}
 	dc.mu.Unlock()
 
-	scanOut, err := exec.Command(dc.cfg.SmartctlPath, "--json", scanCmd).CombinedOutput()
-	if err != nil && scanCmd == "--scan-open" {
-		log.Println("--scan-open failed, falling back to --scan")
-		scanOut, err = exec.Command(dc.cfg.SmartctlPath, "--json", "--scan").CombinedOutput()
+	var scanOut []byte
+	var err error
+	if scanCmd == "--scan-open" {
+		scanOut, err = runScan(dc.cfg.SmartctlPath, []string{"--json", "--scan-open"}, scanOpenTimeout)
+		if err != nil {
+			if isScanTimeout(err) {
+				log.Printf("--scan-open timed out after %s, falling back to --scan", seconds(scanOpenTimeout))
+			} else {
+				log.Println("--scan-open failed, falling back to --scan")
+			}
+			scanOut, err = runScan(dc.cfg.SmartctlPath, []string{"--json", "--scan"}, scanTimeout)
+		}
+	} else {
+		scanOut, err = runScan(dc.cfg.SmartctlPath, []string{"--json", "--scan"}, scanTimeout)
+	}
+	if isScanTimeout(err) {
+		// Stable discriminator: a scan that keeps hanging logs once, then hourly.
+		if dc.logs.shouldLog("scan", "timeout") {
+			log.Printf("drive scan timed out after %s; serving cached data", seconds(scanTimeout))
+		}
+		return
 	}
 	if err != nil {
 		if msg := fmt.Sprintf("drive scan error: %v", err); dc.logs.shouldLog("scan", msg) {
@@ -752,10 +806,12 @@ func (dc *DriveCache) Refresh() {
 		return
 	}
 
-	// Cache the detected protocol for each device found by scan.
+	// Cache the detected protocol for each device found by scan. A path whose
+	// SAT retry came back clean keeps "sat" (D9): overwriting it here is what
+	// made every poll of a NAS SATA drive a SCSI call and then a SAT call.
 	dc.mu.Lock()
 	for _, dev := range scanResult.Devices {
-		if dev.Protocol != "" {
+		if dev.Protocol != "" && !dc.satLearned[dev.Name] {
 			dc.protocolCache[dev.Name] = dev.Protocol
 		}
 	}
@@ -809,7 +865,7 @@ func (dc *DriveCache) Refresh() {
 	var order []string
 
 	for _, dev := range scanResult.Devices {
-		info, outcome := dc.fetchDriveInfo(dev.Name, dev.Protocol, isFirstPoll)
+		info, outcome, dtype := dc.fetchDriveInfo(dev.Name, dev.Protocol, isFirstPoll, false)
 		if outcome != fetchOK {
 			// No fresh data this cycle, for either reason. Recover the cached
 			// entry by device path so the drive keeps its real serial-based ID
@@ -866,6 +922,16 @@ func (dc *DriveCache) Refresh() {
 		}
 		info.InStandby = false
 		info.Readable = true
+
+		// Device Statistics come from a second smartctl call, never from the -a call
+		// above. Both calls report through one exit-code bitmask: a devstat read that
+		// fails sets the same bit 2 that drives readability, the SAT retry and log
+		// tiering for -a, and in a combined call nobody can tell whose bit it is (the
+		// one-call design needed a 14-row table to guess). This call's exit code,
+		// output and timeout only ever reach DriveInfo.DeviceStatistics and Derived.
+		// Design: devstat plan v3, 2026-10-01.
+		dc.readDevstat(&info, dtype)
+
 		newDrives[info.ID] = info
 		order = append(order, info.ID)
 	}
@@ -950,11 +1016,34 @@ func isAutoDetectedProtocol(p string) bool {
 // path without waiting 30 seconds. Nothing else should assign to it.
 var smartctlTimeout = 30 * time.Second
 
+// Scan timeouts. A scan that hangs would otherwise stall startup or the
+// sequential Refresh loop forever. --scan-open opens every device and can be
+// slow on large hosts, so its bound is generous and fixed. Variables so tests
+// can shorten them; nothing else should assign to them.
+var (
+	scanTimeout     = 60 * time.Second
+	scanOpenTimeout = 600 * time.Second
+)
+
+// smartctlTimeoutError is runSmartctlWithTimeout's error for a call that hit
+// its deadline. Its text is v0.7.0's timeout error, unchanged.
+type smartctlTimeoutError struct{ timeout time.Duration }
+
+func (e *smartctlTimeoutError) Error() string {
+	return fmt.Sprintf("timed out after %s (device may be unresponsive)", e.timeout)
+}
+
 // runSmartctl runs smartctl with the given args and returns (output, exitCode, error).
 // error is non-nil only for non-ExitError failures (missing binary, permissions,
 // or a timeout). A non-zero smartctl exit status is returned via exitCode, not error.
 func runSmartctl(smartctlPath string, args []string) ([]byte, int, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), smartctlTimeout)
+	return runSmartctlWithTimeout(smartctlPath, args, smartctlTimeout)
+}
+
+// runSmartctlWithTimeout is runSmartctl with an explicit timeout. A timeout
+// returns a *smartctlTimeoutError.
+func runSmartctlWithTimeout(smartctlPath string, args []string, timeout time.Duration) ([]byte, int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, smartctlPath, args...)
 	// On deadline the context kills only the direct child. If smartctl is a
@@ -965,7 +1054,7 @@ func runSmartctl(smartctlPath string, args []string) ([]byte, int, error) {
 	cmd.WaitDelay = 2 * time.Second
 	out, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {
-		return out, -1, fmt.Errorf("timed out after %s (device may be unresponsive)", smartctlTimeout)
+		return out, -1, &smartctlTimeoutError{timeout: timeout}
 	}
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -976,11 +1065,69 @@ func runSmartctl(smartctlPath string, args []string) ([]byte, int, error) {
 	return out, 0, nil
 }
 
+// scanTimeoutError is runScan's error for a scan that hit its deadline.
+type scanTimeoutError struct{ timeout time.Duration }
+
+func (e *scanTimeoutError) Error() string {
+	return fmt.Sprintf("timed out after %s", seconds(e.timeout))
+}
+
+// isScanTimeout reports whether err is a runScan timeout.
+func isScanTimeout(err error) bool {
+	var te *scanTimeoutError
+	return errors.As(err, &te)
+}
+
+// seconds renders a timeout the way the log lines state it ("60s").
+func seconds(d time.Duration) string {
+	return fmt.Sprintf("%ds", int(d/time.Second))
+}
+
+// runScan runs a smartctl scan (--scan, --scan-open, with or without --json)
+// with a timeout and returns its combined output, as exec's CombinedOutput
+// does: a non-zero exit is an *exec.ExitError. A timeout returns a
+// *scanTimeoutError. Same WaitDelay guard as runSmartctl.
+func runScan(smartctlPath string, args []string, timeout time.Duration) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, smartctlPath, args...)
+	cmd.WaitDelay = 2 * time.Second
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		return out, &scanTimeoutError{timeout: timeout}
+	}
+	return out, err
+}
+
+// standbyInUse reports whether this call passes -n (and so may be told the
+// drive is asleep).
+func (dc *DriveCache) standbyInUse(skipStandby bool) bool {
+	return dc.standbyMode != "never" && !skipStandby
+}
+
+// satArgs is the SAT call: the v0.7.0 SAT retry's arguments, also used as a
+// learned path's main call (D9).
+func (dc *DriveCache) satArgs(devicePath string, skipStandby bool) []string {
+	args := []string{"--json", "-a", "-d", "sat"}
+	if dc.standbyInUse(skipStandby) {
+		args = append(args, "-n", dc.standbyMode)
+	}
+	return append(args, devicePath)
+}
+
 // fetchDriveInfo calls smartctl -a --json on a single device and parses the
-// key fields we care about. Returns (info, outcome). The info value is only
-// meaningful when outcome is fetchOK; for the other outcomes the caller must
-// serve the cached entry rather than publish what is returned here.
-func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bool) (DriveInfo, fetchOutcome) {
+// key fields we care about. Returns (info, outcome, dtype). The info value is
+// only meaningful when outcome is fetchOK; for the other outcomes the caller
+// must serve the cached entry rather than publish what is returned here.
+// dtype is the -d value of the call whose output was accepted ("" when none
+// was passed); the devstat call reuses it.
+//
+// noSATRetry runs the v0.7.0 sequence without its SAT retry. It is set only
+// for the re-read after a learned SAT path failed, so that poll makes the
+// v0.7.0 number of calls (SAT, then the scan protocol) and never a second SAT.
+func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby, noSATRetry bool) (DriveInfo, fetchOutcome, string) {
+	scanProto := protocol
+
 	// Check the protocol cache: if we have a confirmed working protocol for this
 	// device (e.g. "sat" from a previous SAT fallback, or a device_override),
 	// use it upfront instead of relying on the scan-reported protocol.
@@ -989,18 +1136,46 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bo
 		protocol = cached
 	}
 	isOverride := dc.overrideProto[devicePath]
+	learned := dc.satLearned[devicePath] && !isOverride
 	dc.mu.RUnlock()
 
+	// D9: a path whose SAT retry came back clean goes straight to SAT. The
+	// results are taken in v0.7.0's order: a clean read is kept; a drive
+	// asleep is standby and stays learned (the standby check precedes any
+	// retry logic, as in v0.7.0); anything else forgets SAT and reads the
+	// drive the v0.7.0 way in this same poll, without a second SAT call.
+	if learned && !noSATRetry {
+		out, code, execErr := runSmartctl(dc.cfg.SmartctlPath, dc.satArgs(devicePath, skipStandby))
+		if execErr == nil && !smartctlWantsSATRetry(code) {
+			dc.logExitCode(devicePath, code)
+			return dc.parseDriveInfo(devicePath, "sat", out), fetchOK, "sat"
+		}
+		if execErr == nil && code&0x02 != 0 && dc.standbyInUse(skipStandby) && smartctlReportsLowPower(out) {
+			return DriveInfo{DevicePath: devicePath, Protocol: protocol}, fetchStandby, ""
+		}
+		dc.mu.Lock()
+		delete(dc.satLearned, devicePath)
+		if scanProto != "" {
+			dc.protocolCache[devicePath] = scanProto
+		} else {
+			delete(dc.protocolCache, devicePath)
+		}
+		dc.mu.Unlock()
+		return dc.fetchDriveInfo(devicePath, scanProto, skipStandby, true)
+	}
+
 	args := []string{"--json", "-a"}
-	if dc.standbyMode != "never" && !skipStandby {
+	if dc.standbyInUse(skipStandby) {
 		args = append(args, "-n", dc.standbyMode)
 	}
 	// A protocol the user set in device_overrides is always passed through,
 	// including scsi/ata/nvme. Those three are normally left off because scan
 	// detection already implies them, but an explicit override means the scan
 	// got it wrong -- dropping it silently is issue #43.
+	dtype := ""
 	if protocol != "" && (isOverride || !isAutoDetectedProtocol(protocol)) {
 		args = append(args, "-d", protocol)
+		dtype = protocol
 	}
 	args = append(args, devicePath)
 
@@ -1026,71 +1201,44 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bo
 		// agent unavailable). A hung drive hitting the 30s timeout is the
 		// realistic trigger. Same rule as the exit-code path below: never
 		// publish a drive we could not read.
-		return DriveInfo{DevicePath: devicePath, Protocol: protocol}, fetchUnreadable
+		return DriveInfo{DevicePath: devicePath, Protocol: protocol}, fetchUnreadable, ""
 	} else if code != 0 {
 		// Bit 1 (value 2) is set both when the drive is in a low-power mode and
 		// when the device could not be opened at all. Ask smartctl which it was
 		// instead of inferring it from the bit, so a permission-blocked drive is
 		// never reported as sleeping. See smart-sniffer-app#7.
-		if code&0x02 != 0 && dc.standbyMode != "never" && !skipStandby &&
+		if code&0x02 != 0 && dc.standbyInUse(skipStandby) &&
 			smartctlReportsLowPower(out) {
-			return DriveInfo{DevicePath: devicePath, Protocol: protocol}, fetchStandby
+			return DriveInfo{DevicePath: devicePath, Protocol: protocol}, fetchStandby, ""
 		}
 
 		// SAT fallback: if any execution failure bits (0-2) are set and protocol
 		// is SCSI, retry with -d sat. Bit 1 = device open failed (Synology),
 		// bit 2 = command failed/checksum error (QNAP). Both indicate a protocol
 		// mismatch on NAS HBAs where SATA drives present as SCSI.
-		if smartctlWantsSATRetry(code) && strings.EqualFold(protocol, "scsi") {
-			satArgs := []string{"--json", "-a", "-d", "sat"}
-			if dc.standbyMode != "never" && !skipStandby {
-				satArgs = append(satArgs, "-n", dc.standbyMode)
-			}
-			satArgs = append(satArgs, devicePath)
-
-			satOut, satCode, satExecErr := runSmartctl(dc.cfg.SmartctlPath, satArgs)
+		if !noSATRetry && smartctlWantsSATRetry(code) && strings.EqualFold(protocol, "scsi") {
+			satOut, satCode, satExecErr := runSmartctl(dc.cfg.SmartctlPath, dc.satArgs(devicePath, skipStandby))
 			if satExecErr == nil && !smartctlWantsSATRetry(satCode) {
+				// Logged when SAT is learned, which is once per path per run
+				// unless SAT later fails and is learned again (D9). An
+				// override path is never learned and keeps v0.7.0's behaviour.
 				log.Printf("INFO: %s reports as SCSI but SAT succeeded -- using SAT for this drive", devicePath)
 				dc.mu.Lock()
 				dc.protocolCache[devicePath] = "sat"
+				if !isOverride {
+					dc.satLearned[devicePath] = true
+				}
 				dc.mu.Unlock()
 				out = satOut
 				code = satCode
 				protocol = "sat"
+				dtype = "sat"
 				// Fall through to normal parsing below with the SAT output.
 			}
 		}
 
 		if code != 0 {
-			// smartctl exit codes are a bitmask decoded into three severity
-			// tiers (see describeExitCode):
-			//   bits 0-1: the agent could not read the drive (ERROR).
-			//   bits 3-4: a drive health concern the user must act on (WARNING).
-			//   bits 2,5,6,7: the drive WAS read; historical/wear flags (INFO).
-			// Any non-zero code tends to repeat on every poll for the life of
-			// the drive (a failing disk stays failing; a USB bridge keeps
-			// returning exit code 4). Logging every cycle is spam regardless
-			// of severity, so each device logs on first occurrence, re-logs
-			// immediately when the code changes, and otherwise reminds at most
-			// once per logReminderInterval while the condition persists.
-			// Build the severity-tiered message, then dedup on the device key.
-			// The rendered message embeds the code, so a changed code re-logs
-			// immediately; an unchanged code reminds at most hourly.
-			var msg string
-			switch {
-			case !smartctlReadable(code):
-				msg = fmt.Sprintf("ERROR: smartctl -a %s failed (exit code %d: %s)",
-					devicePath, code, describeExitCode(code))
-			case code&0x18 != 0:
-				msg = fmt.Sprintf("WARNING: smartctl -a %s reports drive health concern (exit code %d: %s)",
-					devicePath, code, describeExitCode(code))
-			default:
-				msg = fmt.Sprintf("smartctl -a %s exited with informational flags (exit code %d: %s)",
-					devicePath, code, describeExitCode(code))
-			}
-			if dc.logs.shouldLog(devicePath, msg) {
-				log.Print(msg)
-			}
+			dc.logExitCode(devicePath, code)
 
 			// Bits 0-1 mean the drive could not be read at all, so there is no
 			// serial in the output. Falling through would hand makeDriveSlug an
@@ -1100,11 +1248,52 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bo
 			// /api/drives and its entities go unavailable. Never publish a
 			// drive we could not read. See smart-sniffer-app#7.
 			if !smartctlReadable(code) {
-				return DriveInfo{DevicePath: devicePath, Protocol: protocol}, fetchUnreadable
+				return DriveInfo{DevicePath: devicePath, Protocol: protocol}, fetchUnreadable, ""
 			}
 		}
 	}
 
+	return dc.parseDriveInfo(devicePath, protocol, out), fetchOK, dtype
+}
+
+// logExitCode logs a non-zero -a exit code in its severity tier.
+func (dc *DriveCache) logExitCode(devicePath string, code int) {
+	if code == 0 {
+		return
+	}
+	// smartctl exit codes are a bitmask decoded into three severity
+	// tiers (see describeExitCode):
+	//   bits 0-1: the agent could not read the drive (ERROR).
+	//   bits 3-4: a drive health concern the user must act on (WARNING).
+	//   bits 2,5,6,7: the drive WAS read; historical/wear flags (INFO).
+	// Any non-zero code tends to repeat on every poll for the life of
+	// the drive (a failing disk stays failing; a USB bridge keeps
+	// returning exit code 4). Logging every cycle is spam regardless
+	// of severity, so each device logs on first occurrence, re-logs
+	// immediately when the code changes, and otherwise reminds at most
+	// once per logReminderInterval while the condition persists.
+	// Build the severity-tiered message, then dedup on the device key.
+	// The rendered message embeds the code, so a changed code re-logs
+	// immediately; an unchanged code reminds at most hourly.
+	var msg string
+	switch {
+	case !smartctlReadable(code):
+		msg = fmt.Sprintf("ERROR: smartctl -a %s failed (exit code %d: %s)",
+			devicePath, code, describeExitCode(code))
+	case code&0x18 != 0:
+		msg = fmt.Sprintf("WARNING: smartctl -a %s reports drive health concern (exit code %d: %s)",
+			devicePath, code, describeExitCode(code))
+	default:
+		msg = fmt.Sprintf("smartctl -a %s exited with informational flags (exit code %d: %s)",
+			devicePath, code, describeExitCode(code))
+	}
+	if dc.logs.shouldLog(devicePath, msg) {
+		log.Print(msg)
+	}
+}
+
+// parseDriveInfo builds the published entry from an accepted -a output.
+func (dc *DriveCache) parseDriveInfo(devicePath, protocol string, out []byte) DriveInfo {
 	info := DriveInfo{
 		DevicePath:  devicePath,
 		Protocol:    protocol,
@@ -1144,7 +1333,7 @@ func (dc *DriveCache) fetchDriveInfo(devicePath, protocol string, skipStandby bo
 	// Build a URL-safe slug from serial (preferred) or device path.
 	info.ID = makeDriveSlug(info.Serial, devicePath)
 
-	return info, fetchOK
+	return info
 }
 
 // smartctlReportsLowPower reports whether smartctl's own messages say it

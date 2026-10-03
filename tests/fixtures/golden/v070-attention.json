@@ -1,0 +1,1023 @@
+{
+ "drives": {
+  "fx-ata-devstat-hgst": {
+   "default": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "labels": [
+    "Command Timeout",
+    "Current Pending Sector Count",
+    "Offline Uncorrectable Errors",
+    "Reallocated Event Count",
+    "Reallocated Sector Count",
+    "Reported Uncorrectable Errors",
+    "SSD Wear Percent Used",
+    "Spin Retry Count",
+    "Total Offline Uncorrectable",
+    "Uncorrectable Error Count"
+   ],
+   "overrides": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "placeholders": {
+    "command_timeout": "not reported",
+    "command_timeout_default": "100",
+    "current_pending_sector_count": "0",
+    "current_pending_sector_count_default": "0",
+    "drive": "d",
+    "nvme_media_errors": "not reported",
+    "nvme_media_errors_default": "0",
+    "nvme_spare_warn_below": "not reported",
+    "nvme_spare_warn_below_default": "20%",
+    "offline_uncorrectable_errors": "0",
+    "offline_uncorrectable_errors_default": "0",
+    "reallocated_event_count": "0",
+    "reallocated_event_count_default": "0",
+    "reallocated_sector_count": "0",
+    "reallocated_sector_count_default": "0",
+    "reported_uncorrectable_errors": "not reported",
+    "reported_uncorrectable_errors_default": "0",
+    "spin_retry_count": "0",
+    "spin_retry_count_default": "0",
+    "ssd_wear_percent_used": "not reported",
+    "ssd_wear_percent_used_default": "90%",
+    "total_offline_uncorrectable": "not reported",
+    "total_offline_uncorrectable_default": "0",
+    "uncorrectable_error_count": "not reported",
+    "uncorrectable_error_count_default": "0"
+   },
+   "readings": {
+    "Current Pending Sector Count": 0,
+    "Offline Uncorrectable Errors": 0,
+    "Reallocated Event Count": 0,
+    "Reallocated Sector Count": 0,
+    "Spin Retry Count": 0
+   },
+   "reasons_text": "No issues detected"
+  },
+  "fx-ata-devstat-hgst-nopoh": {
+   "default": [
+    "YES",
+    "critical",
+    [
+     "Current Pending Sector Count: 8 (expected 0)"
+    ],
+    []
+   ],
+   "labels": [
+    "Command Timeout",
+    "Current Pending Sector Count",
+    "Offline Uncorrectable Errors",
+    "Reallocated Event Count",
+    "Reallocated Sector Count",
+    "Reported Uncorrectable Errors",
+    "SSD Wear Percent Used",
+    "Spin Retry Count",
+    "Total Offline Uncorrectable",
+    "Uncorrectable Error Count"
+   ],
+   "overrides": [
+    "NO",
+    "none",
+    [],
+    [
+     "Current Pending Sector Count: 8 (accepted 10)"
+    ]
+   ],
+   "placeholders": {
+    "command_timeout": "not reported",
+    "command_timeout_default": "100",
+    "current_pending_sector_count": "8",
+    "current_pending_sector_count_default": "0",
+    "drive": "d",
+    "nvme_media_errors": "not reported",
+    "nvme_media_errors_default": "0",
+    "nvme_spare_warn_below": "not reported",
+    "nvme_spare_warn_below_default": "20%",
+    "offline_uncorrectable_errors": "0",
+    "offline_uncorrectable_errors_default": "0",
+    "reallocated_event_count": "0",
+    "reallocated_event_count_default": "0",
+    "reallocated_sector_count": "0",
+    "reallocated_sector_count_default": "0",
+    "reported_uncorrectable_errors": "not reported",
+    "reported_uncorrectable_errors_default": "0",
+    "spin_retry_count": "0",
+    "spin_retry_count_default": "0",
+    "ssd_wear_percent_used": "not reported",
+    "ssd_wear_percent_used_default": "90%",
+    "total_offline_uncorrectable": "not reported",
+    "total_offline_uncorrectable_default": "0",
+    "uncorrectable_error_count": "not reported",
+    "uncorrectable_error_count_default": "0"
+   },
+   "readings": {
+    "Current Pending Sector Count": 8,
+    "Offline Uncorrectable Errors": 0,
+    "Reallocated Event Count": 0,
+    "Reallocated Sector Count": 0,
+    "Spin Retry Count": 0
+   },
+   "reasons_text": "Current Pending Sector Count: 8 (expected 0)"
+  },
+  "fx-ata-devstat-samsung-ssd": {
+   "default": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "labels": [
+    "Command Timeout",
+    "Current Pending Sector Count",
+    "Offline Uncorrectable Errors",
+    "Reallocated Event Count",
+    "Reallocated Sector Count",
+    "Reported Uncorrectable Errors",
+    "SSD Wear Percent Used",
+    "Spin Retry Count",
+    "Total Offline Uncorrectable",
+    "Uncorrectable Error Count"
+   ],
+   "overrides": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "placeholders": {
+    "command_timeout": "not reported",
+    "command_timeout_default": "100",
+    "current_pending_sector_count": "0",
+    "current_pending_sector_count_default": "0",
+    "drive": "d",
+    "nvme_media_errors": "not reported",
+    "nvme_media_errors_default": "0",
+    "nvme_spare_warn_below": "not reported",
+    "nvme_spare_warn_below_default": "20%",
+    "offline_uncorrectable_errors": "not reported",
+    "offline_uncorrectable_errors_default": "0",
+    "reallocated_event_count": "not reported",
+    "reallocated_event_count_default": "0",
+    "reallocated_sector_count": "0",
+    "reallocated_sector_count_default": "0",
+    "reported_uncorrectable_errors": "not reported",
+    "reported_uncorrectable_errors_default": "0",
+    "spin_retry_count": "not reported",
+    "spin_retry_count_default": "0",
+    "ssd_wear_percent_used": "1%",
+    "ssd_wear_percent_used_default": "90%",
+    "total_offline_uncorrectable": "not reported",
+    "total_offline_uncorrectable_default": "0",
+    "uncorrectable_error_count": "0",
+    "uncorrectable_error_count_default": "0"
+   },
+   "readings": {
+    "Current Pending Sector Count": 0,
+    "Reallocated Sector Count": 0,
+    "SSD Wear Percent Used": 1,
+    "Uncorrectable Error Count": 0
+   },
+   "reasons_text": "No issues detected"
+  },
+  "fx-ata-devstat-seagate": {
+   "default": [
+    "YES",
+    "critical",
+    [
+     "Reported Uncorrectable Errors: 9 (expected 0)"
+    ],
+    []
+   ],
+   "labels": [
+    "Command Timeout",
+    "Current Pending Sector Count",
+    "Offline Uncorrectable Errors",
+    "Reallocated Event Count",
+    "Reallocated Sector Count",
+    "Reported Uncorrectable Errors",
+    "SSD Wear Percent Used",
+    "Spin Retry Count",
+    "Total Offline Uncorrectable",
+    "Uncorrectable Error Count"
+   ],
+   "overrides": [
+    "YES",
+    "critical",
+    [
+     "Reported Uncorrectable Errors: 9 (accepted 5)"
+    ],
+    []
+   ],
+   "placeholders": {
+    "command_timeout": "0",
+    "command_timeout_default": "100",
+    "current_pending_sector_count": "0",
+    "current_pending_sector_count_default": "0",
+    "drive": "d",
+    "nvme_media_errors": "not reported",
+    "nvme_media_errors_default": "0",
+    "nvme_spare_warn_below": "not reported",
+    "nvme_spare_warn_below_default": "20%",
+    "offline_uncorrectable_errors": "0",
+    "offline_uncorrectable_errors_default": "0",
+    "reallocated_event_count": "not reported",
+    "reallocated_event_count_default": "0",
+    "reallocated_sector_count": "0",
+    "reallocated_sector_count_default": "0",
+    "reported_uncorrectable_errors": "9",
+    "reported_uncorrectable_errors_default": "0",
+    "spin_retry_count": "0",
+    "spin_retry_count_default": "0",
+    "ssd_wear_percent_used": "not reported",
+    "ssd_wear_percent_used_default": "90%",
+    "total_offline_uncorrectable": "not reported",
+    "total_offline_uncorrectable_default": "0",
+    "uncorrectable_error_count": "not reported",
+    "uncorrectable_error_count_default": "0"
+   },
+   "readings": {
+    "Command Timeout": 0,
+    "Current Pending Sector Count": 0,
+    "Offline Uncorrectable Errors": 0,
+    "Reallocated Sector Count": 0,
+    "Reported Uncorrectable Errors": 9,
+    "Spin Retry Count": 0
+   },
+   "reasons_text": "Reported Uncorrectable Errors: 9 (expected 0)"
+  },
+  "fx-ata-devstat-wdc-unc": {
+   "default": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "labels": [
+    "Command Timeout",
+    "Current Pending Sector Count",
+    "Offline Uncorrectable Errors",
+    "Reallocated Event Count",
+    "Reallocated Sector Count",
+    "Reported Uncorrectable Errors",
+    "SSD Wear Percent Used",
+    "Spin Retry Count",
+    "Total Offline Uncorrectable",
+    "Uncorrectable Error Count"
+   ],
+   "overrides": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "placeholders": {
+    "command_timeout": "not reported",
+    "command_timeout_default": "100",
+    "current_pending_sector_count": "0",
+    "current_pending_sector_count_default": "0",
+    "drive": "d",
+    "nvme_media_errors": "not reported",
+    "nvme_media_errors_default": "0",
+    "nvme_spare_warn_below": "not reported",
+    "nvme_spare_warn_below_default": "20%",
+    "offline_uncorrectable_errors": "0",
+    "offline_uncorrectable_errors_default": "0",
+    "reallocated_event_count": "0",
+    "reallocated_event_count_default": "0",
+    "reallocated_sector_count": "0",
+    "reallocated_sector_count_default": "0",
+    "reported_uncorrectable_errors": "not reported",
+    "reported_uncorrectable_errors_default": "0",
+    "spin_retry_count": "0",
+    "spin_retry_count_default": "0",
+    "ssd_wear_percent_used": "not reported",
+    "ssd_wear_percent_used_default": "90%",
+    "total_offline_uncorrectable": "not reported",
+    "total_offline_uncorrectable_default": "0",
+    "uncorrectable_error_count": "not reported",
+    "uncorrectable_error_count_default": "0"
+   },
+   "readings": {
+    "Current Pending Sector Count": 0,
+    "Offline Uncorrectable Errors": 0,
+    "Reallocated Event Count": 0,
+    "Reallocated Sector Count": 0,
+    "Spin Retry Count": 0
+   },
+   "reasons_text": "No issues detected"
+  },
+  "fx-ata-healthy": {
+   "default": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "labels": [
+    "Command Timeout",
+    "Current Pending Sector Count",
+    "Offline Uncorrectable Errors",
+    "Reallocated Event Count",
+    "Reallocated Sector Count",
+    "Reported Uncorrectable Errors",
+    "SSD Wear Percent Used",
+    "Spin Retry Count",
+    "Total Offline Uncorrectable",
+    "Uncorrectable Error Count"
+   ],
+   "overrides": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "placeholders": {
+    "command_timeout": "0",
+    "command_timeout_default": "100",
+    "current_pending_sector_count": "0",
+    "current_pending_sector_count_default": "0",
+    "drive": "d",
+    "nvme_media_errors": "not reported",
+    "nvme_media_errors_default": "0",
+    "nvme_spare_warn_below": "not reported",
+    "nvme_spare_warn_below_default": "20%",
+    "offline_uncorrectable_errors": "0",
+    "offline_uncorrectable_errors_default": "0",
+    "reallocated_event_count": "0",
+    "reallocated_event_count_default": "0",
+    "reallocated_sector_count": "0",
+    "reallocated_sector_count_default": "0",
+    "reported_uncorrectable_errors": "not reported",
+    "reported_uncorrectable_errors_default": "0",
+    "spin_retry_count": "not reported",
+    "spin_retry_count_default": "0",
+    "ssd_wear_percent_used": "not reported",
+    "ssd_wear_percent_used_default": "90%",
+    "total_offline_uncorrectable": "not reported",
+    "total_offline_uncorrectable_default": "0",
+    "uncorrectable_error_count": "not reported",
+    "uncorrectable_error_count_default": "0"
+   },
+   "readings": {
+    "Command Timeout": 0,
+    "Current Pending Sector Count": 0,
+    "Offline Uncorrectable Errors": 0,
+    "Reallocated Event Count": 0,
+    "Reallocated Sector Count": 0
+   },
+   "reasons_text": "No issues detected"
+  },
+  "fx-ata-no-devstat-samsung850": {
+   "default": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "labels": [
+    "Command Timeout",
+    "Current Pending Sector Count",
+    "Offline Uncorrectable Errors",
+    "Reallocated Event Count",
+    "Reallocated Sector Count",
+    "Reported Uncorrectable Errors",
+    "SSD Wear Percent Used",
+    "Spin Retry Count",
+    "Total Offline Uncorrectable",
+    "Uncorrectable Error Count"
+   ],
+   "overrides": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "placeholders": {
+    "command_timeout": "not reported",
+    "command_timeout_default": "100",
+    "current_pending_sector_count": "not reported",
+    "current_pending_sector_count_default": "0",
+    "drive": "d",
+    "nvme_media_errors": "not reported",
+    "nvme_media_errors_default": "0",
+    "nvme_spare_warn_below": "not reported",
+    "nvme_spare_warn_below_default": "20%",
+    "offline_uncorrectable_errors": "not reported",
+    "offline_uncorrectable_errors_default": "0",
+    "reallocated_event_count": "not reported",
+    "reallocated_event_count_default": "0",
+    "reallocated_sector_count": "0",
+    "reallocated_sector_count_default": "0",
+    "reported_uncorrectable_errors": "not reported",
+    "reported_uncorrectable_errors_default": "0",
+    "spin_retry_count": "not reported",
+    "spin_retry_count_default": "0",
+    "ssd_wear_percent_used": "12%",
+    "ssd_wear_percent_used_default": "90%",
+    "total_offline_uncorrectable": "not reported",
+    "total_offline_uncorrectable_default": "0",
+    "uncorrectable_error_count": "0",
+    "uncorrectable_error_count_default": "0"
+   },
+   "readings": {
+    "Reallocated Sector Count": 0,
+    "SSD Wear Percent Used": 12,
+    "Uncorrectable Error Count": 0
+   },
+   "reasons_text": "No issues detected"
+  },
+  "fx-ata-reallocated": {
+   "default": [
+    "YES",
+    "critical",
+    [
+     "Reallocated Sector Count: 147 (expected 0)",
+     "Reallocated Event Count: 47 (expected 0)"
+    ],
+    []
+   ],
+   "labels": [
+    "Command Timeout",
+    "Current Pending Sector Count",
+    "Offline Uncorrectable Errors",
+    "Reallocated Event Count",
+    "Reallocated Sector Count",
+    "Reported Uncorrectable Errors",
+    "SSD Wear Percent Used",
+    "Spin Retry Count",
+    "Total Offline Uncorrectable",
+    "Uncorrectable Error Count"
+   ],
+   "overrides": [
+    "YES",
+    "critical",
+    [
+     "Reallocated Sector Count: 147 (accepted 3)",
+     "Reallocated Event Count: 47 (expected 0)"
+    ],
+    []
+   ],
+   "placeholders": {
+    "command_timeout": "0",
+    "command_timeout_default": "100",
+    "current_pending_sector_count": "0",
+    "current_pending_sector_count_default": "0",
+    "drive": "d",
+    "nvme_media_errors": "not reported",
+    "nvme_media_errors_default": "0",
+    "nvme_spare_warn_below": "not reported",
+    "nvme_spare_warn_below_default": "20%",
+    "offline_uncorrectable_errors": "0",
+    "offline_uncorrectable_errors_default": "0",
+    "reallocated_event_count": "47",
+    "reallocated_event_count_default": "0",
+    "reallocated_sector_count": "147",
+    "reallocated_sector_count_default": "0",
+    "reported_uncorrectable_errors": "not reported",
+    "reported_uncorrectable_errors_default": "0",
+    "spin_retry_count": "not reported",
+    "spin_retry_count_default": "0",
+    "ssd_wear_percent_used": "not reported",
+    "ssd_wear_percent_used_default": "90%",
+    "total_offline_uncorrectable": "not reported",
+    "total_offline_uncorrectable_default": "0",
+    "uncorrectable_error_count": "not reported",
+    "uncorrectable_error_count_default": "0"
+   },
+   "readings": {
+    "Command Timeout": 0,
+    "Current Pending Sector Count": 0,
+    "Offline Uncorrectable Errors": 0,
+    "Reallocated Event Count": 47,
+    "Reallocated Sector Count": 147
+   },
+   "reasons_text": "Reallocated Sector Count: 147 (expected 0); Reallocated Event Count: 47 (expected 0)"
+  },
+  "fx-ata-sandforce-force-gt": {
+   "default": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "labels": [
+    "Command Timeout",
+    "Current Pending Sector Count",
+    "Offline Uncorrectable Errors",
+    "Reallocated Event Count",
+    "Reallocated Sector Count",
+    "Reported Uncorrectable Errors",
+    "SSD Wear Percent Used",
+    "Spin Retry Count",
+    "Total Offline Uncorrectable",
+    "Uncorrectable Error Count"
+   ],
+   "overrides": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "placeholders": {
+    "command_timeout": "not reported",
+    "command_timeout_default": "100",
+    "current_pending_sector_count": "not reported",
+    "current_pending_sector_count_default": "0",
+    "drive": "d",
+    "nvme_media_errors": "not reported",
+    "nvme_media_errors_default": "0",
+    "nvme_spare_warn_below": "not reported",
+    "nvme_spare_warn_below_default": "20%",
+    "offline_uncorrectable_errors": "not reported",
+    "offline_uncorrectable_errors_default": "0",
+    "reallocated_event_count": "0",
+    "reallocated_event_count_default": "0",
+    "reallocated_sector_count": "0",
+    "reallocated_sector_count_default": "0",
+    "reported_uncorrectable_errors": "0",
+    "reported_uncorrectable_errors_default": "0",
+    "spin_retry_count": "not reported",
+    "spin_retry_count_default": "0",
+    "ssd_wear_percent_used": "0%",
+    "ssd_wear_percent_used_default": "90%",
+    "total_offline_uncorrectable": "not reported",
+    "total_offline_uncorrectable_default": "0",
+    "uncorrectable_error_count": "not reported",
+    "uncorrectable_error_count_default": "0"
+   },
+   "readings": {
+    "Reallocated Event Count": 0,
+    "Reallocated Sector Count": 0,
+    "Reported Uncorrectable Errors": 0,
+    "SSD Wear Percent Used": 0
+   },
+   "reasons_text": "No issues detected"
+  },
+  "fx-ata-sandforce-force-gt-smartctl": {
+   "default": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "labels": [
+    "Command Timeout",
+    "Current Pending Sector Count",
+    "Offline Uncorrectable Errors",
+    "Reallocated Event Count",
+    "Reallocated Sector Count",
+    "Reported Uncorrectable Errors",
+    "SSD Wear Percent Used",
+    "Spin Retry Count",
+    "Total Offline Uncorrectable",
+    "Uncorrectable Error Count"
+   ],
+   "overrides": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "placeholders": {
+    "command_timeout": "not reported",
+    "command_timeout_default": "100",
+    "current_pending_sector_count": "not reported",
+    "current_pending_sector_count_default": "0",
+    "drive": "d",
+    "nvme_media_errors": "not reported",
+    "nvme_media_errors_default": "0",
+    "nvme_spare_warn_below": "not reported",
+    "nvme_spare_warn_below_default": "20%",
+    "offline_uncorrectable_errors": "not reported",
+    "offline_uncorrectable_errors_default": "0",
+    "reallocated_event_count": "0",
+    "reallocated_event_count_default": "0",
+    "reallocated_sector_count": "0",
+    "reallocated_sector_count_default": "0",
+    "reported_uncorrectable_errors": "0",
+    "reported_uncorrectable_errors_default": "0",
+    "spin_retry_count": "not reported",
+    "spin_retry_count_default": "0",
+    "ssd_wear_percent_used": "not reported",
+    "ssd_wear_percent_used_default": "90%",
+    "total_offline_uncorrectable": "not reported",
+    "total_offline_uncorrectable_default": "0",
+    "uncorrectable_error_count": "not reported",
+    "uncorrectable_error_count_default": "0"
+   },
+   "readings": {
+    "Reallocated Event Count": 0,
+    "Reallocated Sector Count": 0,
+    "Reported Uncorrectable Errors": 0
+   },
+   "reasons_text": "No issues detected"
+  },
+  "fx-ata-skhynix": {
+   "default": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "labels": [
+    "Command Timeout",
+    "Current Pending Sector Count",
+    "Offline Uncorrectable Errors",
+    "Reallocated Event Count",
+    "Reallocated Sector Count",
+    "Reported Uncorrectable Errors",
+    "SSD Wear Percent Used",
+    "Spin Retry Count",
+    "Total Offline Uncorrectable",
+    "Uncorrectable Error Count"
+   ],
+   "overrides": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "placeholders": {
+    "command_timeout": "not reported",
+    "command_timeout_default": "100",
+    "current_pending_sector_count": "not reported",
+    "current_pending_sector_count_default": "0",
+    "drive": "d",
+    "nvme_media_errors": "not reported",
+    "nvme_media_errors_default": "0",
+    "nvme_spare_warn_below": "not reported",
+    "nvme_spare_warn_below_default": "20%",
+    "offline_uncorrectable_errors": "not reported",
+    "offline_uncorrectable_errors_default": "0",
+    "reallocated_event_count": "not reported",
+    "reallocated_event_count_default": "0",
+    "reallocated_sector_count": "0",
+    "reallocated_sector_count_default": "0",
+    "reported_uncorrectable_errors": "not reported",
+    "reported_uncorrectable_errors_default": "0",
+    "spin_retry_count": "not reported",
+    "spin_retry_count_default": "0",
+    "ssd_wear_percent_used": "1%",
+    "ssd_wear_percent_used_default": "90%",
+    "total_offline_uncorrectable": "not reported",
+    "total_offline_uncorrectable_default": "0",
+    "uncorrectable_error_count": "not reported",
+    "uncorrectable_error_count_default": "0"
+   },
+   "readings": {
+    "Reallocated Sector Count": 0,
+    "SSD Wear Percent Used": 1
+   },
+   "reasons_text": "No issues detected"
+  },
+  "fx-nvme-healthy": {
+   "default": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "labels": [
+    "NVMe Media Errors",
+    "NVMe Spare Warn Below",
+    "SSD Wear Percent Used"
+   ],
+   "overrides": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "placeholders": {
+    "command_timeout": "not reported",
+    "command_timeout_default": "100",
+    "current_pending_sector_count": "not reported",
+    "current_pending_sector_count_default": "0",
+    "drive": "d",
+    "nvme_media_errors": "0",
+    "nvme_media_errors_default": "0",
+    "nvme_spare_warn_below": "100%",
+    "nvme_spare_warn_below_default": "20%",
+    "offline_uncorrectable_errors": "not reported",
+    "offline_uncorrectable_errors_default": "0",
+    "reallocated_event_count": "not reported",
+    "reallocated_event_count_default": "0",
+    "reallocated_sector_count": "not reported",
+    "reallocated_sector_count_default": "0",
+    "reported_uncorrectable_errors": "not reported",
+    "reported_uncorrectable_errors_default": "0",
+    "spin_retry_count": "not reported",
+    "spin_retry_count_default": "0",
+    "ssd_wear_percent_used": "2%",
+    "ssd_wear_percent_used_default": "90%",
+    "total_offline_uncorrectable": "not reported",
+    "total_offline_uncorrectable_default": "0",
+    "uncorrectable_error_count": "not reported",
+    "uncorrectable_error_count_default": "0"
+   },
+   "readings": {
+    "NVMe Media Errors": 0,
+    "NVMe Spare Warn Below": 100,
+    "SSD Wear Percent Used": 2
+   },
+   "reasons_text": "No issues detected"
+  },
+  "fx-nvme-media-errors": {
+   "default": [
+    "YES",
+    "critical",
+    [
+     "NVMe media errors: 3 (expected 0)"
+    ],
+    []
+   ],
+   "labels": [
+    "NVMe Media Errors",
+    "NVMe Spare Warn Below",
+    "SSD Wear Percent Used"
+   ],
+   "overrides": [
+    "YES",
+    "critical",
+    [
+     "NVMe media errors: 3 (expected 0)"
+    ],
+    []
+   ],
+   "placeholders": {
+    "command_timeout": "not reported",
+    "command_timeout_default": "100",
+    "current_pending_sector_count": "not reported",
+    "current_pending_sector_count_default": "0",
+    "drive": "d",
+    "nvme_media_errors": "3",
+    "nvme_media_errors_default": "0",
+    "nvme_spare_warn_below": "96%",
+    "nvme_spare_warn_below_default": "20%",
+    "offline_uncorrectable_errors": "not reported",
+    "offline_uncorrectable_errors_default": "0",
+    "reallocated_event_count": "not reported",
+    "reallocated_event_count_default": "0",
+    "reallocated_sector_count": "not reported",
+    "reallocated_sector_count_default": "0",
+    "reported_uncorrectable_errors": "not reported",
+    "reported_uncorrectable_errors_default": "0",
+    "spin_retry_count": "not reported",
+    "spin_retry_count_default": "0",
+    "ssd_wear_percent_used": "31%",
+    "ssd_wear_percent_used_default": "90%",
+    "total_offline_uncorrectable": "not reported",
+    "total_offline_uncorrectable_default": "0",
+    "uncorrectable_error_count": "not reported",
+    "uncorrectable_error_count_default": "0"
+   },
+   "readings": {
+    "NVMe Media Errors": 3,
+    "NVMe Spare Warn Below": 96,
+    "SSD Wear Percent Used": 31
+   },
+   "reasons_text": "NVMe media errors: 3 (expected 0)"
+  },
+  "fx-nvme-sabrent": {
+   "default": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "labels": [
+    "NVMe Media Errors",
+    "NVMe Spare Warn Below",
+    "SSD Wear Percent Used"
+   ],
+   "overrides": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "placeholders": {
+    "command_timeout": "not reported",
+    "command_timeout_default": "100",
+    "current_pending_sector_count": "not reported",
+    "current_pending_sector_count_default": "0",
+    "drive": "d",
+    "nvme_media_errors": "0",
+    "nvme_media_errors_default": "0",
+    "nvme_spare_warn_below": "100%",
+    "nvme_spare_warn_below_default": "20%",
+    "offline_uncorrectable_errors": "not reported",
+    "offline_uncorrectable_errors_default": "0",
+    "reallocated_event_count": "not reported",
+    "reallocated_event_count_default": "0",
+    "reallocated_sector_count": "not reported",
+    "reallocated_sector_count_default": "0",
+    "reported_uncorrectable_errors": "not reported",
+    "reported_uncorrectable_errors_default": "0",
+    "spin_retry_count": "not reported",
+    "spin_retry_count_default": "0",
+    "ssd_wear_percent_used": "49%",
+    "ssd_wear_percent_used_default": "90%",
+    "total_offline_uncorrectable": "not reported",
+    "total_offline_uncorrectable_default": "0",
+    "uncorrectable_error_count": "not reported",
+    "uncorrectable_error_count_default": "0"
+   },
+   "readings": {
+    "NVMe Media Errors": 0,
+    "NVMe Spare Warn Below": 100,
+    "SSD Wear Percent Used": 49
+   },
+   "reasons_text": "No issues detected"
+  },
+  "fx-scsi-view": {
+   "default": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "labels": [
+    "Command Timeout",
+    "Current Pending Sector Count",
+    "Offline Uncorrectable Errors",
+    "Reallocated Event Count",
+    "Reallocated Sector Count",
+    "Reported Uncorrectable Errors",
+    "SSD Wear Percent Used",
+    "Spin Retry Count",
+    "Total Offline Uncorrectable",
+    "Uncorrectable Error Count"
+   ],
+   "overrides": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "placeholders": {
+    "command_timeout": "not reported",
+    "command_timeout_default": "100",
+    "current_pending_sector_count": "not reported",
+    "current_pending_sector_count_default": "0",
+    "drive": "d",
+    "nvme_media_errors": "not reported",
+    "nvme_media_errors_default": "0",
+    "nvme_spare_warn_below": "not reported",
+    "nvme_spare_warn_below_default": "20%",
+    "offline_uncorrectable_errors": "not reported",
+    "offline_uncorrectable_errors_default": "0",
+    "reallocated_event_count": "not reported",
+    "reallocated_event_count_default": "0",
+    "reallocated_sector_count": "not reported",
+    "reallocated_sector_count_default": "0",
+    "reported_uncorrectable_errors": "not reported",
+    "reported_uncorrectable_errors_default": "0",
+    "spin_retry_count": "not reported",
+    "spin_retry_count_default": "0",
+    "ssd_wear_percent_used": "not reported",
+    "ssd_wear_percent_used_default": "90%",
+    "total_offline_uncorrectable": "not reported",
+    "total_offline_uncorrectable_default": "0",
+    "uncorrectable_error_count": "not reported",
+    "uncorrectable_error_count_default": "0"
+   },
+   "readings": {},
+   "reasons_text": "No issues detected"
+  },
+  "fx-standby": {
+   "default": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "labels": [
+    "Command Timeout",
+    "Current Pending Sector Count",
+    "Offline Uncorrectable Errors",
+    "Reallocated Event Count",
+    "Reallocated Sector Count",
+    "Reported Uncorrectable Errors",
+    "SSD Wear Percent Used",
+    "Spin Retry Count",
+    "Total Offline Uncorrectable",
+    "Uncorrectable Error Count"
+   ],
+   "overrides": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "placeholders": {
+    "command_timeout": "0",
+    "command_timeout_default": "100",
+    "current_pending_sector_count": "0",
+    "current_pending_sector_count_default": "0",
+    "drive": "d",
+    "nvme_media_errors": "not reported",
+    "nvme_media_errors_default": "0",
+    "nvme_spare_warn_below": "not reported",
+    "nvme_spare_warn_below_default": "20%",
+    "offline_uncorrectable_errors": "0",
+    "offline_uncorrectable_errors_default": "0",
+    "reallocated_event_count": "0",
+    "reallocated_event_count_default": "0",
+    "reallocated_sector_count": "0",
+    "reallocated_sector_count_default": "0",
+    "reported_uncorrectable_errors": "not reported",
+    "reported_uncorrectable_errors_default": "0",
+    "spin_retry_count": "not reported",
+    "spin_retry_count_default": "0",
+    "ssd_wear_percent_used": "not reported",
+    "ssd_wear_percent_used_default": "90%",
+    "total_offline_uncorrectable": "not reported",
+    "total_offline_uncorrectable_default": "0",
+    "uncorrectable_error_count": "not reported",
+    "uncorrectable_error_count_default": "0"
+   },
+   "readings": {
+    "Command Timeout": 0,
+    "Current Pending Sector Count": 0,
+    "Offline Uncorrectable Errors": 0,
+    "Reallocated Event Count": 0,
+    "Reallocated Sector Count": 0
+   },
+   "reasons_text": "No issues detected"
+  },
+  "fx-unreadable": {
+   "default": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "labels": [
+    "Command Timeout",
+    "Current Pending Sector Count",
+    "Offline Uncorrectable Errors",
+    "Reallocated Event Count",
+    "Reallocated Sector Count",
+    "Reported Uncorrectable Errors",
+    "SSD Wear Percent Used",
+    "Spin Retry Count",
+    "Total Offline Uncorrectable",
+    "Uncorrectable Error Count"
+   ],
+   "overrides": [
+    "NO",
+    "none",
+    [],
+    []
+   ],
+   "placeholders": {
+    "command_timeout": "0",
+    "command_timeout_default": "100",
+    "current_pending_sector_count": "0",
+    "current_pending_sector_count_default": "0",
+    "drive": "d",
+    "nvme_media_errors": "not reported",
+    "nvme_media_errors_default": "0",
+    "nvme_spare_warn_below": "not reported",
+    "nvme_spare_warn_below_default": "20%",
+    "offline_uncorrectable_errors": "0",
+    "offline_uncorrectable_errors_default": "0",
+    "reallocated_event_count": "0",
+    "reallocated_event_count_default": "0",
+    "reallocated_sector_count": "0",
+    "reallocated_sector_count_default": "0",
+    "reported_uncorrectable_errors": "not reported",
+    "reported_uncorrectable_errors_default": "0",
+    "spin_retry_count": "not reported",
+    "spin_retry_count_default": "0",
+    "ssd_wear_percent_used": "not reported",
+    "ssd_wear_percent_used_default": "90%",
+    "total_offline_uncorrectable": "not reported",
+    "total_offline_uncorrectable_default": "0",
+    "uncorrectable_error_count": "not reported",
+    "uncorrectable_error_count_default": "0"
+   },
+   "readings": {
+    "Command Timeout": 0,
+    "Current Pending Sector Count": 0,
+    "Offline Uncorrectable Errors": 0,
+    "Reallocated Event Count": 0,
+    "Reallocated Sector Count": 0
+   },
+   "reasons_text": "No issues detected"
+  }
+ },
+ "overrides": {
+  "Current Pending Sector Count": 10,
+  "Reallocated Sector Count": 3,
+  "Reported Uncorrectable Errors": 5
+ }
+}

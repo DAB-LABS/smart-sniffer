@@ -1852,7 +1852,10 @@ HEALTH_CURL="curl -sf http://localhost:$PORT/api/health"
 if [ -n "$TOKEN" ]; then
   HEALTH_CURL="curl -sf -H \"Authorization: Bearer $TOKEN\" http://localhost:$PORT/api/health"
 fi
-for i in 1 2 3 4 5; do
+# The agent answers /api/health only after its first pass over the drives.
+# Hosts with many disks, or disks that must wake from standby, can take well
+# over the old 10s (GH #50), so wait up to 90s and say so at the 10s mark.
+for i in {1..45}; do
   sleep 2
   if eval "$HEALTH_CURL" &>/dev/null; then
     HEALTH_OK=true
@@ -1860,7 +1863,10 @@ for i in 1 2 3 4 5; do
     break
   fi
   if [ "$i" -eq 5 ]; then
-    warn "Health check didn't respond after 10s."
+    info "Still reading drives (hosts with many or sleeping disks take longer). Waiting up to 90s..."
+  fi
+  if [ "$i" -eq 45 ]; then
+    warn "Health check didn't respond after 90s."
     if [ "$PLATFORM" = "linux" ] && [ -d /run/systemd/system ]; then
       warn "Check logs: journalctl -u smartha-agent -f"
     else

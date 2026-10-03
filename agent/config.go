@@ -46,6 +46,7 @@ type Config struct {
 	ExcludeDevices     []string           `yaml:"exclude_devices"`     // device paths to skip during scan
 	ZFSPoolStatus      *bool              `yaml:"zfs_pool_status"`     // report ZFS pool health when zpool is present (default: true); pointer to tell "not set" from false
 	ZpoolPath          string             `yaml:"zpool_path"`          // zpool binary to run; empty = PATH, then the usual sbin locations
+	DeviceStatistics   *bool              `yaml:"device_statistics"`   // read ATA Device Statistics with a second smartctl call per poll (default: true); pointer to tell "not set" from false
 	Discover           bool               `yaml:"-"`                   // set by --discover flag; not read from config file
 	NoWrite            bool               `yaml:"-"`                   // set by --no-write flag; skips config write in discover mode
 	SmartctlPath       string             `yaml:"-"`                   // resolved path to smartctl binary; set by resolveSmartctlPath()
@@ -166,6 +167,7 @@ func LoadConfig() (*Config, error) {
 	discover := flag.Bool("discover", false, "Probe drives and detect protocols (diagnostic tool)")
 	noWrite := flag.Bool("no-write", false, "With --discover: print proposed overrides but do not write config")
 	verbose := flag.Bool("verbose", false, "Log every poll cycle instead of suppressing repeated lines")
+	noDevstat := flag.Bool("no-device-statistics", false, "Do not read ATA Device Statistics (one extra smartctl call per SATA drive per poll)")
 	flag.Parse()
 
 	// --- Attempt to load config.yaml ---
@@ -205,6 +207,10 @@ func LoadConfig() (*Config, error) {
 	if *noMDNS {
 		f := false
 		cfg.MDNS = &f
+	}
+	if *noDevstat {
+		f := false
+		cfg.DeviceStatistics = &f
 	}
 	if *advIface != "" {
 		cfg.AdvertiseInterface = *advIface
@@ -329,6 +335,16 @@ func (c *Config) PoolStatusEnabled() bool {
 		return true // default on
 	}
 	return *c.ZFSPoolStatus
+}
+
+// DeviceStatisticsEnabled returns true unless device_statistics is set to
+// false (or --no-device-statistics is given). macOS never reads them; see
+// the skip table in devstat.go.
+func (c *Config) DeviceStatisticsEnabled() bool {
+	if c.DeviceStatistics == nil {
+		return true // default on
+	}
+	return *c.DeviceStatistics
 }
 
 // ResolveAdvertiseInterfaces returns the list of net.Interface to pass to

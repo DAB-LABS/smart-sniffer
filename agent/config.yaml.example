@@ -84,3 +84,14 @@ mdns: true
 # locations, the same way smartctl is found. Set it when zpool lives
 # somewhere else. Any executable that prints zpool status output works.
 # zpool_path: /usr/sbin/zpool
+
+# ATA Device Statistics (optional, default: true).
+# After each SATA drive's normal SMART read, the agent makes one more short
+# smartctl call ("smartctl -i -l devstat") for the drive's standard Device
+# Statistics log. It supplies Data Written and Data Read and a few standard
+# counters. The call never wakes a sleeping drive and never changes the
+# normal SMART data. NVMe and SCSI drives are not asked, and macOS never
+# reads it. Set to false to turn it off (or use the --no-device-statistics
+# flag); Data Written then comes only from a known vendor attribute, or is
+# unknown.
+# device_statistics: true

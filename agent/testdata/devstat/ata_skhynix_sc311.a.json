@@ -1,0 +1,60 @@
+{
+  "json_format_version": [
+    1,
+    0
+  ],
+  "smartctl": {
+    "version": [
+      7,
+      4
+    ],
+    "exit_status": 4
+  },
+  "device": {
+    "name": "/dev/fixture",
+    "info_name": "/dev/fixture",
+    "type": "sat",
+    "protocol": "ATA"
+  },
+  "model_family": "SK hynix SATA SSDs",
+  "model_name": "SK hynix SC311 SATA 128GB",
+  "serial_number": "FIXTURE-gh51",
+  "in_smartctl_database": true,
+  "logical_block_size": 512,
+  "smart_status": {
+    "passed": true
+  },
+  "power_on_time": {
+    "hours": 38573
+  },
+  "ata_smart_attributes": {
+    "revision": 1,
+    "table": [
+      {
+        "id": 9,
+        "name": "Power_On_Hours",
+        "raw": {
+          "value": 38573,
+          "string": "38573"
+        }
+      },
+      {
+        "id": 177,
+        "name": "Wear_Leveling_Count",
+        "value": 100,
+        "raw": {
+          "value": 16,
+          "string": "16"
+        }
+      },
+      {
+        "id": 241,
+        "name": "Total_Writes_GB",
+        "raw": {
+          "value": 1439380027,
+          "string": "1439380027"
+        }
+      }
+    ]
+  }
+}

@@ -232,3 +232,23 @@ def test_no_translation_string_contains_a_url():
         if _URL.search(text)
     ]
     assert offenders == []
+
+
+# v0.8.0
+# -------------------------------------------------------------------------
+
+
+def test_threshold_descriptions_are_two_lines(att):
+    """"Currently" in bold on one line, the default on the next, rendered by
+    <ha-markdown breaks> at the declared floor's frontend and on dev."""
+    form = _load("strings.json")["options"]["step"]["threshold_form"]["data_description"]
+    assert len(form) == 12
+    for label, text in form.items():
+        slug = att.threshold_slug(label)
+        assert text == f"Currently: **{{{slug}}}**\nDefault: {{{slug}_default}}", label
+
+
+def test_the_data_volume_sensors_have_names():
+    names = _load("strings.json")["entity"]["sensor"]
+    assert names["data_written"] == {"name": "Data Written"}
+    assert names["data_read"] == {"name": "Data Read"}
