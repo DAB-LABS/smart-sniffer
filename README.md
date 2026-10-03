@@ -599,6 +599,10 @@ Drive-specific `smartctl -a --json` output samples are especially welcome — th
 - [x] Integration: parent-agent device hierarchy (drives and filesystems nest under their agent via `via_device`) -- shipped v0.6.1
 - [x] Agent: unreadable drives are skipped instead of published under a made-up name, so a blocked or hung drive no longer creates ghost devices or blanks the whole agent -- shipped v0.6.2
 - [x] Agent and integration: ZFS pool health -- each pool's state, error counts, problem disks and last scrub, with alerts when a pool degrades or disappears -- shipped v0.7.0
+- [x] Integration and agent: Data Written and Data Read per drive from the ATA Device Statistics log and the NVMe health log, with Device Statistics filling Attention gaps -- shipped v0.8.0 (GH #49, drive captures by @Mad-Hat)
+- [x] Integration: new drives, pools and filesystems appear without a reload -- shipped v0.8.0
+- [x] Installers: wait up to 90 s for the agent's first drive pass -- shipped v0.8.0 (GH #50)
+- [x] Integration: ZFS pool devices named for their host -- shipped v0.8.1 (GH #50)
 - [ ] Listed in the HACS default store (submitted, awaiting review)
 - [ ] Integration: optional area-on-setup (choose an area once and apply it to all of an agent's drives)
 - [x] Integration: split consolidated wear-leveling / uncorrectable / pending-sector sensors into separate diagnostic entities when a drive reports multiple variants -- shipped v0.5.14
