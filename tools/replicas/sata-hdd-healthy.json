@@ -1,0 +1,40 @@
+{
+  "format": "smart-sniffer-replica",
+  "version": 1,
+  "name": "SATA HDD, healthy",
+  "kind": "ata",
+  "description": "A healthy Seagate Barracuda 2TB.",
+  "origin": {"type": "shipped"},
+  "order": 1,
+  "preset": "sata_hdd",
+  "meta": {"model": "Seagate Barracuda ST2000DM008", "serial": "MOCK-SATA-0002", "protocol": "ATA", "device_path": "/dev/sdz"},
+  "smart": {
+    "model_name": "Seagate Barracuda ST2000DM008",
+    "serial_number": "MOCK-SATA-0002",
+    "logical_block_size": 512,
+    "in_smartctl_database": true,
+    "smart_status": {"passed": true},
+    "temperature": {"current": 36},
+    "power_on_time": {"hours": 8760},
+    "power_cycle_count": 142,
+    "ata_smart_attributes": {
+      "table": [
+        {"id": 5, "name": "Reallocated_Sector_Ct", "value": 100, "worst": 100, "thresh": 10, "raw": {"value": 0, "string": "0"}},
+        {"id": 9, "name": "Power_On_Hours", "value": 80, "worst": 80, "thresh": 0, "raw": {"value": 8760, "string": "8760"}},
+        {"id": 10, "name": "Spin_Retry_Count", "value": 100, "worst": 100, "thresh": 97, "raw": {"value": 0, "string": "0"}},
+        {"id": 12, "name": "Power_Cycle_Count", "value": 100, "worst": 100, "thresh": 20, "raw": {"value": 142, "string": "142"}},
+        {"id": 187, "name": "Reported_Uncorrect", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 0, "string": "0"}},
+        {"id": 188, "name": "Command_Timeout", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 0, "string": "0"}},
+        {"id": 194, "name": "Temperature_Celsius", "value": 36, "worst": 52, "thresh": 0, "raw": {"value": 36, "string": "36"}},
+        {"id": 196, "name": "Reallocated_Event_Count", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 0, "string": "0"}},
+        {"id": 197, "name": "Current_Pending_Sector", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 0, "string": "0"}},
+        {"id": 198, "name": "Offline_Uncorrectable", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 0, "string": "0"}},
+        {"id": 241, "name": "Total_LBAs_Written", "value": 100, "worst": 253, "thresh": 0, "raw": {"value": 23437500000, "string": "23437500000"}},
+        {"id": 242, "name": "Total_LBAs_Read", "value": 100, "worst": 253, "thresh": 0, "raw": {"value": 46875000000, "string": "46875000000"}}
+      ]
+    }
+  },
+  "devstat": {"status": "absent"},
+  "scenario": {"current": "healthy"},
+  "verdict": {"state": "NO", "severity": "none", "reasons": [], "rules_version": "v0.8.2", "at": "2026-10-06T12:00:00Z"}
+}

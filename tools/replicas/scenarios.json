@@ -1,0 +1,210 @@
+{
+  "ata": [
+    {
+      "id": "healthy",
+      "label": "Healthy SATA HDD",
+      "steps": [
+        {
+          "patch": "smart",
+          "body": {
+            "Reallocated_Sector_Ct": 0,
+            "Current_Pending_Sector": 0,
+            "Offline_Uncorrectable": 0,
+            "Reported_Uncorrect": 0,
+            "Command_Timeout": 0,
+            "Reallocated_Event_Count": 0,
+            "Spin_Retry_Count": 0,
+            "smart_passed": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "reallocated_growing",
+      "label": "Reallocated sectors growing",
+      "steps": [
+        {
+          "patch": "smart",
+          "body": {
+            "Reallocated_Sector_Ct": 0,
+            "Current_Pending_Sector": 0,
+            "Offline_Uncorrectable": 0,
+            "Reported_Uncorrect": 0,
+            "Command_Timeout": 0,
+            "Reallocated_Event_Count": 0,
+            "Spin_Retry_Count": 0,
+            "smart_passed": true
+          }
+        },
+        {"patch": "smart", "body": {"Reallocated_Sector_Ct": 8, "Reallocated_Event_Count": 2}}
+      ]
+    },
+    {
+      "id": "pending_sectors",
+      "label": "Pending sectors",
+      "steps": [
+        {
+          "patch": "smart",
+          "body": {
+            "Reallocated_Sector_Ct": 0,
+            "Current_Pending_Sector": 0,
+            "Offline_Uncorrectable": 0,
+            "Reported_Uncorrect": 0,
+            "Command_Timeout": 0,
+            "Reallocated_Event_Count": 0,
+            "Spin_Retry_Count": 0,
+            "smart_passed": true
+          }
+        },
+        {"patch": "smart", "body": {"Current_Pending_Sector": 3}}
+      ]
+    },
+    {
+      "id": "command_timeouts",
+      "label": "Command timeouts",
+      "steps": [
+        {
+          "patch": "smart",
+          "body": {
+            "Reallocated_Sector_Ct": 0,
+            "Current_Pending_Sector": 0,
+            "Offline_Uncorrectable": 0,
+            "Reported_Uncorrect": 0,
+            "Command_Timeout": 0,
+            "Reallocated_Event_Count": 0,
+            "Spin_Retry_Count": 0,
+            "smart_passed": true
+          }
+        },
+        {"patch": "smart", "body": {"Command_Timeout": 120}}
+      ]
+    },
+    {
+      "id": "smart_failed",
+      "label": "SMART failed",
+      "steps": [
+        {
+          "patch": "smart",
+          "body": {
+            "Reallocated_Sector_Ct": 0,
+            "Current_Pending_Sector": 0,
+            "Offline_Uncorrectable": 0,
+            "Reported_Uncorrect": 0,
+            "Command_Timeout": 0,
+            "Reallocated_Event_Count": 0,
+            "Spin_Retry_Count": 0,
+            "smart_passed": true
+          }
+        },
+        {"patch": "smart", "body": {"Reallocated_Sector_Ct": 24, "Current_Pending_Sector": 3, "Reported_Uncorrect": 1, "smart_passed": false}}
+      ]
+    }
+  ],
+  "ata_devstat": [
+    {
+      "id": "healthy",
+      "label": "Healthy, Device Statistics present",
+      "steps": [
+        {
+          "patch": "smart",
+          "body": {
+            "Reallocated_Sector_Ct": 0,
+            "Current_Pending_Sector": 0,
+            "Offline_Uncorrectable": 0,
+            "Reported_Uncorrect": 0,
+            "Command_Timeout": 0,
+            "Reallocated_Event_Count": 0,
+            "Spin_Retry_Count": 0,
+            "smart_passed": true
+          }
+        },
+        {"patch": "devstat", "body": {"status": "default", "reported_uncorrectable": 0}}
+      ]
+    },
+    {
+      "id": "devstat_uncorrectables",
+      "label": "Uncorrectables in Device Statistics",
+      "steps": [
+        {
+          "patch": "smart",
+          "body": {
+            "Reallocated_Sector_Ct": 0,
+            "Current_Pending_Sector": 0,
+            "Offline_Uncorrectable": 0,
+            "Reported_Uncorrect": 0,
+            "Command_Timeout": 0,
+            "Reallocated_Event_Count": 0,
+            "Spin_Retry_Count": 0,
+            "smart_passed": true
+          }
+        },
+        {"patch": "devstat", "body": {"status": "default", "reported_uncorrectable": 0}},
+        {"patch": "devstat", "body": {"reported_uncorrectable": 18}}
+      ]
+    }
+  ],
+  "nvme": [
+    {
+      "id": "healthy",
+      "label": "Healthy NVMe",
+      "steps": [{"patch": "smart", "body": {"critical_warning": 0, "media_errors": 0, "available_spare": 100, "percentage_used": 0, "smart_passed": true}}]
+    },
+    {
+      "id": "nvme_wear",
+      "label": "NVMe wear",
+      "steps": [
+        {"patch": "smart", "body": {"critical_warning": 0, "media_errors": 0, "available_spare": 100, "percentage_used": 0, "smart_passed": true}},
+        {"patch": "smart", "body": {"available_spare": 15, "percentage_used": 3}}
+      ]
+    },
+    {
+      "id": "media_errors",
+      "label": "Media errors",
+      "steps": [
+        {"patch": "smart", "body": {"critical_warning": 0, "media_errors": 0, "available_spare": 100, "percentage_used": 0, "smart_passed": true}},
+        {"patch": "smart", "body": {"media_errors": 2}}
+      ]
+    },
+    {
+      "id": "critical_warning",
+      "label": "Critical warning",
+      "steps": [
+        {"patch": "smart", "body": {"critical_warning": 0, "media_errors": 0, "available_spare": 100, "percentage_used": 0, "smart_passed": true}},
+        {"patch": "smart", "body": {"critical_warning": 4}}
+      ]
+    }
+  ],
+  "zfs_pool": [
+    {
+      "id": "healthy",
+      "label": "Healthy pool",
+      "steps": [{"patch": "pool", "body": {"devices": [{"name": "*", "state": "ONLINE", "read": 0, "write": 0, "cksum": 0}], "data_errors": 0}}]
+    },
+    {
+      "id": "degraded",
+      "label": "ZFS pool degraded",
+      "steps": [
+        {
+          "patch": "pool",
+          "body": {
+            "devices": [{"name": "*", "state": "ONLINE", "read": 0, "write": 0, "cksum": 0}, {"name": "#1", "state": "FAULTED", "read": 12}],
+            "data_errors": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "faulted",
+      "label": "Pool faulted",
+      "steps": [
+        {
+          "patch": "pool",
+          "body": {"state": "FAULTED", "data_errors": 0, "devices": [{"name": "*", "state": "UNAVAIL", "read": 0, "write": 0, "cksum": 0}]}
+        }
+      ]
+    },
+    {"id": "vanished", "label": "Pool vanished", "steps": [{"post": "vanish"}]}
+  ],
+  "scsi": [],
+  "unsupported": []
+}

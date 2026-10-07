@@ -1,0 +1,31 @@
+{
+  "format": "smart-sniffer-replica",
+  "version": 1,
+  "name": "SATA SSD, healthy",
+  "kind": "ata",
+  "description": "A healthy Samsung 870 EVO 500GB SATA SSD.",
+  "origin": {"type": "shipped"},
+  "preset": "sata_ssd",
+  "meta": {"model": "Samsung SSD 870 EVO 500GB", "serial": "MOCK-SSD-0001", "protocol": "ATA", "device_path": "/dev/sdv"},
+  "smart": {
+    "ata_smart_attributes": {
+      "table": [
+        {"id": 5, "name": "Reallocated_Sector_Ct", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 0, "string": "0"}},
+        {"id": 196, "name": "Reallocated_Event_Count", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 0, "string": "0"}},
+        {"id": 198, "name": "Offline_Uncorrectable", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 0, "string": "0"}},
+        {"id": 177, "name": "Wear_Leveling_Count", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 2, "string": "2"}},
+        {"id": 188, "name": "Command_Timeout", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 0, "string": "0"}},
+        {"id": 194, "name": "Temperature_Celsius", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 31, "string": "31"}},
+        {"id": 9, "name": "Power_On_Hours", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 4200, "string": "4200"}},
+        {"id": 12, "name": "Power_Cycle_Count", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 315, "string": "315"}},
+        {"id": 241, "name": "Total_LBAs_Written", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 18750000000, "string": "18750000000"}}
+      ]
+    },
+    "smart_status": {"passed": true},
+    "logical_block_size": 512,
+    "in_smartctl_database": true
+  },
+  "devstat": {"status": "absent"},
+  "scenario": {"current": "healthy"},
+  "verdict": {"state": "NO", "severity": "none", "reasons": [], "rules_version": "v0.8.2", "at": "2026-10-06T12:00:00Z"}
+}

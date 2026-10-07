@@ -1,0 +1,46 @@
+{
+  "format": "smart-sniffer-replica",
+  "version": 1,
+  "name": "SATA HDD, reallocated sectors growing",
+  "kind": "ata",
+  "description": "A Seagate Barracuda 2TB with 8 reallocated sectors and 2 reallocation events.",
+  "origin": {"type": "shipped"},
+  "order": 2,
+  "preset": "sata_hdd",
+  "meta": {"model": "Seagate Barracuda ST2000DM008", "serial": "MOCK-SATA-0003", "protocol": "ATA", "device_path": "/dev/sdw"},
+  "smart": {
+    "model_name": "Seagate Barracuda ST2000DM008",
+    "serial_number": "MOCK-SATA-0003",
+    "logical_block_size": 512,
+    "in_smartctl_database": true,
+    "smart_status": {"passed": true},
+    "temperature": {"current": 38},
+    "power_on_time": {"hours": 21310},
+    "power_cycle_count": 188,
+    "ata_smart_attributes": {
+      "table": [
+        {"id": 5, "name": "Reallocated_Sector_Ct", "value": 100, "worst": 100, "thresh": 10, "raw": {"value": 8, "string": "8"}},
+        {"id": 9, "name": "Power_On_Hours", "value": 80, "worst": 80, "thresh": 0, "raw": {"value": 21310, "string": "21310"}},
+        {"id": 10, "name": "Spin_Retry_Count", "value": 100, "worst": 100, "thresh": 97, "raw": {"value": 0, "string": "0"}},
+        {"id": 12, "name": "Power_Cycle_Count", "value": 100, "worst": 100, "thresh": 20, "raw": {"value": 188, "string": "188"}},
+        {"id": 187, "name": "Reported_Uncorrect", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 0, "string": "0"}},
+        {"id": 188, "name": "Command_Timeout", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 0, "string": "0"}},
+        {"id": 194, "name": "Temperature_Celsius", "value": 38, "worst": 52, "thresh": 0, "raw": {"value": 38, "string": "38"}},
+        {"id": 196, "name": "Reallocated_Event_Count", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 2, "string": "2"}},
+        {"id": 197, "name": "Current_Pending_Sector", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 0, "string": "0"}},
+        {"id": 198, "name": "Offline_Uncorrectable", "value": 100, "worst": 100, "thresh": 0, "raw": {"value": 0, "string": "0"}},
+        {"id": 241, "name": "Total_LBAs_Written", "value": 100, "worst": 253, "thresh": 0, "raw": {"value": 56250000000, "string": "56250000000"}},
+        {"id": 242, "name": "Total_LBAs_Read", "value": 100, "worst": 253, "thresh": 0, "raw": {"value": 101562500000, "string": "101562500000"}}
+      ]
+    }
+  },
+  "devstat": {"status": "absent"},
+  "scenario": {"current": "reallocated_growing"},
+  "verdict": {
+    "state": "YES",
+    "severity": "critical",
+    "reasons": ["Reallocated Sector Count: 8 (expected 0)", "Reallocated Event Count: 2 (expected 0)"],
+    "rules_version": "v0.8.2",
+    "at": "2026-10-06T12:00:00Z"
+  }
+}

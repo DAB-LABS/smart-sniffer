@@ -1,0 +1,35 @@
+{
+  "format": "smart-sniffer-replica",
+  "version": 1,
+  "name": "NVMe, wear",
+  "kind": "nvme",
+  "description": "A Samsung 980 PRO 1TB with its available spare down to 15%.",
+  "origin": {"type": "shipped"},
+  "order": 4,
+  "preset": "nvme",
+  "meta": {"model": "Samsung SSD 980 PRO 1TB", "serial": "MOCK-NVME-0001", "protocol": "NVMe", "device_path": "/dev/nvme9n1"},
+  "smart": {
+    "smart_status": {"passed": true},
+    "nvme_smart_health_information_log": {
+      "critical_warning": 0,
+      "temperature": 41,
+      "available_spare": 15,
+      "available_spare_threshold": 10,
+      "percentage_used": 3,
+      "power_on_hours": 2210,
+      "power_cycles": 11,
+      "media_errors": 0,
+      "data_units_written": 9121094,
+      "data_units_read": 18242188
+    }
+  },
+  "devstat": {"status": "not_applicable"},
+  "scenario": {"current": "nvme_wear"},
+  "verdict": {
+    "state": "MAYBE",
+    "severity": "warning",
+    "reasons": ["NVMe available spare low: 15% remaining"],
+    "rules_version": "v0.8.2",
+    "at": "2026-10-06T12:00:00Z"
+  }
+}

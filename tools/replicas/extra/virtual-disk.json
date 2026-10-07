@@ -1,0 +1,13 @@
+{
+  "format": "smart-sniffer-replica",
+  "version": 1,
+  "name": "Virtual disk",
+  "kind": "unsupported",
+  "description": "A QEMU virtual disk with no SMART data.",
+  "origin": {"type": "shipped"},
+  "preset": "virtual_disk",
+  "meta": {"model": "QEMU HARDDISK", "serial": "MOCK-VD-0001", "protocol": "ATA", "device_path": "/dev/vdz"},
+  "smart": {},
+  "devstat": {"status": "absent"},
+  "verdict": {"state": "UNSUPPORTED", "severity": "none", "reasons": [], "rules_version": "v0.8.2", "at": "2026-10-06T12:00:00Z"}
+}

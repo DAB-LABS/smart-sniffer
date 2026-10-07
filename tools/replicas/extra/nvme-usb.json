@@ -1,0 +1,28 @@
+{
+  "format": "smart-sniffer-replica",
+  "version": 1,
+  "name": "NVMe in a USB enclosure",
+  "kind": "nvme",
+  "description": "A Sabrent Rocket 500GB in a USB-C enclosure whose bridge passes NVMe health through.",
+  "origin": {"type": "shipped"},
+  "preset": "nvme_usb",
+  "meta": {"model": "Sabrent Rocket NVMe 500GB (USB)", "serial": "MOCK-NVME-0002", "protocol": "NVMe", "device_path": "/dev/nvme8n1"},
+  "smart": {
+    "smart_status": {"passed": true},
+    "nvme_smart_health_information_log": {
+      "critical_warning": 0,
+      "temperature": 42,
+      "available_spare": 95,
+      "available_spare_threshold": 10,
+      "percentage_used": 8,
+      "power_on_hours": 900,
+      "power_cycles": 210,
+      "media_errors": 0,
+      "data_units_written": 2343750,
+      "data_units_read": 3906250
+    }
+  },
+  "devstat": {"status": "not_applicable"},
+  "scenario": {"current": "healthy"},
+  "verdict": {"state": "NO", "severity": "none", "reasons": [], "rules_version": "v0.8.2", "at": "2026-10-06T12:00:00Z"}
+}

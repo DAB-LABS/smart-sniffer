@@ -1,0 +1,17 @@
+{
+  "format": "smart-sniffer-replica",
+  "version": 1,
+  "name": "SAS enterprise drive",
+  "kind": "scsi",
+  "description": "A Seagate Exos 10E2400 1.2TB SAS drive.",
+  "origin": {"type": "shipped"},
+  "preset": "sas_enterprise",
+  "meta": {"model": "Seagate Exos 10E2400 ST1200MM0129", "serial": "MOCK-SAS-0001", "protocol": "SCSI", "device_path": "/dev/sgz"},
+  "smart": {
+    "smart_status": {"passed": true},
+    "scsi_grown_defect_list": 0,
+    "scsi_error_counter_log": {"read": {"total_uncorrected_errors": 0}, "write": {"total_uncorrected_errors": 0}}
+  },
+  "devstat": {"status": "not_applicable"},
+  "verdict": {"state": "NO", "severity": "none", "reasons": [], "rules_version": "v0.8.2", "at": "2026-10-06T12:00:00Z"}
+}

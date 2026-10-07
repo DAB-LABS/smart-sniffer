@@ -1,0 +1,36 @@
+{
+  "format": "smart-sniffer-replica",
+  "version": 1,
+  "name": "ZFS pool, degraded",
+  "kind": "zfs_pool",
+  "description": "A two-disk mirror named tank with one disk faulted.",
+  "origin": {"type": "shipped"},
+  "order": 5,
+  "preset": "zfs_pool",
+  "pool": {
+    "name": "tank",
+    "state": "DEGRADED",
+    "status": null,
+    "action": null,
+    "data_errors": 0,
+    "scan_function": "SCRUB",
+    "scan_state": "FINISHED",
+    "scrub_in_progress": false,
+    "last_scrub_end": "2026-10-04T03:00:00Z",
+    "last_scrub_repaired": 0,
+    "last_scrub_errors": 0,
+    "vdev": {"name": "mirror-0", "type": "mirror"},
+    "devices": [
+      {"name": "MOCK0001", "state": "ONLINE", "read": 0, "write": 0, "cksum": 0},
+      {"name": "MOCK0002", "state": "FAULTED", "read": 12, "write": 0, "cksum": 0}
+    ]
+  },
+  "scenario": {"current": "degraded"},
+  "verdict": {
+    "state": "YES",
+    "severity": "critical",
+    "reasons": ["State: DEGRADED", "Read errors: 12", "mirror-0: DEGRADED", "MOCK0002: FAULTED, 12 read errors"],
+    "rules_version": "v0.8.2",
+    "at": "2026-10-06T12:00:00Z"
+  }
+}

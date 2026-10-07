@@ -1,0 +1,13 @@
+{
+  "format": "smart-sniffer-replica",
+  "version": 1,
+  "name": "USB drive, SMART blocked",
+  "kind": "unsupported",
+  "description": "A WD Elements 2TB behind a USB bridge that passes no SMART data.",
+  "origin": {"type": "shipped"},
+  "preset": "usb_blocked",
+  "meta": {"model": "WD Elements 2TB (USB)", "serial": "MOCK-USB-0001", "protocol": "ATA", "device_path": "/dev/sdu"},
+  "smart": {},
+  "devstat": {"status": "unavailable", "reason": "failed"},
+  "verdict": {"state": "UNSUPPORTED", "severity": "none", "reasons": [], "rules_version": "v0.8.2", "at": "2026-10-06T12:00:00Z"}
+}
