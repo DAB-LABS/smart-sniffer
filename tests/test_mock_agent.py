@@ -3,8 +3,10 @@
 Each test starts the mock on a free port in a thread, with no mDNS and a
 temporary data directory, and talks to it over HTTP. The payloads are then fed through the
 integration's own code (devstat.merge_devstat, attention.evaluate_attention,
-devstat.data_volume, pool_health) to show the Test Lab's drives and pool read
-in Home Assistant the way the spec says they should.
+devstat.data_volume, pool_health) to show the replica drives and pool read
+in Home Assistant the way the spec says they should. The drives here are
+added by their old preset keys; tests/test_mock_replicas.py covers the
+replica files and routes.
 """
 
 from __future__ import annotations
@@ -29,7 +31,7 @@ _MOCK_PATH = Path(__file__).resolve().parents[1] / "tools" / "mock-agent.py"
 
 UNC_18 = "Reported Uncorrectable Errors: 18 (expected 0; from device statistics)"
 
-# The Device Statistics status each preset reports.
+# The Device Statistics status each old preset key reports.
 EXPECTED_DEVSTAT = {
     "sata_hdd": ("absent", None),
     "sata_hdd_devstat": ("present", None),

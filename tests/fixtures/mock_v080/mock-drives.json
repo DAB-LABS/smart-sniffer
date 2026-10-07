@@ -1,0 +1,862 @@
+{
+ "order": [
+  "wfl3mock0c79",
+  "fixture-wuh14-c8b0",
+  "s5gxmock455a",
+  "wx72mock9469"
+ ],
+ "drives": {
+  "wfl3mock0c79": {
+   "id": "wfl3mock0c79",
+   "device_path": "/dev/sda",
+   "model": "Seagate Barracuda ST2000DM008",
+   "serial": "WFL3MOCK0C79",
+   "protocol": "ATA",
+   "smart_data": {
+    "ata_smart_attributes": {
+     "table": [
+      {
+       "id": 5,
+       "name": "Reallocated_Sector_Ct",
+       "value": 100,
+       "worst": 100,
+       "thresh": 0,
+       "raw": {
+        "value": 5,
+        "string": "5"
+       }
+      },
+      {
+       "id": 10,
+       "name": "Spin_Retry_Count",
+       "value": 100,
+       "worst": 100,
+       "thresh": 0,
+       "raw": {
+        "value": 0,
+        "string": "0"
+       }
+      },
+      {
+       "id": 188,
+       "name": "Command_Timeout",
+       "value": 100,
+       "worst": 100,
+       "thresh": 0,
+       "raw": {
+        "value": 0,
+        "string": "0"
+       }
+      },
+      {
+       "id": 196,
+       "name": "Reallocated_Event_Count",
+       "value": 100,
+       "worst": 100,
+       "thresh": 0,
+       "raw": {
+        "value": 0,
+        "string": "0"
+       }
+      },
+      {
+       "id": 197,
+       "name": "Current_Pending_Sector",
+       "value": 100,
+       "worst": 100,
+       "thresh": 0,
+       "raw": {
+        "value": 0,
+        "string": "0"
+       }
+      },
+      {
+       "id": 198,
+       "name": "Offline_Uncorrectable",
+       "value": 100,
+       "worst": 100,
+       "thresh": 0,
+       "raw": {
+        "value": 0,
+        "string": "0"
+       }
+      },
+      {
+       "id": 194,
+       "name": "Temperature_Celsius",
+       "value": 100,
+       "worst": 100,
+       "thresh": 0,
+       "raw": {
+        "value": 36,
+        "string": "36"
+       }
+      },
+      {
+       "id": 9,
+       "name": "Power_On_Hours",
+       "value": 100,
+       "worst": 100,
+       "thresh": 0,
+       "raw": {
+        "value": 8760,
+        "string": "8760"
+       }
+      },
+      {
+       "id": 12,
+       "name": "Power_Cycle_Count",
+       "value": 100,
+       "worst": 100,
+       "thresh": 0,
+       "raw": {
+        "value": 142,
+        "string": "142"
+       }
+      },
+      {
+       "id": 241,
+       "name": "Total_LBAs_Written",
+       "value": 100,
+       "worst": 100,
+       "thresh": 0,
+       "raw": {
+        "value": 23437500000,
+        "string": "23437500000"
+       }
+      },
+      {
+       "id": 242,
+       "name": "Total_LBAs_Read",
+       "value": 100,
+       "worst": 100,
+       "thresh": 0,
+       "raw": {
+        "value": 46875000000,
+        "string": "46875000000"
+       }
+      }
+     ]
+    },
+    "smart_status": {
+     "passed": true
+    },
+    "logical_block_size": 512,
+    "in_smartctl_database": true
+   },
+   "_preset": "sata_hdd",
+   "_devstat": {
+    "status": "absent"
+   }
+  },
+  "fixture-wuh14-c8b0": {
+   "id": "fixture-wuh14-c8b0",
+   "device_path": "/dev/sdd",
+   "model": "WDC  WUH721414ALE604",
+   "serial": "FIXTURE-WUH14-C8B0",
+   "protocol": "ATA",
+   "smart_data": {
+    "json_format_version": [
+     1,
+     0
+    ],
+    "smartctl": {
+     "version": [
+      7,
+      5
+     ],
+     "exit_status": 0
+    },
+    "device": {
+     "name": "/dev/sdd",
+     "info_name": "/dev/sdd [SAT]",
+     "type": "sat",
+     "protocol": "ATA"
+    },
+    "serial_number": "FIXTURE-WUH14-C8B0",
+    "model_name": "WDC  WUH721414ALE604",
+    "model_family": "Western Digital Ultrastar DC HC530",
+    "in_smartctl_database": true,
+    "logical_block_size": 512,
+    "smart_status": {
+     "passed": true
+    },
+    "ata_smart_attributes": {
+     "revision": 16,
+     "table": [
+      {
+       "id": 1,
+       "name": "Raw_Read_Error_Rate",
+       "value": 100,
+       "worst": 100,
+       "thresh": 1,
+       "when_failed": "",
+       "flags": {
+        "value": 11,
+        "string": "PO-R-- ",
+        "prefailure": true,
+        "updated_online": true,
+        "performance": false,
+        "error_rate": true,
+        "event_count": false,
+        "auto_keep": false
+       },
+       "raw": {
+        "value": 1,
+        "string": "1"
+       }
+      },
+      {
+       "id": 2,
+       "name": "Throughput_Performance",
+       "value": 138,
+       "worst": 138,
+       "thresh": 54,
+       "when_failed": "",
+       "flags": {
+        "value": 5,
+        "string": "P-S--- ",
+        "prefailure": true,
+        "updated_online": false,
+        "performance": true,
+        "error_rate": false,
+        "event_count": false,
+        "auto_keep": false
+       },
+       "raw": {
+        "value": 96,
+        "string": "96"
+       }
+      },
+      {
+       "id": 3,
+       "name": "Spin_Up_Time",
+       "value": 81,
+       "worst": 81,
+       "thresh": 1,
+       "when_failed": "",
+       "flags": {
+        "value": 7,
+        "string": "POS--- ",
+        "prefailure": true,
+        "updated_online": true,
+        "performance": true,
+        "error_rate": false,
+        "event_count": false,
+        "auto_keep": false
+       },
+       "raw": {
+        "value": 30089675135,
+        "string": "383 (Average 380)"
+       }
+      },
+      {
+       "id": 4,
+       "name": "Start_Stop_Count",
+       "value": 100,
+       "worst": 100,
+       "thresh": 0,
+       "when_failed": "",
+       "flags": {
+        "value": 18,
+        "string": "-O--C- ",
+        "prefailure": false,
+        "updated_online": true,
+        "performance": false,
+        "error_rate": false,
+        "event_count": true,
+        "auto_keep": false
+       },
+       "raw": {
+        "value": 10,
+        "string": "10"
+       }
+      },
+      {
+       "id": 5,
+       "name": "Reallocated_Sector_Ct",
+       "value": 100,
+       "worst": 100,
+       "thresh": 1,
+       "when_failed": "",
+       "flags": {
+        "value": 51,
+        "string": "PO--CK ",
+        "prefailure": true,
+        "updated_online": true,
+        "performance": false,
+        "error_rate": false,
+        "event_count": true,
+        "auto_keep": true
+       },
+       "raw": {
+        "value": 0,
+        "string": "0"
+       }
+      },
+      {
+       "id": 7,
+       "name": "Seek_Error_Rate",
+       "value": 100,
+       "worst": 100,
+       "thresh": 1,
+       "when_failed": "",
+       "flags": {
+        "value": 11,
+        "string": "PO-R-- ",
+        "prefailure": true,
+        "updated_online": true,
+        "performance": false,
+        "error_rate": true,
+        "event_count": false,
+        "auto_keep": false
+       },
+       "raw": {
+        "value": 0,
+        "string": "0"
+       }
+      },
+      {
+       "id": 8,
+       "name": "Seek_Time_Performance",
+       "value": 133,
+       "worst": 133,
+       "thresh": 20,
+       "when_failed": "",
+       "flags": {
+        "value": 5,
+        "string": "P-S--- ",
+        "prefailure": true,
+        "updated_online": false,
+        "performance": true,
+        "error_rate": false,
+        "event_count": false,
+        "auto_keep": false
+       },
+       "raw": {
+        "value": 18,
+        "string": "18"
+       }
+      },
+      {
+       "id": 9,
+       "name": "Power_On_Hours",
+       "value": 97,
+       "worst": 97,
+       "thresh": 0,
+       "when_failed": "",
+       "flags": {
+        "value": 18,
+        "string": "-O--C- ",
+        "prefailure": false,
+        "updated_online": true,
+        "performance": false,
+        "error_rate": false,
+        "event_count": true,
+        "auto_keep": false
+       },
+       "raw": {
+        "value": 27694,
+        "string": "27694"
+       }
+      },
+      {
+       "id": 10,
+       "name": "Spin_Retry_Count",
+       "value": 100,
+       "worst": 100,
+       "thresh": 1,
+       "when_failed": "",
+       "flags": {
+        "value": 19,
+        "string": "PO--C- ",
+        "prefailure": true,
+        "updated_online": true,
+        "performance": false,
+        "error_rate": false,
+        "event_count": true,
+        "auto_keep": false
+       },
+       "raw": {
+        "value": 0,
+        "string": "0"
+       }
+      },
+      {
+       "id": 12,
+       "name": "Power_Cycle_Count",
+       "value": 100,
+       "worst": 100,
+       "thresh": 0,
+       "when_failed": "",
+       "flags": {
+        "value": 50,
+        "string": "-O--CK ",
+        "prefailure": false,
+        "updated_online": true,
+        "performance": false,
+        "error_rate": false,
+        "event_count": true,
+        "auto_keep": true
+       },
+       "raw": {
+        "value": 10,
+        "string": "10"
+       }
+      },
+      {
+       "id": 22,
+       "name": "Helium_Level",
+       "value": 100,
+       "worst": 100,
+       "thresh": 25,
+       "when_failed": "",
+       "flags": {
+        "value": 35,
+        "string": "PO---K ",
+        "prefailure": true,
+        "updated_online": true,
+        "performance": false,
+        "error_rate": false,
+        "event_count": false,
+        "auto_keep": true
+       },
+       "raw": {
+        "value": 100,
+        "string": "100"
+       }
+      },
+      {
+       "id": 192,
+       "name": "Power-Off_Retract_Count",
+       "value": 100,
+       "worst": 100,
+       "thresh": 0,
+       "when_failed": "",
+       "flags": {
+        "value": 50,
+        "string": "-O--CK ",
+        "prefailure": false,
+        "updated_online": true,
+        "performance": false,
+        "error_rate": false,
+        "event_count": true,
+        "auto_keep": true
+       },
+       "raw": {
+        "value": 1895,
+        "string": "1895"
+       }
+      },
+      {
+       "id": 193,
+       "name": "Load_Cycle_Count",
+       "value": 100,
+       "worst": 100,
+       "thresh": 0,
+       "when_failed": "",
+       "flags": {
+        "value": 18,
+        "string": "-O--C- ",
+        "prefailure": false,
+        "updated_online": true,
+        "performance": false,
+        "error_rate": false,
+        "event_count": true,
+        "auto_keep": false
+       },
+       "raw": {
+        "value": 1895,
+        "string": "1895"
+       }
+      },
+      {
+       "id": 194,
+       "name": "Temperature_Celsius",
+       "value": 56,
+       "worst": 56,
+       "thresh": 0,
+       "when_failed": "",
+       "flags": {
+        "value": 2,
+        "string": "-O---- ",
+        "prefailure": false,
+        "updated_online": true,
+        "performance": false,
+        "error_rate": false,
+        "event_count": false,
+        "auto_keep": false
+       },
+       "raw": {
+        "value": 206159675430,
+        "string": "38 (Min/Max 19/48)"
+       }
+      },
+      {
+       "id": 196,
+       "name": "Reallocated_Event_Count",
+       "value": 100,
+       "worst": 100,
+       "thresh": 0,
+       "when_failed": "",
+       "flags": {
+        "value": 50,
+        "string": "-O--CK ",
+        "prefailure": false,
+        "updated_online": true,
+        "performance": false,
+        "error_rate": false,
+        "event_count": true,
+        "auto_keep": true
+       },
+       "raw": {
+        "value": 0,
+        "string": "0"
+       }
+      },
+      {
+       "id": 197,
+       "name": "Current_Pending_Sector",
+       "value": 100,
+       "worst": 100,
+       "thresh": 0,
+       "when_failed": "",
+       "flags": {
+        "value": 34,
+        "string": "-O---K ",
+        "prefailure": false,
+        "updated_online": true,
+        "performance": false,
+        "error_rate": false,
+        "event_count": false,
+        "auto_keep": true
+       },
+       "raw": {
+        "value": 0,
+        "string": "0"
+       }
+      },
+      {
+       "id": 198,
+       "name": "Offline_Uncorrectable",
+       "value": 100,
+       "worst": 100,
+       "thresh": 0,
+       "when_failed": "",
+       "flags": {
+        "value": 8,
+        "string": "---R-- ",
+        "prefailure": false,
+        "updated_online": false,
+        "performance": false,
+        "error_rate": true,
+        "event_count": false,
+        "auto_keep": false
+       },
+       "raw": {
+        "value": 0,
+        "string": "0"
+       }
+      },
+      {
+       "id": 199,
+       "name": "UDMA_CRC_Error_Count",
+       "value": 100,
+       "worst": 100,
+       "thresh": 0,
+       "when_failed": "",
+       "flags": {
+        "value": 10,
+        "string": "-O-R-- ",
+        "prefailure": false,
+        "updated_online": true,
+        "performance": false,
+        "error_rate": true,
+        "event_count": false,
+        "auto_keep": false
+       },
+       "raw": {
+        "value": 0,
+        "string": "0"
+       }
+      }
+     ]
+    },
+    "power_on_time": {
+     "hours": 27694
+    },
+    "power_cycle_count": 10,
+    "temperature": {
+     "current": 38,
+     "power_cycle_min": 29,
+     "power_cycle_max": 41,
+     "lifetime_min": 19,
+     "lifetime_max": 48,
+     "op_limit_min": 0,
+     "op_limit_max": 60,
+     "limit_min": -40,
+     "limit_max": 70,
+     "lifetime_over_limit_minutes": 0,
+     "lifetime_under_limit_minutes": 0
+    }
+   },
+   "_preset": "sata_hdd_devstat",
+   "_devstat": {
+    "status": "present",
+    "complete": true,
+    "logical_block_size": 512,
+    "pages": [
+     {
+      "number": 1,
+      "name": "General Statistics",
+      "revision": 1,
+      "table": [
+       {
+        "offset": 8,
+        "name": "Lifetime Power-On Resets",
+        "size": 4,
+        "value": 10,
+        "flags": {
+         "value": 192,
+         "string": "V--- ",
+         "valid": true,
+         "normalized": false,
+         "supports_dsn": false,
+         "monitored_condition_met": false
+        }
+       },
+       {
+        "offset": 16,
+        "name": "Power-on Hours",
+        "size": 4,
+        "value": 27694,
+        "flags": {
+         "value": 192,
+         "string": "V--- ",
+         "valid": true,
+         "normalized": false,
+         "supports_dsn": false,
+         "monitored_condition_met": false
+        }
+       },
+       {
+        "offset": 24,
+        "name": "Logical Sectors Written",
+        "size": 6,
+        "value": 210606206000,
+        "flags": {
+         "value": 192,
+         "string": "V--- ",
+         "valid": true,
+         "normalized": false,
+         "supports_dsn": false,
+         "monitored_condition_met": false
+        }
+       },
+       {
+        "offset": 40,
+        "name": "Logical Sectors Read",
+        "size": 6,
+        "value": 1546494077801,
+        "flags": {
+         "value": 192,
+         "string": "V--- ",
+         "valid": true,
+         "normalized": false,
+         "supports_dsn": false,
+         "monitored_condition_met": false
+        }
+       }
+      ]
+     },
+     {
+      "number": 3,
+      "name": "Rotating Media Statistics",
+      "revision": 1,
+      "table": [
+       {
+        "offset": 32,
+        "name": "Number of Reallocated Logical Sectors",
+        "size": 4,
+        "value": 0,
+        "flags": {
+         "value": 192,
+         "string": "V--- ",
+         "valid": true,
+         "normalized": false,
+         "supports_dsn": false,
+         "monitored_condition_met": false
+        }
+       }
+      ]
+     },
+     {
+      "number": 4,
+      "name": "General Errors Statistics",
+      "revision": 1,
+      "table": [
+       {
+        "offset": 8,
+        "name": "Number of Reported Uncorrectable Errors",
+        "size": 4,
+        "value": 7,
+        "flags": {
+         "value": 192,
+         "string": "V--- ",
+         "valid": true,
+         "normalized": false,
+         "supports_dsn": false,
+         "monitored_condition_met": false
+        }
+       }
+      ]
+     },
+     {
+      "number": 5,
+      "name": "Temperature Statistics",
+      "revision": 1,
+      "table": [
+       {
+        "offset": 8,
+        "name": "Current Temperature",
+        "size": 1,
+        "value": 38,
+        "flags": {
+         "value": 192,
+         "string": "V--- ",
+         "valid": true,
+         "normalized": false,
+         "supports_dsn": false,
+         "monitored_condition_met": false
+        }
+       },
+       {
+        "offset": 32,
+        "name": "Highest Temperature",
+        "size": 1,
+        "value": 48,
+        "flags": {
+         "value": 192,
+         "string": "V--- ",
+         "valid": true,
+         "normalized": false,
+         "supports_dsn": false,
+         "monitored_condition_met": false
+        }
+       },
+       {
+        "offset": 40,
+        "name": "Lowest Temperature",
+        "size": 1,
+        "value": 19,
+        "flags": {
+         "value": 192,
+         "string": "V--- ",
+         "valid": true,
+         "normalized": false,
+         "supports_dsn": false,
+         "monitored_condition_met": false
+        }
+       },
+       {
+        "offset": 80,
+        "name": "Time in Over-Temperature",
+        "size": 4,
+        "value": 0,
+        "flags": {
+         "value": 192,
+         "string": "V--- ",
+         "valid": true,
+         "normalized": false,
+         "supports_dsn": false,
+         "monitored_condition_met": false
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "s5gxmock455a": {
+   "id": "s5gxmock455a",
+   "device_path": "/dev/nvme0",
+   "model": "Samsung 980 PRO 1TB",
+   "serial": "S5GXMOCK455A",
+   "protocol": "NVMe",
+   "smart_data": {
+    "smart_status": {
+     "passed": true
+    },
+    "nvme_smart_health_information_log": {
+     "critical_warning": 0,
+     "temperature": 38,
+     "available_spare": 100,
+     "available_spare_threshold": 10,
+     "percentage_used": 3,
+     "power_on_hours": 2100,
+     "power_cycles": 87,
+     "media_errors": 0,
+     "data_units_written": 9121094,
+     "data_units_read": 18242188
+    }
+   },
+   "_preset": "nvme",
+   "_devstat": {
+    "status": "not_applicable"
+   }
+  },
+  "wx72mock9469": {
+   "id": "wx72mock9469",
+   "device_path": "/dev/sdc",
+   "model": "WD Elements 2TB (USB)",
+   "serial": "WX72MOCK9469",
+   "protocol": "ATA",
+   "smart_data": {},
+   "_preset": "usb_blocked",
+   "_devstat": {
+    "status": "unavailable",
+    "reason": "failed"
+   }
+  }
+ },
+ "pool_order": [
+  "tank"
+ ],
+ "pools": {
+  "tank": {
+   "name": "tank",
+   "state": "DEGRADED",
+   "status": "One or more devices are faulted in response to persistent errors. Sufficient replicas exist for the pool to continue functioning in a degraded state.",
+   "action": "Replace the faulted device, or use 'zpool clear' to mark the device repaired.",
+   "data_errors": 0,
+   "scan_function": "SCRUB",
+   "scan_state": "FINISHED",
+   "scrub_in_progress": false,
+   "last_scrub_end": "2026-10-05T00:14:01Z",
+   "last_scrub_repaired": 0,
+   "last_scrub_errors": 0,
+   "vdev": {
+    "name": "mirror-0",
+    "type": "mirror"
+   },
+   "devices": [
+    {
+     "name": "sda",
+     "state": "ONLINE",
+     "read": 0,
+     "write": 0,
+     "cksum": 0
+    },
+    {
+     "name": "sdb",
+     "state": "FAULTED",
+     "read": 3,
+     "write": 0,
+     "cksum": 0
+    }
+   ],
+   "_preset": "zfs_pool",
+   "vanished": false
+  }
+ }
+}
