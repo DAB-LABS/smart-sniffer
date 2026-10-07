@@ -644,7 +644,7 @@ def test_data_dir_round_trip_with_replicas(tmp_path):
 
 @pytest.mark.parametrize("folders, usb_file", [
     ((), "shipped.usb-blocked"),
-    (("--replicas", str(REPLICAS)), None),
+    (("--replicas", str(REPLICAS)), "legacy.usb-blocked"),
 ])
 def test_a_store_from_the_v080_mock_loads_and_maps_to_files(tmp_path, folders, usb_file):
     """tests/fixtures/mock_v080: what the mock-v080 mock saved after a few edits."""
@@ -682,5 +682,140 @@ def test_a_store_from_the_v080_mock_loads_and_maps_to_files(tmp_path, folders, u
         hdd_id = hdd["id"]
         client.ok("POST", f"/api/drives/{hdd_id}/scenario", {"id": "smart_failed"})
         assert _drive_state(client, hdd_id) == "YES"
+    finally:
+        _stop(server)
+
+
+def test_an_old_pool_with_healthy_readings_loads_as_healthy(tmp_path):
+    old = json.loads(OLD_STORE.read_text())
+    for dev in old["pools"]["tank"]["devices"]:
+        dev.update(state="ONLINE", read=0, write=0, cksum=0)
+    old["pools"]["tank"].update(state="ONLINE", status=None, action=None, data_errors=0)
+    (tmp_path / "mock-drives.json").write_text(json.dumps(old))
+    server, client = _start("--data-dir", str(tmp_path))
+    try:
+        (pool,) = client.get("/api/state")["pools"]
+        assert pool["lab"]["scenario"]["current"] == "healthy"
+        assert _pool_state(client, "tank") == "NO"
+    finally:
+        _stop(server)
+
+
+# --- A store from the 0.2.12 app ----------------------------------------------------------
+# tests/fixtures/mock_0212/mock-drives.json: what the mock in app 0.2.12 saved after one
+# drive of each of its presets was added, and a second sata_hdd had two values
+# edited (Reallocated_Sector_Ct 5, Temperature_Celsius 44). Drives only, no
+# Device Statistics state, and the ATA drives have no top-level temperature,
+# power_on_time or power_cycle_count.
+
+STORE_0212 = Path(__file__).resolve().parent / "fixtures" / "mock_0212" / "mock-drives.json"
+EDITED_0212 = "wfl3mock2bda"
+KINDS_0212 = {"sata_hdd": "ata", "sata_ssd": "ata", "nvme": "nvme", "nvme_usb": "nvme",
+              "usb_blocked": "unsupported", "virtual_disk": "unsupported", "sas_enterprise": "scsi"}
+SIX_ONLY = ("--replicas", str(REPLICAS))
+
+
+def _start_0212(tmp_path: Path, *folders: str) -> tuple[Any, Client, dict[str, Any]]:
+    old = json.loads(STORE_0212.read_text())
+    (tmp_path / "mock-drives.json").write_text(json.dumps(old))
+    server, client = _start("--data-dir", str(tmp_path), *folders)
+    return server, client, old
+
+
+@pytest.mark.parametrize("folders", [(), SIX_ONLY])
+def test_0212_drives_map_to_files_or_get_a_legacy_entry(tmp_path, folders):
+    server, client, old = _start_0212(tmp_path, *folders)
+    try:
+        drives = client.get("/api/state")["drives"]
+        assert [d["id"] for d in drives] == old["order"]
+        for drive in drives:
+            lab, preset = drive["lab"], drive["lab"]["preset"]
+            stem = preset.replace("_", "-")
+            assert lab["kind"] == KINDS_0212[preset], preset
+            if preset in ("sata_hdd", "nvme"):
+                assert lab["replica"] == {"sata_hdd": "shipped.sata-hdd-healthy", "nvme": "shipped.nvme-wear"}[preset]
+            elif not folders:
+                assert lab["replica"] == f"shipped.{stem}"
+                assert lab["name"] == _load(EXTRA / f"{stem}.json")["name"]
+            else:
+                # The app image ships only the six: the drive stands in for its file.
+                assert lab["replica"] == f"legacy.{stem}"
+                assert lab["name"] == drive["model"]
+                assert lab["description"] == f"{mock._PRESET_LABELS[preset]}, carried over from an older mock."
+        states = {d["lab"]["preset"]: _drive_state(client, d["id"]) for d in drives if d["id"] != EDITED_0212}
+        assert states == {"sata_hdd": "NO", "sata_ssd": "NO", "nvme": "NO", "nvme_usb": "NO",
+                          "usb_blocked": "UNSUPPORTED", "virtual_disk": "UNSUPPORTED", "sas_enterprise": "NO"}
+        assert _drive_state(client, EDITED_0212) == "YES"
+    finally:
+        _stop(server)
+
+
+@pytest.mark.parametrize("folders", [(), SIX_ONLY])
+def test_0212_drives_with_healthy_readings_get_the_healthy_scenario(tmp_path, folders):
+    server, client, _ = _start_0212(tmp_path, *folders)
+    try:
+        drives = client.get("/api/state")["drives"]
+        current = {d["id"]: d["lab"]["scenario"]["current"] for d in drives}
+        options = {d["id"]: [o["id"] for o in d["lab"]["scenario"]["options"]] for d in drives}
+        by_preset = {d["lab"]["preset"]: d["id"] for d in drives if d["id"] != EDITED_0212}
+        # The presets' own values are the Healthy scenario's for these two.
+        assert current[by_preset["sata_hdd"]] == "healthy"
+        assert current[by_preset["sata_ssd"]] == "healthy"
+        # Edited, or not at the Healthy values (NVMe percentage_used 3 and 8): none,
+        # with the options for the kind still offered.
+        for drive_id in (EDITED_0212, by_preset["nvme"], by_preset["nvme_usb"]):
+            assert current[drive_id] is None
+        assert options[EDITED_0212] == list(SCENARIO_STATES["ata"])
+        assert options[by_preset["nvme"]] == options[by_preset["nvme_usb"]] == list(SCENARIO_STATES["nvme"])
+        for preset in ("usb_blocked", "virtual_disk", "sas_enterprise"):
+            assert current[by_preset[preset]] is None and options[by_preset[preset]] == []
+        client.ok("POST", f"/api/drives/{EDITED_0212}/scenario", {"id": "healthy"})
+        assert _drive_state(client, EDITED_0212) == "NO"
+    finally:
+        _stop(server)
+
+
+@pytest.mark.parametrize("folders", [(), SIX_ONLY])
+def test_0212_ata_drives_gain_temperature_and_power_fields(tmp_path, folders):
+    server, client, old = _start_0212(tmp_path, *folders)
+    try:
+        def top(drive_id: str) -> tuple:
+            smart = client.get(f"/api/drives/{drive_id}")["smart_data"]
+            return smart.get("temperature"), smart.get("power_on_time"), smart.get("power_cycle_count")
+
+        by_preset = {d["_preset"]: d["id"] for d in old["drives"].values() if d["id"] != EDITED_0212}
+        assert top(by_preset["sata_hdd"]) == ({"current": 36}, {"hours": 8760}, 142)
+        assert top(by_preset["sata_ssd"]) == ({"current": 31}, {"hours": 4200}, 315)
+        # From the drive's own table, so an edit made under the old mock shows.
+        assert top(EDITED_0212) == ({"current": 44}, {"hours": 8760}, 142)
+        # Not ATA, or no table: nothing is added.
+        assert top(by_preset["nvme"]) == (None, None, None)
+        assert client.get(f"/api/drives/{by_preset['usb_blocked']}")["smart_data"] == {}
+    finally:
+        _stop(server)
+
+
+def test_a_legacy_entry_maps_to_its_file_once_the_extras_load(tmp_path):
+    server, client, old = _start_0212(tmp_path, *SIX_ONLY)
+    ssd = next(d["id"] for d in old["drives"].values() if d["_preset"] == "sata_ssd")
+    try:
+        client.ok("POST", f"/api/drives/{ssd}/scenario", {"id": "command_timeouts"})   # saves the store
+        lab = next(d["lab"] for d in client.get("/api/state")["drives"] if d["id"] == ssd)
+        assert (lab["replica"], lab["scenario"]["current"]) == ("legacy.sata-ssd", "command_timeouts")
+    finally:
+        _stop(server)
+
+    server, client = _start("--data-dir", str(tmp_path), *SIX_ONLY)
+    try:
+        lab = next(d["lab"] for d in client.get("/api/state")["drives"] if d["id"] == ssd)
+        assert (lab["replica"], lab["scenario"]["current"]) == ("legacy.sata-ssd", "command_timeouts")
+    finally:
+        _stop(server)
+
+    server, client = _start("--data-dir", str(tmp_path))
+    try:
+        lab = next(d["lab"] for d in client.get("/api/state")["drives"] if d["id"] == ssd)
+        assert (lab["replica"], lab["name"], lab["scenario"]["current"]) == ("shipped.sata-ssd", "SATA SSD, healthy", None)
+        assert _drive_state(client, ssd) == "MAYBE"
     finally:
         _stop(server)

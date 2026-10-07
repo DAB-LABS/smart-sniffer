@@ -496,6 +496,9 @@ REPLICA_KINDS = ("ata", "ata_devstat", "nvme", "scsi", "unsupported", "zfs_pool"
 REPLICA_ORIGINS = ("shipped", "saved", "uploaded")
 MAX_REPLICA_BYTES = 1024 * 1024          # 1 MB per file
 SCENARIOS_FILE = "scenarios.json"
+# Replica ids of drives and pools carried over from an older mock whose
+# preset has no file in the loaded folders. No file has such an id.
+LEGACY_PREFIX = "legacy."
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_REPLICA_DIRS = [os.path.join(_HERE, "replicas"), os.path.join(_HERE, "replicas", "extra")]
@@ -1074,13 +1077,49 @@ def _fallback_devstat(drive: dict) -> dict:
     return {"status": "absent"}
 
 
+# Top-level smartctl keys the old ATA presets never had, and the attribute
+# rows they are read from: (key, attribute ids in order of preference, shape).
+_ATA_TOP_LEVEL = (
+    # smartctl reports the low byte of 194/190 as the current temperature.
+    ("temperature", (194, 190), lambda raw: {"current": raw & 0xFF if raw > 0xFF else raw}),
+    ("power_on_time", (9,), lambda raw: {"hours": raw}),
+    ("power_cycle_count", (12,), lambda raw: raw),
+)
+
+
+def _fill_ata_top_level(smart: dict) -> None:
+    """Add temperature, power_on_time and power_cycle_count from the ATA table
+    when they are missing, as smartctl would print them for that table."""
+    by_id = {a.get("id"): a for a in _attr_table(smart)}
+    for key, ids, shape in _ATA_TOP_LEVEL:
+        if key in smart:
+            continue
+        for attr_id in ids:
+            value, status = _num_field((by_id.get(attr_id) or {}).get("raw"), "value")
+            if status == _OK:
+                smart[key] = shape(value)
+                break
+
+
+def _needs_mapping(rec: dict) -> bool:
+    """True for a drive or pool saved by an older mock: no file of its own yet."""
+    replica = rec.get("_replica")
+    return not isinstance(replica, str) or replica.startswith(LEGACY_PREFIX)
+
+
 def _upgrade_drive(drive: dict) -> None:
     """Bring a drive saved by an older mock up to its file's current shape.
 
-    Only adds what is missing (attribute rows, NVMe log keys, top-level keys
-    and the Device Statistics state); a value the user already set is never
-    changed. The file is the first one naming the drive's old preset key.
+    Only adds what is missing (top-level temperature and power keys from its
+    own attribute table, then attribute rows, NVMe log keys, top-level keys
+    and the Device Statistics state from the file); a value the user already
+    set is never changed. The file is the first one naming the drive's old
+    preset key.
     """
+    if not _needs_mapping(drive):
+        return
+    if isinstance(drive.get("smart_data"), dict):
+        _fill_ata_top_level(drive["smart_data"])
     if "_devstat" in drive or not isinstance(drive.get("_preset"), str):
         return
     resolved = _resolve_preset(drive["_preset"])
@@ -1104,17 +1143,69 @@ def _upgrade_drive(drive: dict) -> None:
     drive["_devstat"] = devstat
 
 
+def _is_pool(rec: dict) -> bool:
+    return "devices" in rec and "smart_data" not in rec
+
+
+def _legacy_fields(rec: dict) -> None:
+    """A stand-in replica entry for a record whose old preset has no file in
+    the loaded folders (the app ships only the six): kind, name and
+    description come from the record itself."""
+    preset = rec.get("_preset") if isinstance(rec.get("_preset"), str) else None
+    if _is_pool(rec):
+        key = preset or rec.get("name")
+        kind, name = "zfs_pool", f"ZFS pool {rec.get('name')}"
+        what = f"A ZFS pool named {rec.get('name')}"
+    else:
+        key = preset or rec.get("id")
+        kind = drive_kind(rec.get("smart_data") or {}, _natural_devstat(rec), _protocol(rec))
+        name = str(rec.get("model") or rec.get("serial") or "Drive")
+        what = _PRESET_LABELS.get(preset or "", name)
+    rec["_replica"] = LEGACY_PREFIX + _file_slug(str(key or "replica"))
+    rec["_kind"] = kind
+    rec["_name"] = name
+    rec["_description"] = f"{what}, carried over from an older mock."
+    rec["_scenarios_extra"] = []
+
+
+def _readings(rec: dict) -> tuple:
+    """What a scenario sets, as the agent serves it."""
+    if _is_pool(rec):
+        return pool_payload(rec), bool(rec.get("vanished"))
+    return copy.deepcopy(rec.get("smart_data")), devstat_block(rec)
+
+
+def _reads_healthy(rec: dict) -> bool:
+    """True when the record's Healthy scenario would change nothing."""
+    healthy = _find_scenario(rec, "healthy")
+    if healthy is None:
+        return False
+    before = _readings(rec)
+    try:
+        after = _run_scenario(rec, healthy, _is_pool(rec))
+    except BadRequest:
+        return False
+    return _readings(after) == before
+
+
 def _map_saved_record(rec: dict) -> None:
-    """Give a drive or pool saved by an older mock its replica fields."""
-    if "_replica" in rec:
+    """Give a drive or pool saved by an older mock its replica fields.
+
+    It maps to the first loaded file naming its old preset key, or gets a
+    legacy entry when there is none (mapped again once such a file is
+    loaded). Its scenario is Healthy when its readings are the Healthy
+    scenario's, else none: its values may have been edited since.
+    """
+    if not _needs_mapping(rec):
         return
     file_rec = library.by_preset(rec["_preset"]) if isinstance(rec.get("_preset"), str) else None
     if file_rec is not None:
         _replica_fields(rec, file_rec)
-        rec["_scenario"] = None     # its values may have been edited since
+    elif isinstance(rec.get("_replica"), str):
+        return      # a legacy entry, and still no file: keep it as it is
     else:
-        rec["_replica"] = None
-        rec["_scenario"] = None
+        _legacy_fields(rec)
+    rec["_scenario"] = "healthy" if _reads_healthy(rec) else None
 
 
 def _record_kind(rec: dict) -> str:
