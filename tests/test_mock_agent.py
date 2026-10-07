@@ -184,9 +184,9 @@ def test_derived_sources_per_preset(client):
         assert derived(preset) == {"host_writes_omitted": "no_source", "host_reads_omitted": "no_source"}
 
 
-def test_the_new_hdd_preset_uses_a_fixture_serial_and_has_no_187(client):
+def test_the_devstat_hdd_has_a_fake_serial_and_no_187(client):
     drive = client.get(f"/api/drives/{client.add('sata_hdd_devstat')}")
-    assert drive["serial"].startswith("FIXTURE-")
+    assert drive["serial"].startswith("MOCK-")
     assert drive["smart_data"]["serial_number"] == drive["serial"]
     table = drive["smart_data"]["ata_smart_attributes"]["table"]
     assert 187 not in {a["id"] for a in table}
@@ -355,7 +355,7 @@ def test_pool_healthy_degraded_missing_and_back(client):
 
     client.ok("PATCH", "/api/pools/tank", {
         "state": "DEGRADED",
-        "devices": [{"name": "sda", "state": "FAULTED", "read": 12, "write": 0, "cksum": 0}],
+        "devices": [{"name": "MOCK0001", "state": "FAULTED", "read": 12, "write": 0, "cksum": 0}],
     })
     pools, missing = _poll(client, ["tank"])
     (tank,) = pools
@@ -363,7 +363,7 @@ def test_pool_healthy_degraded_missing_and_back(client):
         "State: DEGRADED",
         "Read errors: 12",
         "mirror-0: DEGRADED",
-        "sda: FAULTED, 12 read errors",
+        "MOCK0001: FAULTED, 12 read errors",
     ]
     actions, state = ph.notification_actions(state, pools, missing)
     assert [a.kind for a in actions] == ["create"]
@@ -377,7 +377,7 @@ def test_pool_healthy_degraded_missing_and_back(client):
 
     client.ok("POST", "/api/pools/tank/restore")
     client.ok("PATCH", "/api/pools/tank", {
-        "devices": [{"name": "sda", "state": "ONLINE", "read": 0}],
+        "devices": [{"name": "MOCK0001", "state": "ONLINE", "read": 0}],
     })
     pools, missing = _poll(client, ["tank"])
     assert missing == [] and pools[0]["state"] == "ONLINE"
@@ -395,8 +395,8 @@ def test_pool_patch_data_errors_and_validation(client):
     for body in (
         {"state": "MISSING"},
         {"devices": [{"name": "sdz", "state": "FAULTED"}]},
-        {"devices": [{"name": "sda", "state": "BROKEN"}]},
-        {"devices": [{"name": "sda", "read": -2}]},
+        {"devices": [{"name": "MOCK0001", "state": "BROKEN"}]},
+        {"devices": [{"name": "MOCK0001", "read": -2}]},
         {"errors": "lots"},
         {"colour": "red"},
     ):
@@ -432,15 +432,15 @@ def test_lab_state_lists_drives_pools_and_presets(client):
     assert drive["lab"]["devstat_counts"]["reported_uncorrectable"] == 0
     (pool,) = lab["pools"]
     assert pool["lab"]["vanished"] is True
-    assert [d["name"] for d in pool["lab"]["devices"]] == ["sda", "sdb"]
+    assert [d["name"] for d in pool["lab"]["devices"]] == ["MOCK0001", "MOCK0002"]
     assert client.get("/mock/state")["pools"] == lab["pools"]
 
 
-def test_dashboard_lists_the_new_presets(client):
+def test_dashboard_lists_the_replica_files(client):
     req = urllib.request.urlopen(client.base + "/", timeout=5)
     html = req.read().decode()
-    assert "sata_hdd_devstat" in html and "zfs_pool" in html
-    assert "PRESETS_JSON" not in html
+    assert "shipped.sata-hdd-devstat-uncorrectables" in html and "shipped.zfs-pool-degraded" in html
+    assert "REPLICAS_JSON" not in html
 
 
 def test_unknown_preset_is_refused(client):
