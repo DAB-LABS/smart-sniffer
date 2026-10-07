@@ -2,6 +2,25 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## Unreleased
+
+### Behind the scenes
+- **The mock agent's drives and pools are replica files.** Each fake drive or
+  pool in `tools/mock-agent.py` now comes from a JSON file in
+  `tools/replicas/`, in the shape the agent serves, with a name, a kind and a
+  description. Six ship with the SMART Sniffer app; the other old presets are
+  in `tools/replicas/extra/`. The old preset keys still work with `--preload`
+  and `POST /api/drives`.
+- **Scenarios, upload, save and export for replicas.** New mock routes list
+  the files, add one by id, apply a named scenario (from
+  `tools/replicas/scenarios.json`), upload a file, save a real drive as a
+  replica with its serial and WWN replaced, and export a live replica as a
+  file. New flags `--replicas` and `--user-replicas` choose the folders. See
+  `docs/mock-agent.md`.
+- **Pool replicas name their disks `MOCK0001` and `MOCK0002`**, and the Device
+  Statistics drive's serial is `MOCK-DS-9JG0X1`. Stores saved by older mocks
+  load unchanged.
+
 ## v0.8.0 -- 2026-10-03
 
 **Agent, integration and installers.** Update the integration through HACS,
