@@ -386,6 +386,47 @@ def test_upload_writes_a_valid_file_to_the_user_folder(client, user_dir):
     assert _drive_state(client, client.ok("POST", "/api/drives", {"replica": "user.smart-failed"})["id"]) == "YES"
 
 
+def _export(client: Client, path: str) -> dict[str, Any]:
+    code, _, data = client.raw("GET", path)
+    assert code == 200, (path, code)
+    return json.loads(data)
+
+
+def test_an_uploaded_file_is_uploaded_and_a_saved_one_stays_saved(client, user_dir):
+    # Download a shipped card and upload it back.
+    drive_id = client.ok("POST", "/api/drives", {"replica": "shipped.nvme-wear"})["id"]
+    exported = _export(client, f"/api/drives/{drive_id}/replica")
+    assert exported["origin"] == {"type": "shipped"}
+    file_id = client.ok("POST", "/api/replicas", {"file": exported})["id"]
+    assert json.loads((user_dir / "nvme-wear.json").read_text())["origin"] == {"type": "uploaded"}
+    assert client.get(f"/api/replicas/{file_id}")["origin"] == {"type": "uploaded"}
+    # A card made from it, and its own download, say uploaded too.
+    again = client.ok("POST", "/api/drives", {"replica": file_id})["id"]
+    assert _export(client, f"/api/drives/{again}/replica")["origin"] == {"type": "uploaded"}
+
+    # The same for a pool, and for an origin carrying other keys.
+    client.ok("POST", "/api/pools", {"replica": "shipped.zfs-pool-degraded"})
+    pool_doc = _export(client, "/api/pools/tank/replica")
+    pool_doc["origin"] = {"type": "shipped", "host": "nas.local"}
+    pool_file = client.ok("POST", "/api/replicas", {"file": pool_doc})["id"]
+    name = client.ok("POST", "/api/pools", {"replica": pool_file})["id"]
+    assert _export(client, f"/api/pools/{name}/replica")["origin"] == {"type": "uploaded"}
+
+    # An export dropped into the user folder over Samba is not shipped either.
+    exported["name"] = "Dropped export"
+    (user_dir / "dropped-export.json").write_text(json.dumps(exported))
+    dropped = client.ok("POST", "/api/drives", {"replica": "user.dropped-export"})["id"]
+    assert _export(client, f"/api/drives/{dropped}/replica")["origin"] == {"type": "uploaded"}
+
+    # A file saved from a real drive keeps saved and its date.
+    saved = dict(exported, name="Saved earlier", origin={"type": "saved", "saved_at": "2026-10-01T09:00:00Z"})
+    saved_id = client.ok("POST", "/api/replicas", {"file": saved})["id"]
+    assert client.get(f"/api/replicas/{saved_id}")["origin"] == {"type": "saved", "saved_at": "2026-10-01T09:00:00Z"}
+    card = client.ok("POST", "/api/drives", {"replica": saved_id})["id"]
+    assert _export(client, f"/api/drives/{card}/replica")["origin"] == {
+        "type": "saved", "saved_at": "2026-10-01T09:00:00Z"}
+
+
 @pytest.mark.parametrize("change, message", [
     (lambda d: d.update(format="something-else"), "not a replica file"),
     (lambda d: d.update(kind="floppy"), "kind must be one of"),

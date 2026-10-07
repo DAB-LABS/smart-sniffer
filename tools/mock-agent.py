@@ -997,6 +997,17 @@ def _natural_from_file(devstat: dict) -> dict:
     return natural
 
 
+def _upload_origin(origin: dict) -> dict:
+    """The origin of a file that came in by upload: uploaded, unless it was
+    saved from a real drive (then saved, with its saved_at)."""
+    if origin.get("type") == "saved":
+        saved = {"type": "saved"}
+        if isinstance(origin.get("saved_at"), str):
+            saved["saved_at"] = origin["saved_at"]
+        return saved
+    return {"type": "uploaded"}
+
+
 def _replica_fields(rec: dict, file_rec: dict) -> None:
     """The private keys a live drive or pool keeps about the file it came from."""
     doc = file_rec["doc"]
@@ -1006,7 +1017,10 @@ def _replica_fields(rec: dict, file_rec: dict) -> None:
     rec["_kind"] = doc["kind"]
     rec["_name"] = doc["name"]
     rec["_description"] = doc["description"]
-    rec["_origin"] = copy.deepcopy(doc["origin"])
+    # Only the read-only folders hold shipped files: one in the user folder
+    # (an export dropped in over Samba, say) came in the way an upload does.
+    origin = doc["origin"]
+    rec["_origin"] = _upload_origin(origin) if file_rec["source"] == "user" else copy.deepcopy(origin)
     rec["_scenarios_extra"] = copy.deepcopy(scenario.get("options") or [])
     if doc.get("preset"):
         rec["_preset"] = doc["preset"]
@@ -2536,10 +2550,7 @@ class MockHandler(BaseHTTPRequestHandler):
             doc = validate_replica(copy.deepcopy(doc))
         except InvalidReplica as err:
             raise BadRequest("invalid_replica", 422, message=str(err)) from None
-        origin = doc["origin"]
-        doc["origin"] = {"type": "uploaded" if origin["type"] == "shipped" else origin["type"]}
-        if origin.get("saved_at") is not None and doc["origin"]["type"] == "saved":
-            doc["origin"]["saved_at"] = origin["saved_at"]
+        doc["origin"] = _upload_origin(doc["origin"])
         self._json_response(201, library.write_user(doc))
 
     def _route_post(self, path: str, body: dict) -> None:
