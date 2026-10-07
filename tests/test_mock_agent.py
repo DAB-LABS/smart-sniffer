@@ -134,6 +134,40 @@ def test_health_advertises_pools_once_a_pool_is_added(client):
     assert ph.advertises_pools(health)
 
 
+def test_health_needs_no_token_but_the_rest_does(tmp_path):
+    """Like the agent's auth middleware: /api/health is always public."""
+    server, zc, _ = mock.build_server([
+        "--port", "0", "--host", "127.0.0.1", "--no-mdns", "--data-dir", str(tmp_path),
+        "--token", "s3cret", "--preload", "sata_hdd",
+    ])
+    assert zc is None
+    threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+
+    def get(path: str, token: str | None = None) -> tuple[int, Any]:
+        req = urllib.request.Request(base + path)
+        if token is not None:
+            req.add_header("Authorization", f"Bearer {token}")
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                return resp.status, json.loads(resp.read())
+        except urllib.error.HTTPError as err:
+            return err.code, json.loads(err.read())
+
+    try:
+        code, health = get("/api/health")
+        assert code == 200 and health["status"] == "ok" and health["auth_enabled"] is True
+        assert get("/api/health", "wrong")[0] == 200
+        for path in ("/api/drives", "/api/drives/mock-sata-0002", "/api/state", "/api/replicas",
+                     "/api/scenarios", "/mock/replicas"):
+            assert get(path) == (401, {"error": "unauthorized"}), path
+            assert get(path, "wrong")[0] == 401, path
+            assert get(path, "s3cret")[0] == 200, path
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_pools_endpoint_is_absent_without_pools(client):
     code, _ = client.call("GET", "/api/pools")
     assert code == 404

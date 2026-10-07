@@ -2353,15 +2353,18 @@ class MockHandler(BaseHTTPRequestHandler):
         if path == "/mock/state":
             self._json_response(200, self._lab_state())
             return
+        # The real agent's auth middleware always lets /api/health through:
+        # the Supervisor watchdog and monitoring tools call it with no token.
+        if path == "/api/health":
+            self._json_response(200, self._health())
+            return
 
         # ── Agent API (auth required) ──
         if not self._check_auth():
             return
         parts = path.strip("/").split("/")
 
-        if path == "/api/health":
-            self._json_response(200, self._health())
-        elif path == "/api/drives":
+        if path == "/api/drives":
             store.record_poll()
             self._json_response(200, store.get_summaries())
         elif len(parts) == 3 and parts[:2] == ["api", "drives"]:
