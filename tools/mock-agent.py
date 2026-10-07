@@ -795,9 +795,169 @@ class ReplicaLibrary:
                 out.append(opt)
         return out
 
+    # ── Writing ──
+
+    def write_user(self, doc: dict) -> dict:
+        """Write a validated document into the user folder; return its listing entry."""
+        status = self.folder_status()
+        if status["status"] != "ok":
+            raise BadRequest("replica_folder_unavailable", 503, folder=status,
+                             message="The replica folder is missing or read-only.")
+        text = json.dumps(doc, indent=2, ensure_ascii=False) + "\n"
+        if len(text.encode("utf-8")) > MAX_REPLICA_BYTES:
+            raise BadRequest("too_large", 413, message="A replica file is at most 1 MB.")
+        base = _file_slug(doc["name"])
+        with self.lock:
+            n = 1
+            while True:
+                stem = base if n == 1 else f"{base}-{n}"
+                path = os.path.join(self.user_dir, stem + ".json")
+                if not os.path.exists(path):
+                    break
+                n += 1
+            tmp = os.path.join(self.user_dir, f".{stem}.json.tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(text)
+            os.replace(tmp, path)
+        rec = self.find(f"user.{stem}")
+        if rec is None:   # pragma: no cover - the file was just written
+            raise BadRequest("replica_folder_unavailable", 503, message="The new file could not be read back.")
+        return _replica_entry(rec)
+
 
 # Replaced in build_server().
 library = ReplicaLibrary([], None)
+
+
+# ── Saving a real drive as a replica (anonymised) ───────────────────────────
+
+
+def _fake_like(value: Any) -> Any:
+    """A fixed fake value of the same shape: zeros for numbers and hex strings."""
+    if isinstance(value, dict):
+        return {k: _fake_like(v) for k, v in value.items()}
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return 0
+    if isinstance(value, str):
+        return re.sub(r"[0-9A-Za-z]", "0", value)
+    return None
+
+
+def _replace_strings(obj: Any, old: str, new: str, whole: bool = False) -> Any:
+    """Every string in obj (keys included) with old replaced by new.
+
+    whole: replace only strings equal to old, for values short enough to
+    turn up inside unrelated text.
+    """
+    if isinstance(obj, str):
+        if whole:
+            return new if obj == old else obj
+        return obj.replace(old, new) if old in obj else obj
+    if isinstance(obj, list):
+        return [_replace_strings(v, old, new, whole) for v in obj]
+    if isinstance(obj, dict):
+        return {_replace_strings(k, old, new, whole): _replace_strings(v, old, new, whole)
+                for k, v in obj.items()}
+    return obj
+
+
+def _wwn_text(wwn: Any) -> str | None:
+    """The WWN as smartctl prints it in text (naa, oui, id run together in hex)."""
+    if not isinstance(wwn, dict):
+        return None
+    try:
+        return f"{int(wwn['naa']):x}{int(wwn['oui']):06x}{int(wwn['id']):09x}"
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _file_devstat(block: Any, protocol: str) -> dict:
+    """The devstat part of a file from an agent's device_statistics block."""
+    if not isinstance(block, dict) or block.get("status") not in DEVSTAT_STATUSES:
+        return {"status": "absent" if protocol.upper() == "ATA" else "not_applicable"}
+    out = {k: copy.deepcopy(block[k]) for k in ("status", "reason") if k in block}
+    if block["status"] == "present":
+        out["complete"] = bool(block.get("complete", True))
+        out["logical_block_size"] = block.get("logical_block_size", 512)
+        out["pages"] = copy.deepcopy(block.get("pages") or [])
+    return out
+
+
+def _file_verdict(verdict: Any) -> dict | None:
+    if not isinstance(verdict, dict):
+        return None
+    out = {k: copy.deepcopy(verdict[k]) for k in ("state", "severity", "reasons", "rules_version", "at")
+           if k in verdict}
+    out.setdefault("at", _now_iso())
+    return out
+
+
+def replica_from_drive(payload: Any, verdict: Any = None) -> dict:
+    """A user replica file from a real drive's /api/drives/{id} payload.
+
+    The serial becomes REPLICA- plus 8 random hex digits, everywhere it
+    appears; the WWN, the NVMe IEEE OUI and each namespace's EUI-64 and NGUID
+    become fixed fake values; smartctl's argv and local_time are dropped.
+    Model, firmware and every counter stay.
+    """
+    if not isinstance(payload, dict) or not isinstance(payload.get("smart_data"), dict):
+        raise BadRequest("bad_request", 400, message="from_drive must be a drive payload with smart_data")
+    smart = copy.deepcopy(payload["smart_data"])
+    protocol = str(payload.get("protocol") or _protocol(payload) or "")
+    devstat = _file_devstat(payload.get("device_statistics"), protocol)
+    kind = drive_kind(smart, devstat, protocol)
+    if kind == "unsupported":
+        raise BadRequest("unsupported_drive", 409, message="This drive gives no SMART data to copy.")
+
+    old_serials = {s for s in (payload.get("serial"), smart.get("serial_number"))
+                   if isinstance(s, str) and s.strip()}
+    old_wwn = _wwn_text(smart.get("wwn"))
+    new_serial = "REPLICA-" + uuid.uuid4().hex[:8].upper()
+
+    smart.pop("local_time", None)
+    if isinstance(smart.get("smartctl"), dict):
+        smart["smartctl"].pop("argv", None)
+    if "wwn" in smart:
+        smart["wwn"] = {"naa": 5, "oui": 0, "id": int(uuid.uuid4().hex[:9], 16)}
+    if "nvme_ieee_oui_identifier" in smart:
+        smart["nvme_ieee_oui_identifier"] = _fake_like(smart["nvme_ieee_oui_identifier"])
+    if "logical_unit_id" in smart:
+        smart["logical_unit_id"] = _fake_like(smart["logical_unit_id"])
+    for ns in smart.get("nvme_namespaces") or []:
+        if isinstance(ns, dict):
+            for key in ("eui64", "nguid"):
+                if key in ns:
+                    ns[key] = _fake_like(ns[key])
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    model = str(payload.get("model") or smart.get("model_name") or "Drive")
+    doc: dict[str, Any] = {
+        "format": REPLICA_FORMAT,
+        "version": REPLICA_VERSION,
+        "name": f"{model.strip()}, saved {today}",
+        "kind": kind,
+        "description": f"Saved from a real drive on {today}. Serial and WWN replaced.",
+        "origin": {"type": "saved", "saved_at": _now_iso()},
+        "meta": {"model": model, "serial": new_serial, "protocol": protocol,
+                 "device_path": str(payload.get("device_path") or "")},
+        "smart": smart,
+        "devstat": devstat,
+    }
+    file_verdict = _file_verdict(verdict)
+    if file_verdict is not None:
+        doc["verdict"] = file_verdict
+    for old in sorted(old_serials, key=len, reverse=True):
+        for variant in sorted({old, old.strip(), old.lower(), old.upper()}):
+            doc = _replace_strings(doc, variant, new_serial, whole=len(variant) < 6)
+    if old_wwn:
+        for variant in (old_wwn, old_wwn.upper()):
+            doc = _replace_strings(doc, variant, "5" + "0" * (len(old_wwn) - 1))
+    if "serial_number" in doc["smart"]:
+        doc["smart"]["serial_number"] = new_serial
+    doc["meta"]["serial"] = new_serial
+    return validate_replica(doc)
 
 
 # ── Drive and pool store ─────────────────────────────────────────────────────
@@ -1230,6 +1390,40 @@ def _run_scenario(rec: dict, scenario: dict, is_pool: bool) -> dict:
     return work
 
 
+def _record_file(rec: dict, verdict: Any = None) -> dict:
+    """A live drive or pool as a replica file, the way it reads now."""
+    is_pool = "devices" in rec and "smart_data" not in rec
+    lab = _replica_lab(rec)
+    origin = rec.get("_origin")
+    if not isinstance(origin, dict) or origin.get("type") not in REPLICA_ORIGINS:
+        origin = {"type": "shipped" if rec.get("_preset") else "uploaded"}
+    doc: dict[str, Any] = {
+        "format": REPLICA_FORMAT,
+        "version": REPLICA_VERSION,
+        "name": lab["name"],
+        "kind": lab["kind"],
+        "description": lab["description"],
+        "origin": copy.deepcopy(origin),
+    }
+    if is_pool:
+        doc["pool"] = {k: copy.deepcopy(v) for k, v in rec.items()
+                       if not k.startswith("_") and k != "vanished"}
+    else:
+        ds = devstat_block(rec)
+        ds.pop("exit_status", None)
+        doc["meta"] = {k: rec[k] for k in ("model", "serial", "protocol", "device_path")}
+        doc["smart"] = copy.deepcopy(rec["smart_data"])
+        doc["devstat"] = ds
+    scenario: dict[str, Any] = {"current": rec.get("_scenario")}
+    if rec.get("_scenarios_extra"):
+        scenario["options"] = copy.deepcopy(rec["_scenarios_extra"])
+    doc["scenario"] = scenario
+    file_verdict = _file_verdict(verdict)
+    if file_verdict is not None:
+        doc["verdict"] = file_verdict
+    return doc
+
+
 class DriveStore:
     """Thread-safe store of fake drives and pools with optional disk persistence."""
 
@@ -1411,6 +1605,30 @@ class DriveStore:
             self._save()
             ds = devstat_block(drive)
             return {"ok": True, "derived": derive_volumes(drive, ds)}
+
+    def apply_scenario(self, kind: str, key: str, scenario_id: Any) -> dict:
+        """POST /api/drives/{id}/scenario or /api/pools/{name}/scenario."""
+        is_pool = kind == "pool"
+        with self.lock:
+            records = self.pools if is_pool else self.drives
+            rec = records.get(key)
+            if rec is None:
+                raise BadRequest(f"{kind} not found", 404)
+            scenario = _find_scenario(rec, scenario_id) if isinstance(scenario_id, str) else None
+            if scenario is None:
+                options = [o["id"] for o in _scenario_block(rec)["options"]]
+                raise BadRequest("unknown_scenario", 400, options=options,
+                                 message=f"this {kind} has no scenario {scenario_id!r}")
+            records[key] = _run_scenario(rec, scenario, is_pool)
+            self._save()
+            view = self._lab_pool(records[key]) if is_pool else self._lab_drive(records[key])
+        return {"ok": True, "scenario": scenario["id"], kind: view}
+
+    def export(self, kind: str, key: str, verdict: Any = None) -> dict | None:
+        """GET /api/drives/{id}/replica or /api/pools/{name}/replica."""
+        with self.lock:
+            rec = (self.pools if kind == "pool" else self.drives).get(key)
+            return _record_file(rec, verdict) if rec else None
 
     def _public_drive(self, d: dict) -> dict:
         """One drive as GET /api/drives/{id} returns it. Hold self.lock."""
@@ -1741,6 +1959,22 @@ async function addReplica() {
   refresh();
 }
 
+async function applyScenario(kind, key, id) {
+  if (id) await api("/" + kind + "/" + encodeURIComponent(key) + "/scenario", "POST", { id });
+  refresh();
+}
+
+/* The scenario chooser and the Download link under a card. */
+function scenarioRow(kind, key, lab) {
+  const sc = (lab || {}).scenario || { options: [] };
+  const file = `<a class="attr-hint" href="/mock/${kind}/${encodeURIComponent(key)}/replica" download>Download</a>`;
+  if (!sc.options.length) return `<div class="smart-toggle">${file}</div>`;
+  const opts = [`<option value="">Scenario</option>`].concat(sc.options.map(o =>
+    `<option value="${o.id}" ${o.id === sc.current ? "selected" : ""}>${o.label}</option>`)).join("");
+  return `<div class="smart-toggle"><label>Scenario:</label>
+    <select onchange="applyScenario('${kind}', '${key}', this.value)" style="width:auto">${opts}</select>
+    ${file}</div>`;
+}
 
 async function removeDrive(id) {
   await api("/drives/" + id, "DELETE");
@@ -1802,6 +2036,7 @@ function renderPool(pool) {
         <button class="btn-danger btn-sm" onclick="removePool('${pool.name}')">Remove</button>
       </div>
     </div>
+    ${scenarioRow("pools", pool.name, lab)}
     <div class="smart-toggle"><label>Pool State:</label>
       <select onchange="updatePool('${pool.name}', {state: this.value})" style="width:auto">${stateOpts}</select>
     </div>
@@ -1863,6 +2098,7 @@ async function refresh() {
         </div>
         <button class="btn-danger btn-sm" onclick="removeDrive('${drive.id}')">Remove</button>
       </div>
+      ${scenarioRow("drives", drive.id, lab)}
       <div class="drive-extra">${drive.model} · Device Statistics: <strong>${devstatText(drive.device_statistics)}</strong>
         · Data Written: <strong>${volumeText(drive.derived, "host_writes")}</strong>
         · Data Read: <strong>${volumeText(drive.derived, "host_reads")}</strong></div>`;
@@ -2012,6 +2248,17 @@ class MockHandler(BaseHTTPRequestHandler):
             raise BadRequest("the body must be a JSON object")
         return body
 
+    def _file_response(self, doc: dict) -> None:
+        """A replica file, offered as a download named after the replica."""
+        body = (json.dumps(doc, indent=2, ensure_ascii=False) + "\n").encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Disposition", f'attachment; filename="{_file_slug(doc["name"])}.json"')
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
+
     def _path(self) -> str:
         """The request path, with /mock/... read as /api/... (except /mock/state)."""
         path = unquote(urlparse(self.path).path).rstrip("/")
@@ -2020,12 +2267,22 @@ class MockHandler(BaseHTTPRequestHandler):
         return path
 
     def _dispatch(self, method: str) -> None:
+        path = self._path()
+        upload = method == "POST" and path == "/api/replicas"
         try:
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            if upload and length > MAX_REPLICA_BYTES + 64 * 1024:
+                while length > 0:
+                    length -= len(self.rfile.read(min(length, 65536)) or b"x" * length)
+                raise BadRequest("too_large", 413, message="A replica file is at most 1 MB.")
             body = self._read_body() if method in ("POST", "PATCH") else {}
             handler = getattr(self, f"_route_{method.lower()}")
-            handler(self._path(), body)
+            handler(path, body)
         except json.JSONDecodeError:
-            self._json_response(400, {"error": "the body is not valid JSON"})
+            if upload:
+                self._json_response(422, {"error": "invalid_replica", "message": "not valid JSON"})
+            else:
+                self._json_response(400, {"error": "the body is not valid JSON"})
         except BadRequest as err:
             self._json_response(err.code, {"error": str(err), **err.extra})
 
@@ -2121,13 +2378,33 @@ class MockHandler(BaseHTTPRequestHandler):
                 self._json_response(200, pool)
             else:
                 self._json_response(404, {"error": "pool not found"})
+        elif len(parts) == 4 and parts[:2] in (["api", "drives"], ["api", "pools"]) and parts[3] == "replica":
+            self._export(parts[1][:-1], parts[2], None)
         elif path in ("/api/lab", "/api/state"):
             # /api/state is /mock/state after the app's proxy rewrites it.
             self._json_response(200, self._lab_state())
         elif path == "/api/replicas":
             self._json_response(200, library.listing())
+        elif len(parts) == 3 and parts[:2] == ["api", "replicas"]:
+            rec = library.find(parts[2])
+            if rec is None:
+                self._json_response(404, {"error": "not_found", "message": f"no replica file {parts[2]}"})
+            elif rec.get("doc") is None:
+                self._json_response(422, {"error": "invalid_replica", "message": rec["error"]})
+            else:
+                self._file_response(rec["doc"])
+        elif path == "/api/scenarios":
+            library.refresh()
+            self._json_response(200, copy.deepcopy(library.scenarios))
         else:
             self._json_response(404, {"error": "not found"})
+
+    def _export(self, kind: str, key: str, verdict: Any) -> None:
+        doc = store.export(kind, key, verdict)
+        if doc is None:
+            self._json_response(404, {"error": f"{kind} not found"})
+        else:
+            self._file_response(doc)
 
     def _add(self, body: dict) -> None:
         """POST /api/drives and /api/pools: {"replica": id} or {"preset": key}.
@@ -2150,12 +2427,39 @@ class MockHandler(BaseHTTPRequestHandler):
         else:
             self._json_response(201, added)
 
+    def _post_replica(self, body: dict) -> None:
+        """POST /api/replicas: upload a file, or save a real drive as one."""
+        if "from_drive" in body:
+            doc = replica_from_drive(body["from_drive"], body.get("verdict"))
+            self._json_response(201, library.write_user(doc))
+            return
+        doc = body.get("file", body if "format" in body else None)
+        if doc is None:
+            raise BadRequest("bad_request", 400, message='give {"file": ...} or {"from_drive": ...}')
+        if len(json.dumps(doc).encode("utf-8")) > MAX_REPLICA_BYTES:
+            raise BadRequest("too_large", 413, message="A replica file is at most 1 MB.")
+        try:
+            doc = validate_replica(copy.deepcopy(doc))
+        except InvalidReplica as err:
+            raise BadRequest("invalid_replica", 422, message=str(err)) from None
+        origin = doc["origin"]
+        doc["origin"] = {"type": "uploaded" if origin["type"] == "shipped" else origin["type"]}
+        if origin.get("saved_at") is not None and doc["origin"]["type"] == "saved":
+            doc["origin"]["saved_at"] = origin["saved_at"]
+        self._json_response(201, library.write_user(doc))
+
     def _route_post(self, path: str, body: dict) -> None:
         parts = path.strip("/").split("/")
         if path in ("/api/drives", "/api/pools"):
             self._add(body)
         elif len(parts) == 4 and parts[:2] == ["api", "pools"] and parts[3] in ("vanish", "restore"):
             self._json_response(200, store.set_vanished(parts[2], parts[3] == "vanish"))
+        elif len(parts) == 4 and parts[:2] in (["api", "drives"], ["api", "pools"]) and parts[3] == "scenario":
+            self._json_response(200, store.apply_scenario(parts[1][:-1], parts[2], body.get("id")))
+        elif len(parts) == 4 and parts[:2] in (["api", "drives"], ["api", "pools"]) and parts[3] == "replica":
+            self._export(parts[1][:-1], parts[2], body.get("verdict"))
+        elif path == "/api/replicas":
+            self._post_replica(body)
         else:
             self._json_response(404, {"error": "not found"})
 
