@@ -64,7 +64,7 @@ Both agents appear independently in HA. Your real drives keep reporting normally
 |------|---------|-------------|
 | `--port` | `9099` | Port to listen on |
 | `--host` | `0.0.0.0` | Address to bind |
-| `--token` | *(none)* | Bearer token. When set, every `GET /api/*` request needs `Authorization: Bearer <token>` |
+| `--token` | *(none)* | Bearer token. When set, every `GET /api/*` request except `/api/health` needs `Authorization: Bearer <token>`, as on the real agent |
 | `--no-mdns` | *(off)* | Disable mDNS/Zeroconf advertisement |
 | `--preload` | *(none)* | Comma-separated old preset keys or replica file ids (drives and pools) to load on startup |
 | `--data-dir` | *(none)* | Directory for `mock-drives.json`, which keeps drives, pools and every edit across restarts. When the file has anything in it, `--preload` is skipped. Without the flag the mock keeps everything in memory |
@@ -84,7 +84,7 @@ A replica file is one JSON document, UTF-8, up to 1 MB. A drive replica carries 
 | `name` | yes | The line shown in pickers, and the title when nothing else gives one |
 | `kind` | yes | `ata`, `ata_devstat`, `nvme`, `scsi`, `unsupported` or `zfs_pool`. Picks the scenario list |
 | `description` | yes | One sentence |
-| `origin` | yes | `{"type": "shipped"}`, `{"type": "saved", "saved_at": "..."}` or `{"type": "uploaded"}`. Never a host name |
+| `origin` | yes | `{"type": "shipped"}`, `{"type": "saved", "saved_at": "..."}` or `{"type": "uploaded"}`. Never a host name. Only the read-only folders hold shipped files: a file that comes in by upload is `uploaded` unless it is `saved`, and a card from a user-folder file that says `shipped` (an export dropped in over Samba) reads it as `uploaded` |
 | `order` | no | Position in the list (shipped files) |
 | `preset` | no | The old preset key this file stands for, so `--preload sata_hdd` and `{"preset": ...}` keep working |
 | `meta` | drives | `model`, `serial`, `protocol`, `device_path` |
@@ -147,6 +147,7 @@ Healthy sets every watched counter back to 0 (and SMART health to passed); every
 - File ids are `shipped.<file name>` for the read-only folders and `user.<file name>` for the user folder, without `.json`. `scenarios.json` and files not ending in `.json` are not replicas.
 - A file that does not load (not JSON, the wrong `format`, an unknown `kind`, over 1 MB) is listed with `"valid": false` and an `error`, and is never added.
 - The user folder's status is `ok`, `missing` (no directory) or `read_only` (a test write fails).
+- `legacy.<preset>` is not a file: it is the replica id of a drive or pool carried over from an older mock's store whose old preset has no file in the loaded folders (see Old drives after a restart).
 
 ### Save as replica
 
@@ -163,7 +164,7 @@ The model, firmware and every counter stay. The verdict keeps `state`, `severity
 
 ### Export
 
-`GET /api/drives/{id}/replica` and `GET /api/pools/{name}/replica` hand back a live replica as a file, the way it reads now: every PATCH and scenario included, `origin` kept, `scenario.current` set, no verdict (POST to the same route with `{"verdict": {...}}` to include one). Uploading that file and adding it gives an identical drive.
+`GET /api/drives/{id}/replica` and `GET /api/pools/{name}/replica` hand back a live replica as a file, the way it reads now: every PATCH and scenario included, `origin` kept (`uploaded` for a card from the user folder, unless `saved`), `scenario.current` set, no verdict (POST to the same route with `{"verdict": {...}}` to include one). Uploading that file and adding it gives an identical drive.
 
 ### How drives and pools are served
 
@@ -181,7 +182,7 @@ Adding a replica whose serial is already live appends `-` and 4 hex digits to th
 
 ## Dashboard
 
-The web dashboard is at `http://localhost:<port>/`. No login required: auth only applies to the `GET /api/*` endpoints that HA polls.
+The web dashboard is at `http://localhost:<port>/`. No login required: auth only applies to the `GET /api/*` endpoints that HA polls, and never to `/api/health`.
 
 The picker at the top lists every valid replica file (reload the page to see new files); **+ Add** adds the chosen one.
 
@@ -343,7 +344,7 @@ The mock serves the same API as the real agent. Point the HA integration at it i
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
-| `/api/health` | GET | Yes | The agent's health payload, see below |
+| `/api/health` | GET | No | The agent's health payload, see below. Public even with `--token`, as the real agent's auth middleware leaves it |
 | `/api/drives` | GET | Yes | List all drives: `id`, `device_path`, `model`, `serial`, `protocol`, `readable` |
 | `/api/drives/{id}` | GET | Yes | One drive: the list fields plus `last_updated`, `smart_data`, `device_statistics` and `derived` |
 | `/api/pools` | GET | Yes | The pools that are not vanished, in the agent's shape. 404 while the mock has no pools |
@@ -400,14 +401,14 @@ The agent's `PoolInfo` (`agent/zpool_status.go`). The error totals are the sums 
 
 ### Replica and control routes
 
-Every control route answers under both `/api/...` and `/mock/...`. The dashboard uses `/mock/...`; the SMART Sniffer app's proxy rewrites `/mock/` to `/api/` on the way in, so the mock sees `/api/...`. POST, PATCH and DELETE never ask for the token; a GET under `/api/` does, like every `GET /api/*`.
+Every control route answers under both `/api/...` and `/mock/...`. The dashboard uses `/mock/...`; the SMART Sniffer app's proxy rewrites `/mock/` to `/api/` on the way in, so the mock sees `/api/...`. POST, PATCH and DELETE never ask for the token; a GET under `/api/` does, like every `GET /api/*` but `/api/health`.
 
 | Endpoint | Method | Body | Description |
 |----------|--------|------|-------------|
 | `/mock/state` (or `/api/state`, `/api/lab`) | GET | | Full state: `version`, `drives` and `pools` (each the served payload plus a `lab` block), `presets` (the old keys), `poll_count`, `last_poll`, `port`, `auth`. Only `/mock/state` skips auth |
 | `/api/replicas` | GET | | The replica files: `{"agent": "ok", "folder": {"path", "status"}, "files": [...]}`, see below |
 | `/api/replicas/{file id}` | GET | | One file as stored. 404 unknown, 422 when the file does not load |
-| `/api/replicas` | POST | `{"file": {...}}` | Upload: check the file and write it to the user folder. A shipped `origin` becomes `uploaded`. Answers 201 with its listing entry. 422 `invalid_replica`, 413 `too_large`, 503 `replica_folder_unavailable` |
+| `/api/replicas` | POST | `{"file": {...}}` | Upload: check the file and write it to the user folder. Its `origin` becomes `uploaded`, unless it is `saved` (kept, with `saved_at`). Answers 201 with its listing entry. 422 `invalid_replica`, 413 `too_large`, 503 `replica_folder_unavailable` |
 | `/api/replicas` | POST | `{"from_drive": {...}, "verdict": {...}}` | Save a real drive as a replica (see Save as replica). Answers 201 with its listing entry. 409 `unsupported_drive`, 503 `replica_folder_unavailable` |
 | `/api/scenarios` | GET | | The scenario library, by kind |
 | `/api/drives` (or `/api/pools`) | POST | `{"replica": "shipped.nvme-wear"}` | Add a replica; the file's kind decides drive or pool, on either route. `"name"` names a new pool. Answers 201 `{"id", "kind", "replica"}` (and `"name"` for a pool). 404 unknown file, 422 a file that does not load |
@@ -460,7 +461,7 @@ Each drive and pool in `/api/state` carries `lab`: for drives `preset`, `devstat
 }
 ```
 
-`scenario.current` is the scenario last applied, the file's own `scenario.current` when it was added, or null for drives restored from an older mock's store. `replica` is null for such a drive when no loaded file names its old preset key.
+`scenario.current` is the scenario last applied or the file's own `scenario.current` when it was added. For a drive or pool restored from an older mock's store it is `healthy` when its readings are that scenario's (applying Healthy would change nothing), and null otherwise; `options` still lists every scenario for its kind. `replica` for such a drive is the first loaded file naming its old preset key, or `legacy.<preset>` when none does (the app image ships only the six), with `kind`, `name` (the model) and `description` taken from the drive.
 
 ---
 
@@ -474,6 +475,6 @@ Each drive and pool in `/api/state` carries `lab`: for drives `preset`, `devstat
 
 **Auth mismatch:** if you started with `--token`, the same token must be entered in the HA integration config. The dashboard status bar shows whether auth is on or off.
 
-**Old drives after a restart:** with `--data-dir`, the saved drives come back and `--preload` is skipped. Delete `mock-drives.json` in that directory to start fresh. A store written by an older mock loads too: each drive and pool is matched to the first file naming its old preset key, and keeps every value it had.
+**Old drives after a restart:** with `--data-dir`, the saved drives come back and `--preload` is skipped. Delete `mock-drives.json` in that directory to start fresh. A store written by an older mock (the mock-v080 branch, or app 0.2.12 and before) loads too: each drive and pool is matched to the first file naming its old preset key, and keeps every value it had. When no loaded file names the key (`sata_ssd`, `nvme_usb`, `usb_blocked`, `virtual_disk` and `sas_enterprise` live in `tools/replicas/extra`, which the app image does not ship), it gets a `legacy.<preset>` entry instead and is matched to the file the first time one is loaded. An old ATA drive with no top-level `temperature`, `power_on_time` or `power_cycle_count` gets them from its own attributes 194 (or 190), 9 and 12, so an edit made under the old mock shows.
 
 **A replica file does not appear:** `GET /api/replicas` lists it with `"valid": false` and the reason. Check that the file ends in `.json`, that `format` is `"smart-sniffer-replica"` and `version` is `1`, and that it is under 1 MB.
