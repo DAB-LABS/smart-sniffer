@@ -2,8 +2,8 @@
 """SMART Sniffer Mock Agent: a fake smartha-agent for integration testing.
 
 Serves the same REST API as the real Go agent at v0.8.0 (/api/health,
-/api/drives, /api/drives/{id} with device_statistics and derived, and
-/api/pools) with fully controllable fake data. Every drive and pool comes
+/api/drives, /api/drives/{id} with device_statistics and derived,
+/api/filesystems and /api/pools) with fully controllable fake data. Every drive and pool comes
 from a replica file (tools/replicas/*.json): add one, apply a scenario or
 change its readings in real time, and watch the Home Assistant integration
 react. A built-in web dashboard does the same.
@@ -20,6 +20,7 @@ Usage:
     python3 mock-agent.py --no-mdns             # disable mDNS advertisement
     python3 mock-agent.py --data-dir /data      # keep drives and pools across restarts
     python3 mock-agent.py --preload sata_hdd,nvme,zfs_pool
+    python3 mock-agent.py --preload nvme --extra-fs   # plus /mnt/nas, on no drive
     python3 mock-agent.py --replicas /opt/replicas --user-replicas /share/smart-sniffer/replicas
 
 Requirements: Python 3.9+, stdlib only. The zeroconf package is optional and
@@ -482,6 +483,88 @@ def _parse_errors_line(value: Any) -> int | None:
     return _count(value, "errors")
 
 
+# ── Filesystems ──────────────────────────────────────────────────────────────
+# A drive or pool may carry the filesystems on it, and the mock serves them
+# all on /api/filesystems as the agent's FilesystemInfo list (a bare JSON
+# list, agent/filesystem.go). A record keeps total_bytes, used_bytes and its
+# status; available_bytes and use_percent are computed from them, and an
+# unavailable filesystem is served with zeros, as the agent serves a
+# mountpoint it could not statfs.
+
+FS_STATUSES = ("ok", "unavailable")
+_FS_KEYS = ("id", "uuid", "mountpoint", "device", "fstype", "total_bytes", "used_bytes", "status")
+
+# What --extra-fs adds: a share not on any drive the mock serves.
+EXTRA_FILESYSTEM = {
+    "id": "fs-6e4a5000", "uuid": "6e4a5000-0000-4000-8000-00000000f5e1",
+    "mountpoint": "/mnt/nas", "device": "nas:/export", "fstype": "nfs",
+    "total_bytes": 8_000_000_000_000, "used_bytes": 5_120_000_000_000, "status": "ok",
+}
+
+
+def _fs_percent(used: int, available: int) -> float:
+    """df's percent, used / (used + available), to one decimal as the agent rounds it."""
+    denom = used + available
+    if denom <= 0:
+        return 0.0
+    return float(int(used / denom * 1000 + 0.5)) / 10
+
+
+def fs_payload(fs: dict, unavailable: bool = False, stored: bool = False) -> dict:
+    """One filesystem as GET /api/filesystems lists it.
+
+    unavailable forces the agent's unreadable form (a vanished pool's
+    datasets). stored keeps the bytes of an unavailable one, for a file.
+    """
+    status = "unavailable" if unavailable else fs["status"]
+    out = {"id": fs["id"], "uuid": fs["uuid"], "mountpoint": fs["mountpoint"], "device": fs["device"],
+           "fstype": fs["fstype"], "total_bytes": 0, "used_bytes": 0, "available_bytes": 0,
+           "use_percent": 0.0, "status": status}
+    if status == "ok" or stored:
+        total, used = fs["total_bytes"], fs["used_bytes"]
+        available = max(total - used, 0)
+        out.update(total_bytes=total, used_bytes=used, available_bytes=available,
+                   use_percent=_fs_percent(used, available))
+    return out
+
+
+def _fs_id(fs_uuid: str) -> str:
+    return f"fs-{fs_uuid[:8]}"
+
+
+def _fs_record(item: dict) -> dict:
+    """The stored form of one filesystem from a replica file."""
+    rec = {k: copy.deepcopy(item.get(k)) for k in _FS_KEYS}
+    rec["status"] = rec["status"] or "ok"
+    if not rec["uuid"]:
+        rec["uuid"] = str(uuid.uuid4())
+    if not rec["id"]:
+        rec["id"] = _fs_id(rec["uuid"])
+    return rec
+
+
+def _apply_filesystem(fs: dict, body: dict[str, Any]) -> None:
+    """PATCH /api/filesystems/{id} on one stored filesystem. Validates first."""
+    _check_keys(body, {"used_bytes", "use_percent", "status"})
+    if "used_bytes" in body and "use_percent" in body:
+        raise BadRequest("give used_bytes or use_percent, not both")
+    total, used, status = fs["total_bytes"], fs["used_bytes"], fs["status"]
+    if "used_bytes" in body:
+        used = _count(body["used_bytes"], "used_bytes")
+    elif "use_percent" in body:
+        pct = body["use_percent"]
+        if isinstance(pct, bool) or not isinstance(pct, (int, float)) or not 0 <= pct <= 100:
+            raise BadRequest("use_percent must be a number from 0 to 100")
+        used = int(round(total * pct / 100))
+    if used > total:
+        raise BadRequest(f"used_bytes must not be more than total_bytes ({total})")
+    if "status" in body:
+        if body["status"] not in FS_STATUSES:
+            raise BadRequest(f"status must be one of {', '.join(FS_STATUSES)}")
+        status = body["status"]
+    fs["used_bytes"], fs["status"] = used, status
+
+
 # ── Replica files ────────────────────────────────────────────────────────────
 # Every fake drive and pool comes from a replica file: one JSON document per
 # replica, in the shape the agent serves (meta, smart, devstat for a drive;
@@ -555,6 +638,35 @@ def _check_scenarios(options: Any) -> None:
                 f"scenario {opt['id']}: each step is a patch with a body, or a post of vanish or restore")
 
 
+def _check_filesystems(doc: dict) -> None:
+    """The optional filesystems list: the agent's items, on this drive or pool."""
+    items = doc.get("filesystems")
+    if items is None:
+        return
+    _need(isinstance(items, list), "filesystems must be a list")
+    is_pool = doc["kind"] == "zfs_pool"
+    root = doc["pool"]["name"] if is_pool else doc["meta"]["device_path"]
+    where = f"{root} or {root}/<dataset>" if is_pool else f"{root or 'the drive'} or a partition of it"
+    ids: set[str] = set()
+    for fs in items:
+        _need(isinstance(fs, dict), "each filesystem must be an object")
+        for key in ("mountpoint", "device", "fstype"):
+            _need(isinstance(fs.get(key), str) and fs[key] != "", f"filesystem {key} must be a non-empty string")
+        for key in ("id", "uuid"):
+            _need(fs.get(key) is None or isinstance(fs[key], str), f"filesystem {key} must be a string")
+        dev = fs["device"]
+        on_it = (dev == root or dev.startswith(root + "/")) if is_pool else (root != "" and dev.startswith(root))
+        _need(on_it, f"filesystem {fs['mountpoint']}: device must be {where}")
+        _need(_is_count(fs.get("total_bytes")) and _is_count(fs.get("used_bytes")),
+              "filesystem total_bytes and used_bytes must be whole numbers")
+        _need(fs["used_bytes"] <= fs["total_bytes"],
+              f"filesystem {fs['mountpoint']}: used_bytes is more than total_bytes")
+        _need(fs.get("status", "ok") in FS_STATUSES, f"filesystem status must be one of {', '.join(FS_STATUSES)}")
+        if fs.get("id"):
+            _need(fs["id"] not in ids, f"filesystem id {fs['id']} is listed twice")
+            ids.add(fs["id"])
+
+
 def validate_replica(doc: Any) -> dict:
     """Check a replica document and return it. Raises InvalidReplica."""
     _need(isinstance(doc, dict), "not a replica file: the top level must be a JSON object")
@@ -608,6 +720,7 @@ def validate_replica(doc: Any) -> dict:
               f"devstat.status must be one of {', '.join(DEVSTAT_STATUSES)}")
         if devstat["status"] == "present":
             _need(isinstance(devstat.get("pages"), list), "devstat with status present needs pages")
+    _check_filesystems(doc)
     return doc
 
 
@@ -1040,6 +1153,7 @@ def drive_from_file(file_rec: dict) -> dict:
         "_devstat": _natural_from_file(doc["devstat"]),
     }
     _replica_fields(drive, file_rec)
+    drive["_filesystems"] = [_fs_record(fs) for fs in doc.get("filesystems") or []]
     return drive
 
 
@@ -1060,6 +1174,7 @@ def pool_from_file(file_rec: dict) -> dict:
             shifted = datetime.now(timezone.utc).replace(microsecond=0) - (at - end)
             rec["last_scrub_end"] = shifted.strftime("%Y-%m-%dT%H:%M:%SZ")
     _replica_fields(rec, file_rec)
+    rec["_filesystems"] = [_fs_record(fs) for fs in doc.get("filesystems") or []]
     rec["vanished"] = rec["_scenario"] == "vanished"
     return rec
 
@@ -1519,6 +1634,8 @@ def _record_file(rec: dict, verdict: Any = None) -> dict:
         doc["meta"] = {k: rec[k] for k in ("model", "serial", "protocol", "device_path")}
         doc["smart"] = copy.deepcopy(rec["smart_data"])
         doc["devstat"] = ds
+    if rec.get("_filesystems"):
+        doc["filesystems"] = [fs_payload(fs, stored=True) for fs in rec["_filesystems"]]
     scenario: dict[str, Any] = {"current": rec.get("_scenario")}
     if rec.get("_scenarios_extra"):
         scenario["options"] = copy.deepcopy(rec["_scenarios_extra"])
@@ -1538,6 +1655,9 @@ class DriveStore:
         self.order: list[str] = []
         self.pools: dict[str, dict[str, Any]] = {}    # keyed by pool name
         self.pool_order: list[str] = []
+        # Filesystems on no drive or pool (--extra-fs). Not saved: the flag
+        # adds them again at every start.
+        self.extra_filesystems: list[dict[str, Any]] = []
         self._poll_count = 0
         self._last_poll: float | None = None
         self._persist_path = persist_path
@@ -1609,6 +1729,7 @@ class DriveStore:
                 smart["serial_number"] = serial
             drive["serial"] = serial
             drive["id"] = _make_slug(serial)
+            self._claim_fs_ids(drive)
             self.drives[drive["id"]] = drive
             self.order.append(drive["id"])
             self._save()
@@ -1627,6 +1748,12 @@ class DriveStore:
                     name = f"{base}{n}"
             elif name in self.pools:
                 raise BadRequest(f"pool {name} already exists", 409)
+            # The datasets follow the pool's new name: tank/media on tank2.
+            old = rec["name"]
+            for fs in rec.get("_filesystems") or []:
+                if fs["device"] == old or fs["device"].startswith(old + "/"):
+                    fs["device"] = name + fs["device"][len(old):]
+            self._claim_fs_ids(rec)
             rec["name"] = name
             self.pools[name] = rec
             self.pool_order.append(name)
@@ -1668,6 +1795,54 @@ class DriveStore:
         if added is None or added["kind"] != "pool":
             raise BadRequest(f"unknown preset: {preset_key}")
         return added["id"]
+
+    # ── Filesystems ──
+
+    def _fs_entries(self) -> list[tuple[dict, bool]]:
+        """Every stored filesystem with whether it reads unavailable regardless
+        (a vanished pool's). Drives, then pools, then the extras. Hold self.lock."""
+        out: list[tuple[dict, bool]] = []
+        for d in self.order:
+            out.extend((fs, False) for fs in (self.drives.get(d) or {}).get("_filesystems") or [])
+        for p in self.pool_order:
+            rec = self.pools.get(p) or {}
+            out.extend((fs, bool(rec.get("vanished"))) for fs in rec.get("_filesystems") or [])
+        out.extend((fs, False) for fs in self.extra_filesystems)
+        return out
+
+    def _claim_fs_ids(self, rec: dict) -> None:
+        """Give a new record's filesystems ids no live one has. Hold self.lock."""
+        taken = {fs["id"] for fs, _ in self._fs_entries()}
+        for fs in rec.get("_filesystems") or []:
+            if fs["id"] in taken:
+                fs["uuid"] = str(uuid.uuid4())
+                fs["id"] = _fs_id(fs["uuid"])
+            taken.add(fs["id"])
+
+    def add_extra_filesystem(self, item: dict) -> None:
+        with self.lock:
+            rec = {"_filesystems": [_fs_record(item)]}
+            self._claim_fs_ids(rec)
+            self.extra_filesystems.extend(rec["_filesystems"])
+
+    def filesystem_count(self) -> int:
+        with self.lock:
+            return len(self._fs_entries())
+
+    def served_filesystems(self) -> list[dict]:
+        """GET /api/filesystems: the agent's bare list."""
+        with self.lock:
+            return [fs_payload(fs, gone) for fs, gone in self._fs_entries()]
+
+    def update_filesystem(self, fs_id: str, body: dict[str, Any]) -> dict:
+        """PATCH /api/filesystems/{id}. Validates the whole body before applying it."""
+        with self.lock:
+            for fs, gone in self._fs_entries():
+                if fs["id"] == fs_id:
+                    _apply_filesystem(fs, body)
+                    self._save()
+                    return {"ok": True, "filesystem": fs_payload(fs, gone)}
+        raise BadRequest("filesystem not found", 404)
 
     # ── Drives ──
 
@@ -1778,6 +1953,7 @@ class DriveStore:
             "devstat_default": {k: natural[k] for k in ("status", "reason") if k in natural},
             "devstat_override": copy.deepcopy(override) if isinstance(override, dict) else None,
             "devstat_counts": None,
+            "filesystems": [fs_payload(fs) for fs in d.get("_filesystems") or []],
         }
         pages = natural.get("pages")
         if isinstance(pages, list):
@@ -1831,6 +2007,7 @@ class DriveStore:
             "vanished": bool(rec.get("vanished")),
             "vdev": copy.deepcopy(rec.get("vdev")),
             "devices": copy.deepcopy(rec.get("devices")),
+            "filesystems": [fs_payload(fs, bool(rec.get("vanished"))) for fs in rec.get("_filesystems") or []],
             **_replica_lab(rec),
         }
         return payload
@@ -2409,6 +2586,7 @@ class MockHandler(BaseHTTPRequestHandler):
         endpoints = ["/api/health", "/api/drives", "/api/drives/{id}"]
         with store.lock:
             drive_count = len(store.drives)
+        fs_count = store.filesystem_count()
         health: dict[str, Any] = {
             "status": "ok",
             "version": VERSION,
@@ -2416,8 +2594,11 @@ class MockHandler(BaseHTTPRequestHandler):
             "uptime_seconds": int(time.time() - STARTED_AT),
             "endpoints": endpoints,
             "drives": drive_count,
-            "filesystems": 0,
+            "filesystems": fs_count,
         }
+        # As the agent: /api/filesystems only while there is one to serve.
+        if fs_count:
+            endpoints.append("/api/filesystems")
         if store.pools_enabled():
             endpoints.append("/api/pools")
             health["pools"] = len(store.served_pools())
@@ -2438,6 +2619,7 @@ class MockHandler(BaseHTTPRequestHandler):
             "version": VERSION,
             "drives": store.get_all(),
             "pools": store.all_pools(),
+            "filesystems": store.served_filesystems(),
             "presets": library.preset_keys(),
             "poll_count": poll["count"],
             "last_poll": poll["last"],
@@ -2478,6 +2660,8 @@ class MockHandler(BaseHTTPRequestHandler):
                 self._json_response(200, drive)
             else:
                 self._json_response(404, {"error": "drive not found"})
+        elif path == "/api/filesystems" and store.filesystem_count():
+            self._json_response(200, store.served_filesystems())
         elif path == "/api/pools" and store.pools_enabled():
             self._json_response(200, store.served_pools())
         elif len(parts) == 3 and parts[:2] == ["api", "pools"]:
@@ -2583,6 +2767,8 @@ class MockHandler(BaseHTTPRequestHandler):
                 self._json_response(404, {"error": "not found"})
         elif len(parts) == 3 and parts[:2] == ["api", "pools"]:
             self._json_response(200, store.update_pool(parts[2], body))
+        elif len(parts) == 3 and parts[:2] == ["api", "filesystems"]:
+            self._json_response(200, store.update_filesystem(parts[2], body))
         else:
             self._json_response(404, {"error": "not found"})
 
@@ -2696,6 +2882,9 @@ def build_server(argv: list[str] | None = None) -> tuple[MockHTTPServer, Any, ar
                              "(default: tools/replicas and tools/replicas/extra beside this script)")
     parser.add_argument("--user-replicas", type=str, default="", metavar="DIR",
                         help="Read-write folder for uploaded and saved replica files (default: none)")
+    parser.add_argument("--extra-fs", action="store_true",
+                        help="Also serve /mnt/nas (nfs, nas:/export, about 64%% used), "
+                             "a filesystem on no drive or pool")
     args = parser.parse_args(argv)
 
     # The replica files, then the store with optional persistence.
@@ -2728,6 +2917,9 @@ def build_server(argv: list[str] | None = None) -> tuple[MockHTTPServer, Any, ar
         print(f"[mock] Restored {len(store.drives)} drives and {len(store.pools)} pools "
               "from disk, skipping preload")
 
+    if args.extra_fs:
+        store.add_extra_filesystem(EXTRA_FILESYSTEM)
+
     server = MockHTTPServer((args.host, args.port), MockHandler)
 
     # Set handler class attributes.
@@ -2752,6 +2944,7 @@ def main(argv: list[str] | None = None) -> None:
     print(f"  Auth:       {auth_str}")
     print(f"  Drives:     {len(store.drives)}")
     print(f"  Pools:      {len(store.pools)}")
+    print(f"  Filesystems: {store.filesystem_count()}")
     files = library.listing()
     valid = sum(1 for f in files["files"] if f["valid"])
     print(f"  Replicas:   {valid} files, user folder {files['folder']['path'] or 'none'} "
