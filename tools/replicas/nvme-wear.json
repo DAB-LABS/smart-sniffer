@@ -24,6 +24,10 @@
     }
   },
   "devstat": {"status": "not_applicable"},
+  "filesystems": [
+    {"id": "fs-1d000005", "uuid": "1d000005-0000-4000-8000-000000000005", "mountpoint": "/", "device": "/dev/nvme9n1p2", "fstype": "ext4", "total_bytes": 200000000000, "used_bytes": 194000000000, "available_bytes": 6000000000, "use_percent": 97.0, "status": "ok"},
+    {"id": "fs-1d000006", "uuid": "1d000006-0000-4000-8000-000000000006", "mountpoint": "/home", "device": "/dev/nvme9n1p3", "fstype": "ext4", "total_bytes": 780000000000, "used_bytes": 234000000000, "available_bytes": 546000000000, "use_percent": 30.0, "status": "ok"}
+  ],
   "scenario": {"current": "nvme_wear"},
   "verdict": {
     "state": "MAYBE",

@@ -117,7 +117,9 @@ def test_health_has_the_agents_shape(client):
     assert health["status"] == "ok"
     assert health["version"].startswith("0.8.0")
     assert health["drives"] == 1
-    assert health["endpoints"] == ["/api/health", "/api/drives", "/api/drives/{id}"]
+    # The NVMe replica carries / and /home, so /api/filesystems is advertised.
+    assert health["endpoints"] == ["/api/health", "/api/drives", "/api/drives/{id}", "/api/filesystems"]
+    assert health["filesystems"] == 2
     # No pools yet: the agent with pool status off sends neither key.
     assert "pools" not in health and "pools_status" not in health
     assert not ph.advertises_pools(health)

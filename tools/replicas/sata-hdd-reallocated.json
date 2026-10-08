@@ -35,6 +35,9 @@
     }
   },
   "devstat": {"status": "absent"},
+  "filesystems": [
+    {"id": "fs-1d000003", "uuid": "1d000003-0000-4000-8000-000000000003", "mountpoint": "/srv/media", "device": "/dev/sdw1", "fstype": "ext4", "total_bytes": 2000000000000, "used_bytes": 1820000000000, "available_bytes": 180000000000, "use_percent": 91.0, "status": "ok"}
+  ],
   "scenario": {"current": "reallocated_growing"},
   "verdict": {
     "state": "YES",

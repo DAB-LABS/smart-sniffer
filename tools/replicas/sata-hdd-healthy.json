@@ -35,6 +35,10 @@
     }
   },
   "devstat": {"status": "absent"},
+  "filesystems": [
+    {"id": "fs-1d000001", "uuid": "1d000001-0000-4000-8000-000000000001", "mountpoint": "/", "device": "/dev/sdz1", "fstype": "ext4", "total_bytes": 250000000000, "used_bytes": 100000000000, "available_bytes": 150000000000, "use_percent": 40.0, "status": "ok"},
+    {"id": "fs-1d000002", "uuid": "1d000002-0000-4000-8000-000000000002", "mountpoint": "/data", "device": "/dev/sdz2", "fstype": "ext4", "total_bytes": 1700000000000, "used_bytes": 1394000000000, "available_bytes": 306000000000, "use_percent": 82.0, "status": "ok"}
+  ],
   "scenario": {"current": "healthy"},
   "verdict": {"state": "NO", "severity": "none", "reasons": [], "rules_version": "v0.8.2", "at": "2026-10-06T12:00:00Z"}
 }

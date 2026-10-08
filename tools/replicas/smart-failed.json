@@ -34,6 +34,9 @@
     }
   },
   "devstat": {"status": "absent"},
+  "filesystems": [
+    {"id": "fs-1d00000a", "uuid": "1d00000a-0000-4000-8000-00000000000a", "mountpoint": "/mnt/backup", "device": "/dev/sdx1", "fstype": "ext4", "total_bytes": 2000000000000, "used_bytes": 940000000000, "available_bytes": 1060000000000, "use_percent": 47.0, "status": "ok"}
+  ],
   "scenario": {"current": "smart_failed"},
   "verdict": {
     "state": "YES",

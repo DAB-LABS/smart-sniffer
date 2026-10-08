@@ -25,6 +25,11 @@
       {"name": "MOCK0002", "state": "FAULTED", "read": 12, "write": 0, "cksum": 0}
     ]
   },
+  "filesystems": [
+    {"id": "fs-1d000007", "uuid": "1d000007-0000-4000-8000-000000000007", "mountpoint": "/tank", "device": "tank", "fstype": "zfs", "total_bytes": 4000000000000, "used_bytes": 840000000000, "available_bytes": 3160000000000, "use_percent": 21.0, "status": "ok"},
+    {"id": "fs-1d000008", "uuid": "1d000008-0000-4000-8000-000000000008", "mountpoint": "/tank/media", "device": "tank/media", "fstype": "zfs", "total_bytes": 4000000000000, "used_bytes": 3520000000000, "available_bytes": 480000000000, "use_percent": 88.0, "status": "ok"},
+    {"id": "fs-1d000009", "uuid": "1d000009-0000-4000-8000-000000000009", "mountpoint": "/tank/backups", "device": "tank/backups", "fstype": "zfs", "total_bytes": 4000000000000, "used_bytes": 2200000000000, "available_bytes": 1800000000000, "use_percent": 55.0, "status": "ok"}
+  ],
   "scenario": {"current": "degraded"},
   "verdict": {
     "state": "YES",

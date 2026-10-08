@@ -486,6 +486,9 @@
       }
     ]
   },
+  "filesystems": [
+    {"id": "fs-1d000004", "uuid": "1d000004-0000-4000-8000-000000000004", "mountpoint": "/mnt/archive", "device": "/dev/sdy1", "fstype": "xfs", "total_bytes": 14000000000000, "used_bytes": 9100000000000, "available_bytes": 4900000000000, "use_percent": 65.0, "status": "unavailable"}
+  ],
   "scenario": {"current": "devstat_uncorrectables"},
   "verdict": {
     "state": "YES",
