@@ -1,6 +1,6 @@
 # SMART Sniffer Mock Agent
 
-A fake `smartha-agent` for testing the Home Assistant integration without waiting for real drives to degrade. Serves the same REST API as the real Go agent at v0.8.0 (drives, Device Statistics, Data Written and Data Read, ZFS pools) but with fully controllable fake data and a built-in web dashboard.
+A fake `smartha-agent` for testing the Home Assistant integration without waiting for real drives to degrade. Serves the same REST API as the real Go agent at v0.8.0 (drives, Device Statistics, Data Written and Data Read, filesystems, ZFS pools) but with fully controllable fake data and a built-in web dashboard.
 
 Every fake drive and pool is a **replica**: a JSON file in the shape the agent serves, with a name, a kind and a description. Add a replica, pick a scenario or edit any reading, and watch Home Assistant react.
 
@@ -36,6 +36,9 @@ python3 tools/mock-agent.py --port 9100 --preload sata_hdd,sata_hdd_devstat,sata
 # Keep drives, pools and your edits across restarts
 python3 tools/mock-agent.py --port 9100 --data-dir ./mock-data --preload sata_hdd_devstat,zfs_pool
 
+# Plus a filesystem on no drive (/mnt/nas), for the leftover filesystem card
+python3 tools/mock-agent.py --port 9100 --preload sata_hdd,nvme,zfs_pool --extra-fs
+
 # Disable mDNS (useful if the real agent is already advertising)
 python3 tools/mock-agent.py --port 9100 --no-mdns --preload sata_hdd,nvme
 ```
@@ -70,6 +73,7 @@ Both agents appear independently in HA. Your real drives keep reporting normally
 | `--data-dir` | *(none)* | Directory for `mock-drives.json`, which keeps drives, pools and every edit across restarts. When the file has anything in it, `--preload` is skipped. Without the flag the mock keeps everything in memory |
 | `--replicas DIR` | `tools/replicas` and `tools/replicas/extra` beside the script | A read-only folder of replica files. Repeat the flag for more than one. Giving it at all replaces the default |
 | `--user-replicas DIR` | *(none)* | The read-write folder where uploaded and saved replicas go. Without it, uploads and saves are refused |
+| `--extra-fs` | *(off)* | Also serve `/mnt/nas` on device `nas:/export` (`nfs`, 8 TB, about 64 % used), a filesystem on no drive or pool. Not saved with `--data-dir`: the flag adds it again, as the file has it, at every start |
 
 ---
 
@@ -91,10 +95,42 @@ A replica file is one JSON document, UTF-8, up to 1 MB. A drive replica carries 
 | `smart` | drives | The agent's `smart_data` |
 | `devstat` | drives | The agent's `device_statistics` (`status`, and `pages` when present) |
 | `pool` | pools | `name`, `state`, `status`, `action`, `data_errors`, the scan fields, `vdev` and `devices` (every disk, with `state`, `read`, `write`, `cksum`) |
+| `filesystems` | no | The filesystems on this drive or pool, each in the agent's `/api/filesystems` item shape. See Filesystems below |
 | `scenario` | no | `{"current": "<id>"}`, and optionally `"options": [...]`: extra scenarios for this file only, in the library's shape |
 | `verdict` | no | The verdict when the file was written: `state`, `severity`, `reasons`, `rules_version`, `at` |
 
 `derived` is never stored: the mock computes it from the data, the way the agent does. The full example is `tools/replicas/smart-failed.json`.
+
+### Filesystems
+
+A replica may carry `filesystems`, a list of the agent's `/api/filesystems` items: `id`, `uuid`, `mountpoint`, `device`, `fstype`, `total_bytes`, `used_bytes`, `available_bytes`, `use_percent` and `status` (`ok` or `unavailable`).
+
+```json
+"filesystems": [
+  {"id": "fs-1d000005", "uuid": "1d000005-0000-4000-8000-000000000005", "mountpoint": "/",
+   "device": "/dev/nvme9n1p2", "fstype": "ext4", "total_bytes": 200000000000, "used_bytes": 194000000000,
+   "available_bytes": 6000000000, "use_percent": 97.0, "status": "ok"}
+]
+```
+
+- `device` is on the replica's own device: on a drive it starts with `meta.device_path` (the drive's `/dev/sdx` has `/dev/sdx1`, `/dev/nvme9n1` has `/dev/nvme9n1p2`); on a pool it is the pool name or `<pool>/<dataset>`, with `fstype` `zfs`. A file with a filesystem on another device does not load.
+- `mountpoint`, `device`, `fstype`, `total_bytes` and `used_bytes` are required, and `used_bytes` is at most `total_bytes`. `status` defaults to `ok`. A missing `uuid` is made up when the replica is added, and a missing `id` is `fs-` and the first 8 characters of the uuid, as the agent makes it.
+- `available_bytes` and `use_percent` are not read: the mock computes them, available as total less used and the percent as used / (used + available) to one decimal, the agent's df rule.
+- An `unavailable` filesystem is served the way the agent serves a mountpoint it cannot read: every byte count and the percent 0. The file keeps its `total_bytes` and `used_bytes` (an export writes them too), so setting it back to `ok` shows them again.
+- A second copy of a replica gets new ids for any that are already live. A second pool from a file (`tank2`) has its datasets renamed with it (`tank2/media`). The datasets of a vanished pool read `unavailable` until it is restored.
+
+The six shipped files carry these:
+
+| File id | Filesystems |
+|---------|-------------|
+| `shipped.sata-hdd-healthy` | `/` on `/dev/sdz1` at 40 %, `/data` on `/dev/sdz2` at 82 % |
+| `shipped.sata-hdd-reallocated` | `/srv/media` on `/dev/sdw1` at 91 % |
+| `shipped.sata-hdd-devstat-uncorrectables` | `/mnt/archive` on `/dev/sdy1` (`xfs`), `unavailable` |
+| `shipped.nvme-wear` | `/` on `/dev/nvme9n1p2` at 97 %, `/home` on `/dev/nvme9n1p3` at 30 % |
+| `shipped.zfs-pool-degraded` | `tank` at 21 %, `tank/media` at 88 %, `tank/backups` at 55 % |
+| `shipped.smart-failed` | `/mnt/backup` on `/dev/sdx1` at 47 % |
+
+An old preset key gets its file's filesystems (`--preload sata_hdd` has `/` and `/data`). The extra replicas carry none. A drive saved as a replica from a real drive has none either: the agent does not say which filesystems are on which drive.
 
 ### The shipped replicas
 
@@ -171,6 +207,8 @@ The model, firmware and every counter stay. The verdict keeps `state`, `severity
 `device_statistics` and `derived` are computed the way the agent computes them (`agent/devstat.go`): NVMe volumes are data units × 512,000; an ATA drive with Device Statistics present uses Logical Sectors Written / Read × the logical block size; an ATA drive without them falls back to an allowlisted vendor attribute (with the same 512-byte, drive database, 1 % agreement and rate checks) or is omitted with the agent's reason. Edit the underlying numbers and `derived` follows.
 
 The real agent reports `off` with reason `os` on macOS and `off` with reason `config` when Device Statistics are turned off in its config. To see either, set it on any drive with `PATCH /api/drives/{id}/devstat {"status": "off", "reason": "os"}`; it is saved with the drive.
+
+Filesystems are served on `/api/filesystems` as one bare list, the agent's shape: the drives' in drive order, then the pools', then the one `--extra-fs` adds. `/api/health` reports their count in `filesystems` and lists `/api/filesystems` in `endpoints` while there is at least one, as an agent with filesystems configured does; with none, the count is 0, the endpoint is not listed and `/api/filesystems` answers 404, as on an agent with none configured. The integration only asks for the list when the count is above 0. Removing a drive or pool removes its filesystems.
 
 A pool is not a drive: it is kept in its own collection (saved with `--data-dir` too), and it only ever appears on `/api/pools`. Once a pool exists, `/api/health` lists `/api/pools` in `endpoints` and reports `pools` and `pools_status: "ok"`, as an agent with pool status on does. With no pools at all, the mock is an agent with pool status off: no endpoint, no keys, `/api/pools` answers 404. A second pool from the same file is named `tank2`, and so on.
 
@@ -288,6 +326,12 @@ The status bar at the top shows the drive and pool counts, the HA poll count and
 2. Set **Data Written (TB)** to `12.5` (or `PATCH /api/drives/{id}/derived {"host_writes_tb": 12.5}`). Wait one poll.
 3. HA shows 12.5 TB. The source does not change.
 
+### Test 12: Disk usage
+
+1. Start with `--preload sata_hdd,nvme,zfs_pool,sata_hdd_devstat --extra-fs`. HA's Filesystems device shows eight usage sensors plus `/mnt/nas` at 64 %; `/mnt/archive` is unavailable.
+2. Find an id in `GET /api/filesystems`, then `PATCH /api/filesystems/{id} {"use_percent": 99}`. Wait one poll. The sensor shows 99 %.
+3. `{"status": "unavailable"}` makes it unavailable; `{"status": "ok"}` brings back the last reading.
+
 ---
 
 ## Attribute Reference
@@ -347,6 +391,7 @@ The mock serves the same API as the real agent. Point the HA integration at it i
 | `/api/health` | GET | No | The agent's health payload, see below. Public even with `--token`, as the real agent's auth middleware leaves it |
 | `/api/drives` | GET | Yes | List all drives: `id`, `device_path`, `model`, `serial`, `protocol`, `readable` |
 | `/api/drives/{id}` | GET | Yes | One drive: the list fields plus `last_updated`, `smart_data`, `device_statistics` and `derived` |
+| `/api/filesystems` | GET | Yes | Every filesystem, in the agent's shape. 404 while the mock has none |
 | `/api/pools` | GET | Yes | The pools that are not vanished, in the agent's shape. 404 while the mock has no pools |
 | `/` | GET | No | Web dashboard |
 
@@ -357,13 +402,13 @@ The replica and control routes below are the mock's own.
 ```json
 {
   "status": "ok", "version": "0.8.0-mock", "os": "mock", "uptime_seconds": 42,
-  "endpoints": ["/api/health", "/api/drives", "/api/drives/{id}", "/api/pools"],
-  "drives": 4, "filesystems": 0, "pools": 1, "pools_status": "ok",
+  "endpoints": ["/api/health", "/api/drives", "/api/drives/{id}", "/api/filesystems", "/api/pools"],
+  "drives": 4, "filesystems": 7, "pools": 1, "pools_status": "ok",
   "mock": true, "hostname": "labhost", "port": 9100, "auth_enabled": false, "drive_count": 4
 }
 ```
 
-The keys up to `pools_status` are the real agent's (`healthResponse` in `agent/main.go`). `/api/pools`, `pools` and `pools_status` are there only while the mock has at least one pool; `pools` counts the ones served. The last five keys are not in the real agent: they are for the app's Control Center and the dashboard.
+The keys up to `pools_status` are the real agent's (`healthResponse` in `agent/main.go`). `filesystems` counts every filesystem, unavailable ones included, and `/api/filesystems` is listed only while that is above 0. `/api/pools`, `pools` and `pools_status` are there only while the mock has at least one pool; `pools` counts the ones served. The last five keys are not in the real agent: they are for the app's Control Center and the dashboard.
 
 ### `device_statistics` and `derived`
 
@@ -385,6 +430,21 @@ The keys up to `pools_status` are the real agent's (`healthResponse` in `agent/m
 
 Each of `host_writes` and `host_reads` is either `{"bytes", "source"}` (plus `attribute_id` and `attribute_name` when `source` is `ata_attribute`) or replaced by `host_writes_omitted` / `host_reads_omitted` with the agent's reason: `no_source`, `device_statistics_unavailable`, `entry_invalid`, `block_size`, `not_in_database`, `excluded_model`, `power_on_hours_unknown`, `rate_bound`, `candidates_disagree` or `overflow`.
 
+### `/api/filesystems`
+
+```json
+[
+  {"id": "fs-1d000005", "uuid": "1d000005-0000-4000-8000-000000000005", "mountpoint": "/",
+   "device": "/dev/nvme9n1p2", "fstype": "ext4", "total_bytes": 200000000000, "used_bytes": 194000000000,
+   "available_bytes": 6000000000, "use_percent": 97.0, "status": "ok"},
+  {"id": "fs-1d000004", "uuid": "1d000004-0000-4000-8000-000000000004", "mountpoint": "/mnt/archive",
+   "device": "/dev/sdy1", "fstype": "xfs", "total_bytes": 0, "used_bytes": 0,
+   "available_bytes": 0, "use_percent": 0.0, "status": "unavailable"}
+]
+```
+
+The agent's `FilesystemInfo` (`agent/filesystem.go`): a bare list, not wrapped in an object. The integration's coordinator stores it as is under `_filesystems`.
+
 ### `/api/pools`
 
 ```json
@@ -405,7 +465,7 @@ Every control route answers under both `/api/...` and `/mock/...`. The dashboard
 
 | Endpoint | Method | Body | Description |
 |----------|--------|------|-------------|
-| `/mock/state` (or `/api/state`, `/api/lab`) | GET | | Full state: `version`, `drives` and `pools` (each the served payload plus a `lab` block), `presets` (the old keys), `poll_count`, `last_poll`, `port`, `auth`. Only `/mock/state` skips auth |
+| `/mock/state` (or `/api/state`, `/api/lab`) | GET | | Full state: `version`, `drives` and `pools` (each the served payload plus a `lab` block), `filesystems` (as `/api/filesystems` serves them), `presets` (the old keys), `poll_count`, `last_poll`, `port`, `auth`. Only `/mock/state` skips auth |
 | `/api/replicas` | GET | | The replica files: `{"agent": "ok", "folder": {"path", "status"}, "files": [...]}`, see below |
 | `/api/replicas/{file id}` | GET | | One file as stored. 404 unknown, 422 when the file does not load |
 | `/api/replicas` | POST | `{"file": {...}}` | Upload: check the file and write it to the user folder. Its `origin` becomes `uploaded`, unless it is `saved` (kept, with `saved_at`). Answers 201 with its listing entry. 422 `invalid_replica`, 413 `too_large`, 503 `replica_folder_unavailable` |
@@ -427,6 +487,7 @@ Every control route answers under both `/api/...` and `/mock/...`. The dashboard
 | `/api/pools/{name}/vanish` | POST | | Take the pool out of `/api/pools`, keeping it in the store |
 | `/api/pools/{name}/restore` | POST | | Bring a vanished pool back |
 | `/api/pools/{name}` | DELETE | | Remove the pool for good. With no pools left, pool status is off again |
+| `/api/filesystems/{id}` | PATCH | `{"use_percent": 95}` | Change one filesystem, on a drive, a pool or from `--extra-fs`: `used_bytes`, or `use_percent` (0 to 100, turned into used bytes of its total; not both), and/or `status` (`ok` or `unavailable`). `available_bytes` and `use_percent` are computed again. Answers `{"ok", "filesystem"}` with the item as `/api/filesystems` serves it. 400 for a bad body (nothing is changed), 404 for an unknown id |
 
 Bad bodies get a 400 with an `error` text; an unknown drive or pool gets a 404. The replica routes answer errors as `{"error": "<code>", "message": "..."}`.
 
@@ -449,7 +510,7 @@ Shipped files come first in their `order` (files with no order after them, by na
 
 ### The `lab` block
 
-Each drive and pool in `/api/state` carries `lab`: for drives `preset`, `devstat_default`, `devstat_override` and `devstat_counts`; for pools `preset`, `vanished`, `vdev` and `devices` (every disk); and for both:
+Each drive and pool in `/api/state` carries `lab`: for drives `preset`, `devstat_default`, `devstat_override` and `devstat_counts`; for pools `preset`, `vanished`, `vdev` and `devices` (every disk); for both `filesystems` (its own, as `/api/filesystems` serves them) and:
 
 ```json
 "lab": {

@@ -568,10 +568,10 @@ def _apply_filesystem(fs: dict, body: dict[str, Any]) -> None:
 # ── Replica files ────────────────────────────────────────────────────────────
 # Every fake drive and pool comes from a replica file: one JSON document per
 # replica, in the shape the agent serves (meta, smart, devstat for a drive;
-# pool for a pool), with a name, a kind and a description. The files live in
-# read-only folders (--replicas, shipped with the app) and one read-write
-# folder (--user-replicas, where uploads and saved drives go). See
-# docs/mock-agent.md for the format.
+# pool for a pool; optionally the filesystems on it), with a name, a kind
+# and a description. The files live in read-only folders (--replicas,
+# shipped with the app) and one read-write folder (--user-replicas, where
+# uploads and saved drives go). See docs/mock-agent.md for the format.
 
 REPLICA_FORMAT = "smart-sniffer-replica"
 REPLICA_VERSION = 1
