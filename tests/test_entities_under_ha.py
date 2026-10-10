@@ -195,6 +195,19 @@ def test_the_listener_adds_new_entities_once():
     ]
 
 
+def test_pool_devices_are_named_for_their_host():
+    """Two hosts with an rpool must not collide (GH #50): the pool device
+    carries the host the way the Disk Usage device does."""
+    data = golden_payload()
+    _, added = _setup(data)
+    pool_entities = [e for e in added["sensor"] + added["binary_sensor"]
+                     if e.unique_id.startswith(f"{ENTRY_ID}_zpool_")]
+    assert pool_entities
+    names = {e.device_info["name"] for e in pool_entities}
+    assert all(name.endswith(" (fixturehost)") for name in names), names
+    assert "ZFS pool oldpool (fixturehost)" in names
+
+
 def test_a_failing_listener_does_not_raise(caplog):
     data = golden_payload()
     coord, _ = _setup(data)

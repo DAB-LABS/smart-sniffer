@@ -2,6 +2,23 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.8.1 -- 2026-10-03
+
+**Integration only.** Update through HACS; no agent update.
+
+### Changed
+- **ZFS pool devices are named for their host** -- "ZFS pool rpool (pve-nas)"
+  instead of "ZFS pool rpool", the same way the Disk Usage device is. Two
+  machines with a pool of the same name no longer look identical in the device
+  list, and new pool entities get the host in their ids instead of a "_2"
+  suffix. Reported by @Telejunky and @spry-salt in
+  [#50](https://github.com/DAB-LABS/smart-sniffer/issues/50).
+
+### Upgrade notes
+- Existing pool devices pick up the new name on the next restart. Existing
+  entity ids stay as they are; rename them from the entity settings if you
+  want the host in them.
+
 ## v0.8.0 -- 2026-10-03
 
 **Agent, integration and installers.** Update the integration through HACS,
