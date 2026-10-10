@@ -18,6 +18,12 @@ The most valuable contribution you can make is a `smartctl` dump from a drive we
 sudo smartctl -a --json /dev/sdX > my-drive-dump.json
 ```
 
+For a SATA drive, also attach the Device Statistics log, which is what Data Written and the Attention gap-fill read:
+
+```bash
+sudo smartctl --json -i -l devstat /dev/sdX > my-drive-devstat.json
+```
+
 Attach the JSON file to an issue or PR. Feel free to redact the serial number if you prefer. The fields we care about most are the attribute names and the JSON structure, not identifying information.
 
 See [docs/smart-attribute-name-variants.md](docs/smart-attribute-name-variants.md) for the current mapping and known gaps.
@@ -51,7 +57,11 @@ python3 tools/mock-agent.py --port 9100 --preload sata_hdd,nvme,usb_blocked
 | `agent/main.go` | HTTP server, smartctl execution, caching, mDNS |
 | `agent/config.go` | Config loading (YAML + CLI flags) |
 | `custom_components/smart_sniffer/attention.py` | Attention state classification logic |
-| `custom_components/smart_sniffer/sensor.py` | All sensor entities + extraction |
+| `agent/devstat.go` | Device Statistics call, the skip table, Data Written and Data Read derivation |
+| `custom_components/smart_sniffer/devstat.py` | Device Statistics merge, gap-fill readings, announcements (no HA imports) |
+| `custom_components/smart_sniffer/entity_plan.py` | Which entities a payload calls for; adds new drives, pools and filesystems without a reload |
+| `custom_components/smart_sniffer/extract.py` | Reading values out of a drive payload |
+| `custom_components/smart_sniffer/sensor.py` | Sensor entities (values come from extract.py) |
 | `custom_components/smart_sniffer/coordinator.py` | Data polling + notification lifecycle |
 | `custom_components/smart_sniffer/config_flow.py` | HA config flow + Zeroconf discovery |
 
@@ -59,8 +69,8 @@ python3 tools/mock-agent.py --port 9100 --preload sata_hdd,nvme,usb_blocked
 
 1. Fork the repo and create a branch from `main`
 2. Make your changes
-3. Test against the mock agent if touching the integration
-4. Test with `go build` if touching the agent
+3. Run `pip install -r requirements_test.txt && pytest tests/` if touching the integration, and test against the mock agent for anything the tests do not cover
+4. Run `cd agent && gofmt -l . && go test ./...` if touching the agent
 5. Open a PR with a clear description of what and why
 
 Keep PRs focused — one feature or fix per PR. If you're planning something large, open an issue first to discuss the approach.
