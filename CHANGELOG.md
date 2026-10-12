@@ -2,24 +2,54 @@
 
 All notable changes to SMART Sniffer are documented here.
 
-## Unreleased
+## v0.8.2 -- 2026-10-12
+
+**Mock agent and docs only. No agent update needed.** The integration is
+unchanged apart from its version number; take the HACS update so the versions
+match, but there is nothing new on that side.
+
+This release is for the SMART Sniffer app 0.3.0, which downloads the mock agent
+and its replica files from it, and for anyone who tests the integration with
+`tools/mock-agent.py`.
 
 ### Behind the scenes
+- **The mock agent speaks the v0.8.0 agent API.** Every drive carries
+  `device_statistics` and `derived`, worked out the way the agent does it, a
+  ZFS pool is served on `/api/pools`, and `/api/health` has the agent's shape.
+  It also takes over what the app's own copy had (`--data-dir`, the write
+  routes, its own mDNS name), so the app no longer carries one.
 - **The mock agent's drives and pools are replica files.** Each fake drive or
-  pool in `tools/mock-agent.py` now comes from a JSON file in
-  `tools/replicas/`, in the shape the agent serves, with a name, a kind and a
-  description. Six ship with the SMART Sniffer app; the other old presets are
-  in `tools/replicas/extra/`. The old preset keys still work with `--preload`
-  and `POST /api/drives`.
-- **Scenarios, upload, save and export for replicas.** New mock routes list
-  the files, add one by id, apply a named scenario (from
+  pool now comes from a JSON file in `tools/replicas/`, in the shape the agent
+  serves, with a name, a kind and a description. Six ship with the SMART
+  Sniffer app; the other old presets are in `tools/replicas/extra/`. The old
+  preset keys still work with `--preload` and `POST /api/drives`.
+- **Scenarios, upload, save and export for replicas.** `GET /api/replicas`
+  lists the files, and a file dropped into the user folder shows up without a
+  restart. New routes add a file by id, apply a named scenario (from
   `tools/replicas/scenarios.json`), upload a file, save a real drive as a
   replica with its serial and WWN replaced, and export a live replica as a
-  file. New flags `--replicas` and `--user-replicas` choose the folders. See
-  `docs/mock-agent.md`.
+  file. New flags `--replicas` and `--user-replicas` choose the folders.
+- **Filesystems in the mock.** A replica can carry the filesystems on its
+  device, served on `/api/filesystems` in the agent's shape and counted in
+  `/api/health`. `PATCH /api/filesystems/{id}` changes used space or status,
+  and `--extra-fs` adds `/mnt/nas`, a filesystem on no drive. The six shipped
+  files carry filesystems in every state the app's page draws, including one
+  that cannot be read.
+- **`/api/health` answers without the token**, as on the real agent, so health
+  checks work against a mock started with `--token`.
+- **Stores from older mocks load fully.** A store written by the mock in app
+  0.2.12 keeps every drive: one whose preset is no longer shipped gets a
+  `legacy.<preset>` entry, a drive whose readings match its Healthy scenario
+  gets that scenario, and ATA drives get their temperature, power-on time and
+  power cycle count from their own attribute table.
+- **A file that came in by upload is never marked shipped**, including an
+  export dropped into the user folder by hand.
 - **Pool replicas name their disks `MOCK0001` and `MOCK0002`**, and the Device
   Statistics drive's serial is `MOCK-DS-9JG0X1`. Stores saved by older mocks
   load unchanged.
+- **Docs.** `docs/mock-agent.md` covers the replica format, the shipped files,
+  scenarios, folders, filesystems and every route. `llms.txt` describes the
+  app's Control Center instead of the Test Lab.
 
 ## v0.8.1 -- 2026-10-03
 
