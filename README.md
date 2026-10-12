@@ -603,6 +603,8 @@ Drive-specific `smartctl -a --json` output samples are especially welcome — th
 - [x] Integration: new drives, pools and filesystems appear without a reload -- shipped v0.8.0
 - [x] Installers: wait up to 90 s for the agent's first drive pass -- shipped v0.8.0 (GH #50)
 - [x] Integration: ZFS pool devices named for their host -- shipped v0.8.1 (GH #50)
+- [x] Mock agent: replica files (drives and pools in JSON, with scenarios and your own replica folder) and filesystems, for testing without real drives -- shipped v0.8.2
+- [x] HAOS App: the Control Center -- this machine's drives, your other agents and replicas on one page, judged by the integration's rules -- shipped in App v0.3.0
 - [ ] Listed in the HACS default store (submitted, awaiting review)
 - [ ] Integration: optional area-on-setup (choose an area once and apply it to all of an agent's drives)
 - [x] Integration: split consolidated wear-leveling / uncorrectable / pending-sector sensors into separate diagnostic entities when a drive reports multiple variants -- shipped v0.5.14
