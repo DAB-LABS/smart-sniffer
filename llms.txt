@@ -98,7 +98,8 @@ companion HAOS add-on: https://github.com/DAB-LABS/smart-sniffer-app
   scripts (install.sh, install.ps1), and all project documentation (docs/).
 - [smart-sniffer-app](https://github.com/DAB-LABS/smart-sniffer-app): HAOS add-on.
   Runs the agent inside Home Assistant OS to monitor the local HAOS boot drive.
-  Includes a Test Lab with simulated drives and a real-time web UI.
+  Includes the Control Center page, which shows this machine's drives, replicas
+  (fake drives for testing) and field agents on other network machines.
 
 ## Documentation
 
