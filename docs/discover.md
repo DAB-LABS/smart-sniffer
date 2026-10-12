@@ -31,7 +31,7 @@ Discovery runs in three phases:
 
 ### Phase 1: Standard scan
 
-Runs `smartctl --scan-open` (or `--scan` as fallback) to find all drives the OS knows about. For each drive, it tests whether SMART data is readable using the reported protocol.
+Runs `smartctl --scan-open` (or `--scan` as fallback) to find all drives the OS knows about. For each drive, it tests whether SMART data is readable using the reported protocol. Both scans have the same time limits as the running agent: 600 s for `--scan-open` and 60 s for `--scan`. A `--scan-open` that times out falls back to `--scan`; a `--scan` that times out ends discovery with an error (v0.8.0). Discovery does not test the Device Statistics log.
 
 ### Phase 2: Platform-specific probing
 
@@ -41,7 +41,7 @@ QNAP is detected via `/etc/config/qpkg.conf` or `/sbin/get_hd_smartinfo`. On QNA
 
 ### Phase 3: SAT fallback testing
 
-For any drive where the initial protocol (usually SCSI) fails to return SMART data, discovery automatically retries with SAT (SCSI-to-ATA Translation). NAS devices commonly report SATA drives as SCSI through their HBA controllers -- SAT is the fix.
+For any drive where the initial protocol (usually SCSI) fails to return SMART data, discovery automatically retries with SAT (SCSI-to-ATA Translation). NAS devices commonly report SATA drives as SCSI through their HBA controllers -- SAT is the fix. Since v0.8.0 the running agent remembers a clean SAT result for a drive, through standby and rescans, so later polls go straight to SAT instead of a failed SCSI read followed by a retry.
 
 ## Example output
 

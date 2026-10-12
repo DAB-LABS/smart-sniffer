@@ -70,7 +70,7 @@ Before evaluating any attributes, the system checks whether the drive returned u
 
 If none of these conditions are met → state is **UNSUPPORTED**.
 
-This handles USB enclosures that block SMART passthrough, drives where smartctl times out, and protocols we don't yet support (SAS/SCSI).
+This handles USB enclosures that block SMART passthrough, drives where smartctl times out, and SAS/SCSI drives that return no health page.
 
 ---
 
@@ -106,7 +106,7 @@ These indicate early degradation but don't necessarily mean data has been lost y
 
 #### Device Statistics fill gaps (v0.8.0+)
 
-Some drives keep a count in their Device Statistics log that their SMART attribute table does not show: a WDC Ultrastar without attribute 187 still counts reported uncorrectable errors there. When the table has no attribute 187 (or 5, or no usable wear attribute), SMART Sniffer reads Reported Uncorrectable Errors (or Reallocated Sector Count, or SSD Wear Percent Used) from the log instead, and the reason says so: "Reported Uncorrectable Errors: 18 (expected 0; from device statistics)". Thresholds apply as usual. The first time this turns a drive to attention you get one notification, even if it is the first poll after an upgrade. Run a long self-test (`smartctl -t long`); if it passes and the count does not grow, set the threshold to the current reading to accept it.
+Some drives keep a count in their Device Statistics log that their SMART attribute table does not show: a WDC Ultrastar without attribute 187 still counts reported uncorrectable errors there. When the table has no attribute 187 (or 5, or no usable wear attribute), SMART Sniffer reads Reported Uncorrectable Errors (or Reallocated Sector Count, or SSD Wear Percent Used) from the log instead, and the reason says so: "Reported Uncorrectable Errors: 18 (expected 0; from device statistics)". Thresholds apply as usual. The first time this turns a drive to attention you get one notification, even if it is the first poll after an upgrade. Run a long self-test (`smartctl -t long`); if it passes and the count does not grow, set the threshold to the current reading to accept it. The Reported Uncorrectable Errors and Reallocated Sector Count sensors keep their table value (unknown when the table has no row) and show the log's count as the `device_statistics_count` or `device_statistics_logical_sectors` attribute; their icon does not change for a gap-filled reason. Turning Device Statistics off removes these reasons, which can clear the state and dismiss the notification.
 
 Data Written and Data Read keep long-term statistics as a `total`. The long-term graph starts at zero on the entity's first day, not at the drive's lifetime total, and if short-term statistics are purged the sum restarts at zero. A change of source (for example turning Device Statistics off) shows as one step, not a dip.
 
@@ -153,7 +153,7 @@ The coordinator (`coordinator.py`) evaluates attention after every poll and mana
 
 | Previous state | New state | Action |
 |---|---|---|
-| _(first poll)_ | any | Record baseline, **no notification** (avoids spam on HA restart) |
+| _(first poll)_ | any | Record baseline, **no notification** (avoids spam on HA restart). Exception (v0.8.0): a drive whose reasons include one ending "from device statistics" that was never announced for it notifies once, with the line "First reading from this drive's Device Statistics." The record is kept per drive and reading across restarts. |
 | `NO` | `MAYBE` | Fire ⚠️ WARNING notification |
 | `NO` | `YES` | Fire 🔴 CRITICAL notification |
 | `MAYBE` | `YES` | Update notification → escalate to CRITICAL |
@@ -211,7 +211,7 @@ Pools are evaluated separately from drives. Each pool has a **Problem** binary s
 
 The `status:` and `action:` text from `zpool status` is shown as attributes but never counts on its own, so "Some supported and requested features are not enabled" does not raise an alert.
 
-A notification fires when a pool becomes unhealthy, updates when the reasons change, and dismisses when the pool recovers. A pool that is missing when Home Assistant starts notifies; a pool that is already unhealthy at start turns its Problem sensor on but does not notify until something changes. If the agent cannot read `zpool`, pool entities go unavailable and nothing is notified.
+A notification fires when a pool becomes unhealthy, updates when the reasons change, and dismisses when the pool recovers. A pool that is missing when Home Assistant starts notifies; a pool that is already unhealthy at start turns its Problem sensor on but does not notify until something changes. If the agent cannot read `zpool`, pool entities go unavailable and nothing is notified. The notification states each error count once: when a single disk carries the whole pool total, only the disk line shows it (v0.8.0). Pool devices are named "ZFS pool <name> (<host>)" so two hosts with the same pool name stay apart (v0.8.1).
 
 ---
 
