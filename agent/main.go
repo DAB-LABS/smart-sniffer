@@ -386,14 +386,14 @@ func preflightScanDrives(smartctlPath string) (drives []string, timedOut bool, e
 	// Check the output text first (smartctl may exit 0 but still warn),
 	// then fall back to the generic exec error.
 	if containsPermissionError(outStr) {
-		return nil, false, fmt.Errorf(`ERROR: smartctl requires elevated privileges to read drive data.
+		return nil, false, fmt.Errorf(`smartctl requires elevated privileges to read drive data.
 
 Run the agent with sufficient permissions:
   Linux/macOS:  sudo ./smartha-agent
   Windows:      Run as Administrator`)
 	}
 	if err != nil {
-		return nil, false, fmt.Errorf("ERROR: smartctl --scan failed: %v\nOutput: %s", err, outStr)
+		return nil, false, fmt.Errorf("smartctl --scan failed: %v\nOutput: %s", err, outStr)
 	}
 
 	drives = parseScanOutput(outStr)

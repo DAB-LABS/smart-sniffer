@@ -178,10 +178,63 @@ func TestResolveSmartctlConfiguredInvalidNothingElse(t *testing.T) {
 		t.Fatal("want an error when nothing is found")
 	}
 	msg := err.Error()
-	for _, want := range []string{"smartctl not found in PATH or known locations", `smartctl_path in config was not used: "/nope/smartctl": file not found.`, "set smartctl_path in config.yaml"} {
+	for _, want := range []string{"smartctl not found in PATH or known locations", `smartctl_path "/nope/smartctl" in config was not used: file not found.`, "set smartctl_path in config.yaml"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("error lacks %q:\n%s", want, msg)
 		}
+	}
+}
+
+func TestResolveSmartctlWindowsPathPrintedAsTyped(t *testing.T) {
+	// A Windows path is shown the way it was typed in config.yaml, with
+	// single backslashes, in the log line, the event 103 text and the
+	// startup error.
+	const typed = `C:\nope\smartctl.exe`
+	r := newFakeResolver("windows", nil, nil, "", nil)
+	_, _, err := r.resolve(typed, "7.0")
+	if err == nil {
+		t.Fatal("want an error when nothing is found")
+	}
+	wantLine := `ERROR: smartctl_path "C:\nope\smartctl.exe" in config cannot be used: file not found. Searching PATH and known locations instead.`
+	if len(r.logs) != 1 || r.logs[0] != wantLine {
+		t.Errorf("log = %q\nwant %q", r.logs, wantLine)
+	}
+	if len(r.notices) != 1 || r.notices[0] != wantLine {
+		t.Errorf("event 103 text = %q, want %q", r.notices, wantLine)
+	}
+	if !strings.Contains(err.Error(), `smartctl_path "C:\nope\smartctl.exe" in config was not used: file not found.`) {
+		t.Errorf("startup error lacks the plain path:\n%s", err)
+	}
+	if strings.Contains(err.Error()+r.logs[0], `\\`) {
+		t.Errorf("doubled backslash in output:\n%s\n%s", r.logs[0], err)
+	}
+}
+
+func TestStartupErrorSaysErrorOnce(t *testing.T) {
+	r := newFakeResolver("linux", nil, nil, "", nil)
+	_, _, err := r.resolve("", "7.0")
+	if err == nil {
+		t.Fatal("want an error when nothing is found")
+	}
+	line := startupErrorLine(err)
+	if !strings.HasPrefix(line, "ERROR: smartctl not found in PATH or known locations.") {
+		t.Errorf("console line = %q", line)
+	}
+	event := startupFailureEvent(err)
+	if !strings.HasPrefix(event, "ERROR: agent failed during startup: smartctl not found") {
+		t.Errorf("event 100 text = %q", event)
+	}
+	for _, s := range []string{line, event} {
+		if n := strings.Count(s, "ERROR"); n != 1 {
+			t.Errorf("ERROR appears %d times in %q", n, s)
+		}
+	}
+	// An error that still carries its own prefix is not prefixed twice.
+	if got := startupErrorLine(errors.New("ERROR: boom")); got != "ERROR: boom" {
+		t.Errorf("got %q", got)
+	}
+	if got := startupFailureEvent(errors.New("ERROR: boom")); got != "ERROR: agent failed during startup: boom" {
+		t.Errorf("got %q", got)
 	}
 }
 

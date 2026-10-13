@@ -23,7 +23,7 @@ func main() {
 
 	// ready is unused in the Unix path; RunAgent handles a nil channel.
 	if err := RunAgent(ctx, nil); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		fmt.Fprintln(os.Stderr, startupErrorLine(err))
 		os.Exit(1)
 	}
 }

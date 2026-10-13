@@ -12,7 +12,23 @@
 // See docs/internal/plans/plan-v0.5.1-consolidated-changes.md §Change 2.
 package main
 
+import "strings"
+
 // ServiceName is the Windows service identifier. Changing this value is a
 // breaking change for existing installations — install.ps1 must be updated
 // in lockstep, and upgraders will need to uninstall the old service first.
 const ServiceName = "SmartHA-Agent"
+
+// startupErrorLine is the console line for an error RunAgent returned:
+// "ERROR: " and the message. A message that already starts with
+// "ERROR: " keeps a single prefix, so the line never reads
+// "ERROR: ERROR: ...".
+func startupErrorLine(err error) string {
+	return "ERROR: " + strings.TrimPrefix(err.Error(), "ERROR: ")
+}
+
+// startupFailureEvent is the Windows Event Log text (event 100) for an
+// error RunAgent returned before the listener was bound.
+func startupFailureEvent(err error) string {
+	return "ERROR: agent failed during startup: " + strings.TrimPrefix(err.Error(), "ERROR: ")
+}

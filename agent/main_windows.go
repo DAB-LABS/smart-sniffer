@@ -128,7 +128,7 @@ func main() {
 	defer stop()
 
 	if err := RunAgent(ctx, nil); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		fmt.Fprintln(os.Stderr, startupErrorLine(err))
 		os.Exit(1)
 	}
 }
@@ -190,7 +190,7 @@ func (s *service) Execute(args []string, r <-chan svc.ChangeRequest, changes cha
 		// preflight error). Report Stopped with a non-zero exit code
 		// so the SCM and Event Log see the failure.
 		changes <- svc.Status{State: svc.Stopped}
-		logf(logError, evtStartupFailure, "agent failed during startup: %v", err)
+		logf(logError, evtStartupFailure, "%s", startupFailureEvent(err))
 		return false, 1
 	}
 

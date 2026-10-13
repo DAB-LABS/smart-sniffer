@@ -237,10 +237,12 @@ func (r *smartctlResolver) resolve(configured, minVersion string) (string, strin
 			r.logf("using smartctl_path from config: %s", p)
 			return p, ver, nil
 		}
-		msg := fmt.Sprintf("ERROR: smartctl_path %q in config cannot be used: %s. Searching PATH and known locations instead.", configured, reason)
+		// The path is quoted as typed, not with %q: %q would double every
+		// backslash in a Windows path.
+		msg := fmt.Sprintf(`ERROR: smartctl_path "%s" in config cannot be used: %s. Searching PATH and known locations instead.`, configured, reason)
 		r.logf("%s", msg)
 		r.notice(true, msg)
-		configNote = fmt.Sprintf("\nsmartctl_path in config was not used: %q: %s.\n", configured, reason)
+		configNote = fmt.Sprintf("\nsmartctl_path \"%s\" in config was not used: %s.\n", configured, reason)
 	}
 
 	// 1. Try PATH first (current behavior for most users).
@@ -265,7 +267,7 @@ func (r *smartctlResolver) resolve(configured, minVersion string) (string, strin
 
 	// 3. Nothing found.
 	if pathBin != "" {
-		return "", "", fmt.Errorf(`ERROR: smartctl found in PATH but version is too old.
+		return "", "", fmt.Errorf(`smartctl found in PATH but version is too old.
 The agent requires smartctl %s or newer for JSON output support.
 
 The smartctl in your PATH is at: %s
@@ -280,7 +282,7 @@ Install a newer version:
 Run 'smartctl --version' to check your current version.`, minVersion, pathBin, configNote)
 	}
 
-	return "", "", fmt.Errorf(`ERROR: smartctl not found in PATH or known locations.
+	return "", "", fmt.Errorf(`smartctl not found in PATH or known locations.
 smartmontools is required for SMART Sniffer to function.
 %s
 Install it for your platform:
