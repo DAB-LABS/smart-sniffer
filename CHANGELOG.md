@@ -2,6 +2,29 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.8.3 -- 2026-10-12
+
+**Agent and Windows installer. Windows users with smartmontools from Scoop:
+update the agent.** The Windows service no longer fails to start when
+smartctl is only on your user PATH, and `smartctl_path` in `config.yaml` now
+works on every platform. The integration is unchanged apart from its version
+number; take the HACS update so the versions match.
+
+### Fixed
+- **Windows service would not start (error 100, "smartctl not found") when
+  smartmontools came from Scoop.** The service runs as SYSTEM and never saw
+  the user PATH. The agent now also looks in Program Files, Chocolatey,
+  winget and Scoop folders, in every user profile. Thanks @SiriosDev (#60).
+- **`smartctl_path` in `config.yaml` was ignored.** It is now used when set.
+  A path that is missing, not executable or too old is logged as an `ERROR`
+  with the reason, and the agent falls back to its normal search (#60).
+
+### Changed
+- **The Windows installer writes `smartctl_path`** when smartctl is only on
+  your user PATH (Scoop, winget portable), on new installs and upgrades.
+- **Windows Event Viewer shows which smartctl the service uses** (event ID
+  3), and a `smartctl_path` that cannot be used as a warning (event ID 103).
+
 ## v0.8.2 -- 2026-10-12
 
 **Mock agent and docs only. No agent update needed.** The integration is
