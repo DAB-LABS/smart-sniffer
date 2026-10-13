@@ -236,6 +236,8 @@ The equivalent config file setting is `mount_prefix: /host`. Configured mountpoi
 
 `/api/drives/{id}` carries two fields added in v0.8.0 beside the unchanged `smart_data`: `device_statistics` says whether the drive's ATA Device Statistics log was read this poll (`present` with the raw pages, `absent`, `unavailable` with a reason, `not_applicable` for NVMe and SCSI, or `off` with `config` or `os`), and `derived` holds `host_writes` and `host_reads` in bytes with their `source`, or `host_writes_omitted` / `host_reads_omitted` with the reason. `unavailable` reasons are `failed`, `timeout`, `standby`, `mismatch` and `stopped`; `source` is `ata_device_statistics`, `ata_attribute` (with `attribute_id` and `attribute_name`) or `nvme`. `/api/health` reports `pools_status` (`pending`, `ok` or `failed`) when pool status is on.
 
+`/api/health` also reports, since v0.8.3, `hostname` (the machine's short host name, the same value as the mDNS TXT record; inside a container it is the container's name, and `mdns_name` never changes it), `os_name` (a friendly name with version, such as `Ubuntu 24.04.1 LTS`, `macOS 15.1` or `Windows 11 Pro 24H2`) and `os_version` (`24.04`, `15.1`, `24H2`). The OS name comes from `/etc/os-release` on Linux (the host's copy under `mount_prefix` when one is set), `sw_vers` on macOS and the registry on Windows, read once at startup. A field that cannot be read is left out; `os` is unchanged (`linux`, `darwin`, `windows`).
+
 **Service management:**
 
 | Platform | Status | Logs | Restart |

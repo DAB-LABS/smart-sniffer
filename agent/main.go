@@ -118,6 +118,12 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 		log.Printf("Excluding %d device(s): %s", len(cfg.ExcludeDevices), strings.Join(cfg.ExcludeDevices, ", "))
 	}
 
+	// --- Host OS name for /api/health, read once ---
+	agentSystem = loadSystemInfo(cfg.MountPrefix)
+	if agentSystem.Name != "" {
+		log.Printf("OS: %s", agentSystem.Name)
+	}
+
 	// --- Cache / background scanner ---
 	cache := NewDriveCache(cfg)
 	cache.Refresh() // initial population
@@ -464,6 +470,9 @@ type healthResponse struct {
 	Status      string   `json:"status"`
 	Version     string   `json:"version"`
 	OS          string   `json:"os"`
+	Hostname    string   `json:"hostname,omitempty"`   // short host name, as in the mDNS TXT record; omitted if it cannot be read
+	OSName      string   `json:"os_name,omitempty"`    // friendly OS name with version, read once at startup
+	OSVersion   string   `json:"os_version,omitempty"` // OS version alone
 	Uptime      int      `json:"uptime_seconds"`
 	Endpoints   []string `json:"endpoints"`
 	Drives      int      `json:"drives"`
@@ -502,6 +511,9 @@ func handleHealth(cache *DriveCache) http.HandlerFunc {
 			Status:      "ok",
 			Version:     version,
 			OS:          detectOS(),
+			Hostname:    shortHostname(),
+			OSName:      agentSystem.Name,
+			OSVersion:   agentSystem.Version,
 			Uptime:      int(time.Since(startTime).Seconds()),
 			Endpoints:   endpoints,
 			Drives:      driveCount,
