@@ -594,6 +594,10 @@ type DriveCache struct {
 	devstatMemory map[string]*devstatMem
 	goos          string
 	devstatRun    smartctlRunner
+
+	// SMART availability per drive id for the run (smart_available.go).
+	// Touched only by Refresh.
+	smartMemory map[string]*smartMem
 }
 
 // DriveInfo is the per-drive cached payload.
@@ -607,6 +611,13 @@ type DriveInfo struct {
 	Readable    bool            `json:"readable"`               // false when smartctl could not read the drive this cycle; data is stale
 	LastUpdated string          `json:"last_updated,omitempty"` // ISO 8601 timestamp of last successful SMART fetch
 	RawJSON     json.RawMessage `json:"smart_data"`             // the -a call's output, exactly as v0.7.0 published it
+
+	// Whether smart_data carries SMART data (smart_available.go, GH #61).
+	// Readable stays true for a drive that answers without it. smart_lost
+	// marks a drive that gave SMART data earlier in this agent run.
+	SmartAvailable         *bool  `json:"smart_available,omitempty"`
+	SmartUnavailableReason string `json:"smart_unavailable_reason,omitempty"`
+	SmartLost              bool   `json:"smart_lost,omitempty"`
 
 	// From the separate devstat call and the derivation (devstat.go). Never
 	// fed back into anything above.
@@ -636,6 +647,8 @@ type DriveSummary struct {
 	Serial     string `json:"serial"`
 	Protocol   string `json:"protocol"`
 	Readable   bool   `json:"readable"` // false = stale cached entry, smartctl could not read it
+
+	SmartAvailable *bool `json:"smart_available,omitempty"` // see DriveInfo
 }
 
 func NewDriveCache(cfg *Config) *DriveCache {
@@ -651,6 +664,7 @@ func NewDriveCache(cfg *Config) *DriveCache {
 		cfg:           cfg,
 		devstatMemory: make(map[string]*devstatMem),
 		goos:          devstatGOOS,
+		smartMemory:   make(map[string]*smartMem),
 	}
 }
 
@@ -832,6 +846,7 @@ func (dc *DriveCache) Refresh() {
 		}
 		info.InStandby = false
 		info.Readable = true
+		dc.noteSmartAvailability(&info)
 
 		// Device Statistics come from a second smartctl call, never from the -a call
 		// above. Both calls report through one exit-code bitmask: a devstat read that
@@ -1334,6 +1349,8 @@ func (dc *DriveCache) HandleDrives(w http.ResponseWriter, r *http.Request) {
 			Serial:     d.Serial,
 			Protocol:   d.Protocol,
 			Readable:   d.Readable,
+
+			SmartAvailable: d.SmartAvailable,
 		})
 	}
 
