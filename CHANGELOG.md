@@ -4,11 +4,12 @@ All notable changes to SMART Sniffer are documented here.
 
 ## v0.8.3 -- 2026-10-12
 
-**Agent, Windows installer and integration. Update the agent and take the
-HACS update.** The Windows service no longer fails to start when smartctl is
-only on your user PATH, and `smartctl_path` in `config.yaml` now works on
-every platform. A drive that stops giving SMART data (seen on Mac USB drives)
-now shows "not available right now" instead of being called unsupported.
+**Agent, Windows installer, integration and release workflow. Update the
+agent and take the HACS update.** The Windows service no longer fails to
+start when smartctl is only on your user PATH, and `smartctl_path` in
+`config.yaml` now works on every platform. A drive that stops giving SMART
+data (seen on Mac USB drives) now shows "not available right now" instead of
+being called unsupported. A timed-out poll now names the agent in the log.
 
 ### Fixed
 - **Windows service would not start (error 100, "smartctl not found") when
@@ -23,6 +24,13 @@ now shows "not available right now" instead of being called unsupported.
   the drive answered with no SMART data. Such a drive now shows Attention
   Needed as unknown, "SMART data not available right now", no notification,
   and recovers by itself when SMART data returns. Thanks @spry-salt (#61).
+- **"Timeout fetching smart_sniffer data" did not say which agent.** The log
+  now names the agent's host and port and the request that timed out, once
+  when it starts and once when the agent answers again.
+- **On a Mac, disk usage could not be tied to its drive.** A filesystem such
+  as `/System/Volumes/Data` sits on an APFS volume that names no drive.
+  `/api/filesystems` now gives each one on macOS `physical_devices` and the
+  `drive_id` of its drive, for the SMART Sniffer app's Control Center.
 
 ### Changed
 - **The Windows installer writes `smartctl_path`** when smartctl is only on
@@ -33,6 +41,10 @@ now shows "not available right now" instead of being called unsupported.
   line each way, and `smart_available` on `/api/drives` and
   `/api/drives/{id}` (with `smart_unavailable_reason` and `smart_lost` on
   the drive) (#61).
+- **`/api/health` reports the host name and OS name**: `hostname`,
+  `os_name` (such as "macOS 15.1") and `os_version`. `os` is unchanged.
+- **Release notes no longer carry emoji** in the update and install steps
+  added under each release.
 
 ## v0.8.2 -- 2026-10-12
 
