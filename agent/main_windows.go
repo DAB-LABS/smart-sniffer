@@ -84,6 +84,22 @@ func logf(level logLevel, id uint32, format string, args ...interface{}) {
 	}
 }
 
+// init routes the shared smartctl startup messages (serviceNotice in
+// smartctl_resolve.go) to the Event Log. Only under the SCM: a console
+// run already prints them through the standard logger.
+func init() {
+	serviceNotice = func(warning bool, msg string) {
+		if elog == nil {
+			return
+		}
+		if warning {
+			logf(logWarn, evtSmartctlPath, "%s", msg)
+			return
+		}
+		logf(logInfo, evtSmartctlInUse, "%s", msg)
+	}
+}
+
 // service implements svc.Handler. It is stateless aside from the ctx
 // cancel function that the control loop uses to signal RunAgent to exit.
 type service struct{}

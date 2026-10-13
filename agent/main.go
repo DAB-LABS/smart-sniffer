@@ -61,7 +61,7 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 	// --discover flag: probe drives, detect protocols, optionally write config.
 	// Must resolve smartctl path before running (discover needs to call smartctl).
 	if cfg.Discover {
-		smartctlPath, _, resolveErr := resolveSmartctlPath("7.0")
+		smartctlPath, _, resolveErr := resolveSmartctlPath(cfg.SmartctlPathConfig, "7.0")
 		if resolveErr != nil {
 			return resolveErr
 		}
@@ -71,12 +71,13 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 
 	// --- Preflight: resolve smartctl binary ---
 	const minSmartctlVersion = "7.0"
-	smartctlPath, smartctlVer, err := resolveSmartctlPath(minSmartctlVersion)
+	smartctlPath, smartctlVer, err := resolveSmartctlPath(cfg.SmartctlPathConfig, minSmartctlVersion)
 	if err != nil {
 		return err
 	}
 	cfg.SmartctlPath = smartctlPath
 	log.Printf("using smartctl: %s (version %s)", smartctlPath, smartctlVer)
+	serviceNotice(false, fmt.Sprintf("using smartctl: %s (version %s)", smartctlPath, smartctlVer))
 
 	drives, scanTimedOut, err := preflightScanDrives(cfg.SmartctlPath)
 	if err != nil {
@@ -323,8 +324,9 @@ func detectOS() string {
 // ---------------------------------------------------------------------------
 
 // preflightSmartctlExists and preflightSmartctlVersion have been replaced
-// by resolveSmartctlPath() which handles both existence and version checking
-// with fallback to known platform-specific paths.
+// by resolveSmartctlPath() (smartctl_resolve.go) which handles both
+// existence and version checking with fallback to known platform-specific
+// paths.
 
 // parseSmartctlVersion extracts a version like "7.4" from the --version output.
 var versionRe = regexp.MustCompile(`smartctl\s+(\d+\.\d+)`)
@@ -356,98 +358,6 @@ func isSmartctlVersionOK(ver, minVer string) bool {
 	vMaj, vMin := parse(ver)
 	mMaj, mMin := parse(minVer)
 	return vMaj > mMaj || (vMaj == mMaj && vMin >= mMin)
-}
-
-// smartctlSearchPaths lists known installation locations for smartctl across
-// platforms. Checked in order when the PATH version is missing or too old.
-// See docs/internal/research/smartctl-install-paths.md for full research.
-var smartctlSearchPaths = []string{
-	// NAS platforms (most likely to need fallback)
-	"/var/packages/synocli-disk/target/sbin/smartctl",        // SynoCommunity on Synology
-	"/opt/sbin/smartctl",                                     // Entware (Synology/QNAP)
-	"/opt/bin/smartctl",                                      // Entware alternate
-	"/boot/extra/sbin/smartctl",                              // Unraid NerdTools
-	"/boot/extra/bin/smartctl",                               // Unraid NerdTools alternate
-	"/share/CACHEDEV1_DATA/.qpkg/smartmontools/bin/smartctl", // QNAP QPKG
-
-	// Standard Linux
-	"/usr/sbin/smartctl", // Debian, Ubuntu, RHEL, Fedora, Arch, Alpine, Proxmox, OMV
-
-	// BSD / TrueNAS CORE
-	"/usr/local/sbin/smartctl", // FreeBSD, OpenBSD
-
-	// macOS
-	"/usr/local/bin/smartctl",    // Homebrew (Intel)
-	"/opt/homebrew/bin/smartctl", // Homebrew (Apple Silicon)
-	"/opt/local/sbin/smartctl",   // MacPorts
-
-	// NixOS
-	"/run/current-system/sw/sbin/smartctl", // NixOS system profile
-}
-
-// resolveSmartctlPath finds the best smartctl binary available. It checks
-// PATH first, then falls back to known platform-specific paths. Returns the
-// full path and version string, or an error if no usable binary is found.
-func resolveSmartctlPath(minVersion string) (string, string, error) {
-	// 1. Try PATH first (current behavior for most users).
-	pathBin, err := exec.LookPath("smartctl")
-	if err == nil {
-		ver := getSmartctlVersion(pathBin)
-		if isSmartctlVersionOK(ver, minVersion) {
-			return pathBin, ver, nil
-		}
-		log.Printf("smartctl in PATH is %s (requires %s+), searching known paths...", ver, minVersion)
-	}
-
-	// 2. Search known platform-specific paths.
-	for _, candidate := range smartctlSearchPaths {
-		info, statErr := os.Stat(candidate)
-		if statErr != nil || info.IsDir() {
-			continue
-		}
-		if info.Mode()&0111 == 0 {
-			continue // not executable
-		}
-		ver := getSmartctlVersion(candidate)
-		if ver == "" {
-			continue
-		}
-		if isSmartctlVersionOK(ver, minVersion) {
-			log.Printf("found smartctl %s at %s", ver, candidate)
-			return candidate, ver, nil
-		}
-	}
-
-	// 3. Nothing found.
-	if pathBin != "" {
-		return "", "", fmt.Errorf(`ERROR: smartctl found in PATH but version is too old.
-The agent requires smartctl %s or newer for JSON output support.
-
-The smartctl in your PATH is at: %s
-
-Install a newer version:
-  Linux (Debian/Ubuntu):  sudo apt install smartmontools
-  Linux (RHEL/Fedora):    sudo dnf install smartmontools
-  macOS (Homebrew):       brew install smartmontools
-  Synology:               Install SynoCli Disk Tools from SynoCommunity
-  QNAP:                   Install smartmontools via Entware (opkg install smartmontools)
-
-Run 'smartctl --version' to check your current version.`, minVersion, pathBin)
-	}
-
-	return "", "", fmt.Errorf(`ERROR: smartctl not found in PATH or known locations.
-smartmontools is required for SMART Sniffer to function.
-
-Install it for your platform:
-  Linux (Debian/Ubuntu):  sudo apt install smartmontools
-  Linux (RHEL/Fedora):    sudo dnf install smartmontools
-  macOS (Homebrew):       brew install smartmontools
-  Windows (Chocolatey):   choco install smartmontools
-  Synology:               Install SynoCli Disk Tools from SynoCommunity
-  QNAP:                   Install smartmontools via Entware (opkg install smartmontools)
-
-More info: https://www.smartmontools.org/wiki/Download
-`)
 }
 
 // getSmartctlVersion runs "<path> --version" and returns the version string,

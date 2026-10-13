@@ -19,9 +19,11 @@
 //
 //	  1  Service started (informational)
 //	  2  Service stopped (informational)
+//	  3  smartctl in use, with its path and version (informational)
 //	100  Startup failure (config or preflight error)
 //	101  Runtime failure (RunAgent returned error mid-flight)
 //	102  Shutdown error
+//	103  smartctl_path from config.yaml could not be used (warning)
 package main
 
 import (
@@ -34,9 +36,11 @@ import (
 const (
 	evtStarted        uint32 = 1
 	evtStopped        uint32 = 2
+	evtSmartctlInUse  uint32 = 3
 	evtStartupFailure uint32 = 100
 	evtRuntimeFailure uint32 = 101
 	evtShutdownError  uint32 = 102
+	evtSmartctlPath   uint32 = 103
 )
 
 // openEventLog returns a debug.Log bound to the Windows Event Log under

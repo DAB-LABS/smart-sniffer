@@ -79,6 +79,16 @@ mdns: true
 # no zpool, no pools, nothing logged. Set to false to turn it off entirely.
 # zfs_pool_status: true
 
+# Path to the smartctl binary (optional).
+# Leave unset to look on PATH, then in the usual install locations for this
+# platform (on Windows: Program Files, Chocolatey, winget and Scoop, in every
+# user profile). Set it when smartctl lives somewhere else. If the file is
+# missing, not executable or older than smartctl 7.0, the agent logs an
+# ERROR line naming the path and the reason, then searches as if unset.
+# On Windows, quote the path and double the backslashes:
+#   smartctl_path: "C:\\Users\\me\\scoop\\apps\\smartmontools\\current\\bin\\smartctl.exe"
+# smartctl_path: /usr/local/bin/smartctl
+
 # Path to the zpool binary (optional).
 # Leave unset to look on PATH, then in /usr/sbin, /sbin and the other usual
 # locations, the same way smartctl is found. Set it when zpool lives

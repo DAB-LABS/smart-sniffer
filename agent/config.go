@@ -49,6 +49,7 @@ type Config struct {
 	DeviceStatistics   *bool              `yaml:"device_statistics"`   // read ATA Device Statistics with a second smartctl call per poll (default: true); pointer to tell "not set" from false
 	Discover           bool               `yaml:"-"`                   // set by --discover flag; not read from config file
 	NoWrite            bool               `yaml:"-"`                   // set by --no-write flag; skips config write in discover mode
+	SmartctlPathConfig string             `yaml:"smartctl_path"`       // smartctl binary from config; empty = PATH, then the usual install locations
 	SmartctlPath       string             `yaml:"-"`                   // resolved path to smartctl binary; set by resolveSmartctlPath()
 	excludeSet         map[string]bool    // normalized set built once at load time (unexported, not serialized)
 }
