@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"runtime"
 	"sync"
 )
 
@@ -24,6 +25,12 @@ type FilesystemInfo struct {
 	AvailableBytes uint64  `json:"available_bytes"`
 	UsePercent     float64 `json:"use_percent"`
 	Status         string  `json:"status"` // "ok" or "unavailable"
+
+	// macOS only (filesystem_physical.go): the whole physical disks the
+	// filesystem lives on, and the /api/drives id of its drive when it is on
+	// exactly one drive the agent reports. Omitted elsewhere and when unknown.
+	PhysicalDevices []string `json:"physical_devices,omitempty"`
+	DriveID         string   `json:"drive_id,omitempty"`
 }
 
 // FilesystemCache holds cached filesystem usage data. It is refreshed on
@@ -34,6 +41,16 @@ type FilesystemCache struct {
 	configs     []FilesystemConfig
 	mountPrefix string       // host mount root when running in a container; "" = none
 	logs        *logThrottle // suppresses repeated per-mount log lines (key = stat path)
+
+	// Physical drive linking on macOS (filesystem_physical.go). Touched only
+	// by Refresh. run, smartRun and drives are injectable for tests.
+	goos         string
+	run          cmdRunner
+	smartRun     smartctlRunner
+	smartctlPath string
+	drives       func() []driveRef
+	phys         map[string]*physEntry
+	serials      map[string]*serialEntry
 }
 
 // NewFilesystemCache creates a cache for the given filesystem configurations.
@@ -45,6 +62,9 @@ func NewFilesystemCache(configs []FilesystemConfig, mountPrefix string, verbose 
 		configs:     configs,
 		mountPrefix: mountPrefix,
 		logs:        newLogThrottle(logReminderInterval, verbose),
+		goos:        runtime.GOOS,
+		run:         runCommand,
+		smartRun:    runSmartctlWithTimeout,
 	}
 }
 

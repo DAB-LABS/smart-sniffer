@@ -132,6 +132,8 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 	var fsCache *FilesystemCache
 	if len(cfg.Filesystems) > 0 {
 		fsCache = NewFilesystemCache(cfg.Filesystems, cfg.MountPrefix, cfg.Verbose)
+		fsCache.smartctlPath = cfg.SmartctlPath
+		fsCache.drives = cache.driveRefs
 		fsCache.Refresh() // initial population
 		cache.fsCache = fsCache
 		log.Printf("Filesystem monitoring: %d mount(s)", len(cfg.Filesystems))
@@ -1344,6 +1346,18 @@ func (dc *DriveCache) RunBackground(ctx context.Context) {
 			dc.Refresh()
 		}
 	}
+}
+
+// driveRefs is the drive list as filesystem linking needs it.
+func (dc *DriveCache) driveRefs() []driveRef {
+	dc.mu.RLock()
+	defer dc.mu.RUnlock()
+	refs := make([]driveRef, 0, len(dc.driveOrder))
+	for _, id := range dc.driveOrder {
+		d := dc.drives[id]
+		refs = append(refs, driveRef{ID: d.ID, DevicePath: d.DevicePath, Model: d.Model, Serial: d.Serial})
+	}
+	return refs
 }
 
 // HandleDrives serves GET /api/drives — returns summary list.

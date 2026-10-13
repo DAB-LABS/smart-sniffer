@@ -238,6 +238,8 @@ The equivalent config file setting is `mount_prefix: /host`. Configured mountpoi
 
 `/api/health` also reports, since v0.8.3, `hostname` (the machine's short host name, the same value as the mDNS TXT record; inside a container it is the container's name, and `mdns_name` never changes it), `os_name` (a friendly name with version, such as `Ubuntu 24.04.1 LTS`, `macOS 15.1` or `Windows 11 Pro 24H2`) and `os_version` (`24.04`, `15.1`, `24H2`). The OS name comes from `/etc/os-release` on Linux (the host's copy under `mount_prefix` when one is set), `sw_vers` on macOS and the registry on Windows, read once at startup. A field that cannot be read is left out; `os` is unchanged (`linux`, `darwin`, `windows`). The integration keeps these three on its agent health coordinator for later use; it does not name devices or entries from them yet.
 
+On macOS, `/api/filesystems` also says which drive each filesystem lives on (v0.8.3). A filesystem there sits on a device such as `/dev/disk3s5`, an APFS volume in a container disk macOS synthesizes, while the drive is listed under an IOService path, so the two could not be matched. Each filesystem now carries `physical_devices`, the whole physical disks under it (e.g. `["/dev/disk0"]`, found with `diskutil info -plist` through the APFS physical store), and `drive_id`, the `/api/drives` id of that drive, matched by device path, by the serial `smartctl -i` reads from the disk, or by model when only one drive has it. `drive_id` is left out when the filesystem spans two drives (Fusion) or no drive matches. The lookup runs once per filesystem and is cached. Linux and Windows output is unchanged.
+
 **Service management:**
 
 | Platform | Status | Logs | Restart |

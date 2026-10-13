@@ -65,6 +65,10 @@ func (fc *FilesystemCache) Refresh() {
 		}
 		info.Status = "ok"
 
+		// macOS: the physical disk and drive under the filesystem. The
+		// device actually mounted there (from statfs) is used when known.
+		fc.linkPhysical(&info, mountSource(&stat))
+
 		results = append(results, info)
 	}
 
