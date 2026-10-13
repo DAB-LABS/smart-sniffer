@@ -26,6 +26,7 @@ sensor = importlib.import_module("custom_components.smart_sniffer.sensor")
 binary = importlib.import_module("custom_components.smart_sniffer.binary_sensor")
 coordinator_mod = importlib.import_module("custom_components.smart_sniffer.coordinator")
 devstat = importlib.import_module("custom_components.smart_sniffer.devstat")
+smart_presence = importlib.import_module("custom_components.smart_sniffer.smart_presence")
 
 
 class _Entry:
@@ -55,6 +56,7 @@ class _Coord:
         self.host = "10.0.0.5"
         self.created = {}
         self.drive_classes = {}
+        self.smart_presence = smart_presence.SmartPresence()
         self.listeners = []
 
     def registered_pool_names(self):
@@ -235,6 +237,7 @@ def _coordinator(stored=None):
     coord._store = _Store()
     coord._devstat = devstat.normalize_store(stored)
     coord.created, coord.drive_classes = {}, {}
+    coord.smart_presence = smart_presence.SmartPresence()
 
     class _E:
         entry_id = ENTRY_ID
@@ -312,3 +315,132 @@ def test_forget_device_drops_hold_records_and_created(monkeypatch):
     coord.forget_device("fx-ata-devstat-wdc-unc", "FIXTURE-m01-sdl")
     assert coord._devstat == {"announced": [], "held": {}}
     assert coord.created == {"sensor": {}}
+
+
+# --- GH #61: SMART data that was there and is not now --------------------
+
+def _smart_gone(drive):
+    """The drive as the agent reports it once the macOS SAT driver stops
+    passing SMART through: identity kept, SMART data gone."""
+    gone = json.loads(json.dumps(drive))
+    keep = ("json_format_version", "smartctl", "device", "model_name", "serial_number",
+            "user_capacity", "logical_block_size")
+    gone["smart_data"] = {k: v for k, v in gone["smart_data"].items() if k in keep}
+    gone["smart_data"]["smart_support"] = {"available": True, "enabled": False}
+    gone["smart_available"] = False
+    gone["smart_unavailable_reason"] = "disabled"
+    gone["smart_lost"] = True
+    gone.pop("device_statistics", None)
+    gone.pop("derived", None)
+    return gone
+
+
+def _notes(monkeypatch):
+    notes = []
+    monkeypatch.setattr(coordinator_mod, "pn_create", lambda hass, **kw: notes.append(kw))
+    monkeypatch.setattr(coordinator_mod, "pn_dismiss", lambda hass, nid: notes.append(("dismiss", nid)))
+    return notes
+
+
+def test_lost_smart_raises_no_notification_and_recovers(monkeypatch, caplog):
+    notes = _notes(monkeypatch)
+    coord = _coordinator()
+    healthy = agent_drive("ata_devstat_hgst")
+    drive_id = healthy["id"]
+    _poll(coord, healthy, notes)
+    assert coord._prev_state[drive_id] == "NO"
+    gone = _smart_gone(healthy)
+    gone["smart_lost"] = False  # the integration's own memory is enough
+    with caplog.at_level("INFO", logger=coordinator_mod.__name__):
+        for _ in range(3):
+            _poll(coord, gone, notes)
+        assert notes == []
+        assert coord.smart_presence.is_lost(drive_id)
+        assert coord._prev_state[drive_id] == "NO"  # the baseline is kept
+        _poll(coord, healthy, notes)
+        _poll(coord, healthy, notes)
+    assert notes == []
+    assert not coord.smart_presence.is_lost(drive_id)
+    lost_lines = [r for r in caplog.records if "stopped giving SMART data" in r.getMessage()]
+    back_lines = [r for r in caplog.records if "giving SMART data again" in r.getMessage()]
+    assert len(lost_lines) == 1 and len(back_lines) == 1
+    assert "agent says: no reason given" not in lost_lines[0].getMessage()
+
+
+def test_lost_smart_keeps_an_open_attention_notification_quiet(monkeypatch):
+    notes = _notes(monkeypatch)
+    coord = _coordinator()
+    _poll(coord, agent_drive("ata_devstat_wdc_unc", status=None), notes)  # NO
+    _poll(coord, agent_drive("ata_devstat_wdc_unc"), notes)  # YES: one notification
+    assert len(notes) == 1
+    yes = agent_drive("ata_devstat_wdc_unc")
+    _poll(coord, _smart_gone(yes), notes)
+    _poll(coord, yes, notes)  # back with the same reasons: not news
+    assert len(notes) == 1
+
+
+def test_lost_after_a_home_assistant_restart(monkeypatch):
+    # Only the agent remembers the drive had SMART data.
+    notes = _notes(monkeypatch)
+    coord = _coordinator()
+    healthy = agent_drive("ata_devstat_hgst")
+    _poll(coord, _smart_gone(healthy), notes)
+    assert notes == [] and coord.smart_presence.is_lost(healthy["id"])
+    assert healthy["id"] not in coord._prev_state
+    _poll(coord, healthy, notes)
+    assert notes == [] and coord._prev_state[healthy["id"]] == "NO"
+
+
+def test_never_had_smart_is_unchanged(monkeypatch):
+    notes = _notes(monkeypatch)
+    coord = _coordinator()
+    never = _smart_gone(agent_drive("ata_devstat_hgst"))
+    never["smart_lost"] = False
+    never["smart_unavailable_reason"] = "no_data"
+    for _ in range(3):
+        _poll(coord, never, notes)
+    assert notes == []
+    assert coord._prev_state[never["id"]] == "UNSUPPORTED"
+    assert not coord.smart_presence.is_lost(never["id"])
+    coord_data = {never["id"]: never}
+    stub, added = _setup(coord_data)
+    stub.smart_presence.update(never["id"], never)
+    by_uid = {e.unique_id: e for e in added["sensor"]}
+    prefix = f"{ENTRY_ID}_{never['id']}"
+    assert by_uid[f"{prefix}_attention"].native_value == "UNSUPPORTED"
+    assert by_uid[f"{prefix}_attention_reasons"].native_value == "No usable SMART data"
+
+
+def test_lost_smart_entities(monkeypatch):
+    healthy = _devstat_drive("ata_devstat_hgst")
+    data = {healthy["id"]: healthy}
+    coord, added = _setup(data)
+    coord.smart_presence.update(healthy["id"], healthy)
+    by_uid = {e.unique_id: e for e in added["sensor"] + added["binary_sensor"]}
+    prefix = f"{ENTRY_ID}_{healthy['id']}"
+    attention_entity = by_uid[f"{prefix}_attention"]
+    reasons_entity = by_uid[f"{prefix}_attention_reasons"]
+    health_entity = by_uid[f"{prefix}_health"]
+    assert attention_entity.native_value == "NO"
+    assert health_entity.is_on is False
+
+    gone = _smart_gone(healthy)
+    data[healthy["id"]] = gone
+    coord.smart_presence.update(healthy["id"], gone)
+    assert attention_entity.native_value is None
+    assert attention_entity.icon == "mdi:help-circle-outline"
+    assert attention_entity.extra_state_attributes == {
+        "severity": "none",
+        "reasons": ["SMART data not available right now"],
+        "issue_count": 0,
+        "accepted": [],
+    }
+    assert reasons_entity.native_value == "SMART data not available right now"
+    assert health_entity.is_on is None
+    assert by_uid[f"{prefix}_temperature"].native_value is None
+
+    data[healthy["id"]] = healthy
+    coord.smart_presence.update(healthy["id"], healthy)
+    assert attention_entity.native_value == "NO"
+    assert reasons_entity.native_value == "No issues detected"
+    assert health_entity.is_on is False

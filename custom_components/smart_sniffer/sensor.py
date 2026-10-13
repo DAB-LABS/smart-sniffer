@@ -58,6 +58,7 @@ from .extract import (  # noqa: F401 - re-exported under the names they always h
     _extract_attribute,
 )
 from .device_link import agent_link
+from .smart_presence import REASON_SMART_NOT_AVAILABLE
 from .devstat import data_volume, page_attributes, temperature_attrs_in_unit
 from .entity_plan import (
     KIND_AGENT_IP,
@@ -604,6 +605,8 @@ class SmartSnifferAttentionSensor(
       MAYBE        Warning-level issues (plan replacement).
       YES          Critical issues (back up immediately).
       UNSUPPORTED  Drive returned no usable SMART data.
+      unknown      The drive gave SMART data before and gives none now
+                   (GH #61, smart_presence.py); back when the data is.
 
     Attributes:
       severity     "critical" | "warning" | "none"
@@ -662,10 +665,12 @@ class SmartSnifferAttentionSensor(
         )
 
     @property
-    def native_value(self) -> str:
+    def native_value(self) -> str | None:
         drive_data = self.coordinator.data.get(self._drive_id)
         if drive_data is None:
             return STATE_UNSUPPORTED
+        if self.coordinator.smart_presence.is_lost(self._drive_id):
+            return None
         state, _, _, _ = evaluate_attention(drive_data, self._thresholds())
         return state
 
@@ -676,6 +681,13 @@ class SmartSnifferAttentionSensor(
             return {
                 "severity": SEVERITY_NONE,
                 "reasons": ["Drive data unavailable"],
+                "issue_count": 0,
+                "accepted": [],
+            }
+        if self.coordinator.smart_presence.is_lost(self._drive_id):
+            return {
+                "severity": SEVERITY_NONE,
+                "reasons": [REASON_SMART_NOT_AVAILABLE],
                 "issue_count": 0,
                 "accepted": [],
             }
@@ -706,6 +718,8 @@ class SmartSnifferAttentionReasonsSensor(
 
     When attention is NO:          "No issues detected"
     When attention is UNSUPPORTED: "No usable SMART data"
+    When SMART data was there before and is not now: "SMART data not
+    available right now" (GH #61).
     When attention is MAYBE/YES:   Semicolon-separated list of trigger reasons.
     """
 
@@ -749,6 +763,8 @@ class SmartSnifferAttentionReasonsSensor(
         drive_data = self.coordinator.data.get(self._drive_id)
         if drive_data is None:
             return "Drive data unavailable"
+        if self.coordinator.smart_presence.is_lost(self._drive_id):
+            return REASON_SMART_NOT_AVAILABLE
         state, _, reasons, accepted = evaluate_attention(
             drive_data, self._thresholds()
         )

@@ -20,6 +20,13 @@ Transition rules:
   * → UNSUPPORTED   Fire ℹ️ informational notification (once).
   UNSUPPORTED → *   Dismiss informational notification.
 
+A drive that gave SMART data before and has stopped (GH #61, see
+smart_presence.py) is not UNSUPPORTED: no notification, a log line when it
+stops and when it is back, and the state before the loss kept as the
+baseline, so returning to it raises nothing. Since a drive that never gave
+SMART data is UNSUPPORTED from its first poll, which is a silent baseline,
+this means the informational notification is no longer raised at all.
+
 Notification IDs are stable: smart_sniffer_attention_{drive_id}
 
 One exception to the first-poll rule (D11, v0.8.0): a reason that only the
@@ -92,6 +99,7 @@ from .devstat import (
     normalize_store,
 )
 from .entity_plan import DriveClass, EntitySpec, forget_device as forget_created
+from .smart_presence import EVENT_BACK, EVENT_LOST, SmartPresence
 from .pool_health import (
     advertises_pools,
     build_missing_notification as build_pool_missing_notification,
@@ -207,6 +215,10 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # unique id, and each drive's class from its first plan.
         self.created: dict[str, dict[str, EntitySpec]] = {}
         self.drive_classes: dict[str, DriveClass] = {}
+
+        # Which drives gave SMART data this run, and which have lost it
+        # (smart_presence.py, GH #61). The attention sensors read it.
+        self.smart_presence = SmartPresence()
 
     @property
     def _base_url(self) -> str:
@@ -394,6 +406,7 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         so it starts afresh if it comes back."""
         forget_created(self.created, identifier)
         self.drive_classes.pop(identifier, None)
+        self.smart_presence.forget(identifier)
         changed = self._devstat["held"].pop(identifier, None) is not None
         announced = forget_serial(self._devstat["announced"], serial)
         if announced != self._devstat["announced"]:
@@ -460,6 +473,23 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for drive_id, drive_data in new_data.items():
             if drive_id.startswith("_"):
                 continue  # skip internal keys like _filesystems
+            event = self.smart_presence.update(drive_id, drive_data)
+            if event == EVENT_LOST:
+                _LOGGER.warning(
+                    "SMART Sniffer: %s still answers but stopped giving SMART "
+                    "data (agent says: %s); its attention state is unknown until "
+                    "it does again. A USB bridge or the driver that passes SMART "
+                    "through it may have stopped working",
+                    drive_id, drive_data.get("smart_unavailable_reason") or "no reason given",
+                )
+            elif event == EVENT_BACK:
+                _LOGGER.info("SMART Sniffer: %s is giving SMART data again", drive_id)
+            if self.smart_presence.is_lost(drive_id):
+                # Not the "SMART Monitoring Unavailable" notification, which
+                # blames the enclosure, and no change of baseline: the state
+                # and reasons from before the loss stay, so SMART data
+                # returning to them is not news.
+                continue
             # The fourth value is deliberately ignored here. Accepted entries
             # must not reach the reasons comparison below, or an accepted value
             # drifting under its threshold would read as a change on every poll.
@@ -513,7 +543,10 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 pn_dismiss(self.hass, notif_id)
 
             elif state == STATE_UNSUPPORTED:
-                # Unsupported — informational notification (once).
+                # Unsupported: informational notification (once). Not
+                # reached since GH #61: a drive only gets here from NO, MAYBE
+                # or YES, so it gave SMART data, and losing it is handled
+                # above as lost.
                 _LOGGER.info(
                     "SMART Sniffer: %s has no usable SMART data", drive_id,
                 )
