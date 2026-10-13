@@ -446,6 +446,55 @@ def test_lost_smart_entities(monkeypatch):
     assert health_entity.is_on is False
 
 
+class _TimeoutSession:
+    """aiohttp session stand-in: /api/drives answers, a drive times out."""
+
+    def __init__(self):
+        self.calls = []
+
+    def get(self, url, headers=None, timeout=None):
+        self.calls.append(url)
+
+        class _Resp:
+            async def __aenter__(self):
+                if url.endswith("/api/drives"):
+                    return self
+                raise TimeoutError
+
+            async def __aexit__(self, *exc):
+                return False
+
+            def raise_for_status(self):
+                return None
+
+            async def json(self):
+                return [{"id": "fake-serial-01"}]
+
+        return _Resp()
+
+
+def test_a_poll_timeout_names_the_host_and_request(monkeypatch, caplog):
+    from homeassistant.helpers.update_coordinator import UpdateFailed
+
+    session = _TimeoutSession()
+    monkeypatch.setattr(coordinator_mod, "async_get_clientsession", lambda hass: session)
+    coord = _coordinator()
+    coord.host, coord.port, coord.token = "10.0.0.5", 9099, "secret-token"
+    coord._timeouts = coordinator_mod.PollTimeouts(
+        coordinator_mod._LOGGER, coord.host, coord.port, coordinator_mod.AGENT_POLL_TIMEOUT
+    )
+    for _ in range(3):
+        with pytest.raises(UpdateFailed) as err:
+            asyncio.run(coord._async_update_data())
+        assert str(err.value) == (
+            "SMART Sniffer agent at 10.0.0.5:9099 did not answer "
+            "/api/drives/fake-serial-01 within 30 seconds"
+        )
+    warnings = [r for r in caplog.records if r.levelname == "WARNING" and "did not answer" in r.getMessage()]
+    assert len(warnings) == 1
+    assert "secret-token" not in caplog.text
+
+
 class _HealthSession:
     """Session stand-in for the health coordinator: one body, or a timeout."""
 

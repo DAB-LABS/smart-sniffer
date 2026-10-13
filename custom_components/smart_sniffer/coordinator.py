@@ -100,6 +100,7 @@ from .devstat import (
 )
 from .entity_plan import DriveClass, EntitySpec, forget_device as forget_created
 from .smart_presence import EVENT_BACK, EVENT_LOST, SmartPresence
+from .poll_timeout import AGENT_POLL_TIMEOUT, PollTimeouts
 from .pool_health import (
     advertises_pools,
     build_missing_notification as build_pool_missing_notification,
@@ -220,6 +221,10 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # (smart_presence.py, GH #61). The attention sensors read it.
         self.smart_presence = SmartPresence()
 
+        # A poll that times out names the agent and the request, once
+        # (poll_timeout.py).
+        self._timeouts = PollTimeouts(_LOGGER, self.host, self.port, AGENT_POLL_TIMEOUT)
+
     @property
     def _base_url(self) -> str:
         return f"http://{self.host}:{self.port}"
@@ -268,8 +273,12 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         notifications as needed.
         """
         session = async_get_clientsession(self.hass)
-        timeout = aiohttp.ClientTimeout(total=30)
+        timeout = aiohttp.ClientTimeout(total=AGENT_POLL_TIMEOUT)
 
+        # The request in flight, for the timeout message. Requests whose
+        # failure does not fail the poll (health, filesystems, pools) catch
+        # their own timeouts below.
+        path = "/api/drives"
         try:
             async with session.get(
                 f"{self._base_url}/api/drives",
@@ -282,6 +291,7 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             result: dict[str, Any] = {}
             for drive_summary in drives_list:
                 drive_id = drive_summary["id"]
+                path = f"/api/drives/{drive_id}"
                 async with session.get(
                     f"{self._base_url}/api/drives/{drive_id}",
                     headers=self._headers,
@@ -354,11 +364,17 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 advertises_pools(health), pools, self.registered_pool_names()
             )
 
+        except (asyncio.TimeoutError, TimeoutError) as err:
+            # Caught before ClientError: aiohttp's own timeout errors are
+            # both. Without this HA logs only "Timeout fetching
+            # smart_sniffer data", with no host.
+            raise UpdateFailed(self._timeouts.timed_out(path)) from err
         except aiohttp.ClientError as err:
             raise UpdateFailed(
                 f"Error communicating with SMART Sniffer agent: {err}"
             ) from err
 
+        self._timeouts.succeeded()
         self._merge_devstat(result)
         await self._handle_attention_notifications(result)
         self._handle_pool_notifications(
