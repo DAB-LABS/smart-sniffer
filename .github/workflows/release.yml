@@ -113,20 +113,20 @@ jobs:
           body: |
             ${{ steps.changelog.outputs.NOTES }}
 
-            📋 [Full Changelog](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)
+            [Full Changelog](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)
 
             ---
 
-            ### ⚡ Update Your Agents
+            ### Update your agents
             **Already have agents running?** Update them to match this release:
             ```bash
             curl -sSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | sudo bash
             ```
-            The installer detects your existing configuration and offers to keep it — just press Enter to upgrade in place.
+            The installer detects your existing configuration and offers to keep it -- just press Enter to upgrade in place.
 
             ---
 
-            ### Fresh Install
+            ### Fresh install
 
             **Linux / macOS (one command):**
             ```bash
@@ -138,7 +138,7 @@ jobs:
             irm https://raw.githubusercontent.com/${{ github.repository }}/main/install.ps1 | iex
             ```
 
-            ### Manual Download
+            ### Manual download
             Download the binary for your platform below, then see the [README](https://github.com/${{ github.repository }}#installation) for manual installation instructions.
 
             ### Checksums
