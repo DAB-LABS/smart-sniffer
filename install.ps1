@@ -412,6 +412,64 @@ function Ensure-SmartmontoolsInPath {
     }
 }
 
+# Find-SmartctlExe returns the full path of a smartctl.exe this installer
+# can see, or $null. Checks the current session's PATH first (it includes
+# the user PATH, so Scoop shims and winget links show up), then the usual
+# install folders. A Scoop shim is swapped for the real binary behind it
+# so the service does not depend on the shim.
+function Find-SmartctlExe {
+    $Candidates = @()
+    $Cmd = Get-Command smartctl -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($Cmd) { $Candidates += $Cmd.Source }
+    $Candidates += "$env:ProgramFiles\smartmontools\bin\smartctl.exe"
+    $Candidates += "${env:ProgramFiles(x86)}\smartmontools\bin\smartctl.exe"
+    if ($env:SCOOP) { $Candidates += "$env:SCOOP\apps\smartmontools\current\bin\smartctl.exe" }
+    if ($env:USERPROFILE) { $Candidates += "$env:USERPROFILE\scoop\apps\smartmontools\current\bin\smartctl.exe" }
+    if ($env:SCOOP_GLOBAL) { $Candidates += "$env:SCOOP_GLOBAL\apps\smartmontools\current\bin\smartctl.exe" }
+    if ($env:ProgramData) { $Candidates += "$env:ProgramData\scoop\apps\smartmontools\current\bin\smartctl.exe" }
+    if ($env:LOCALAPPDATA) { $Candidates += "$env:LOCALAPPDATA\Microsoft\WinGet\Links\smartctl.exe" }
+
+    foreach ($C in $Candidates) {
+        try {
+            if (-not $C -or -not (Test-Path -LiteralPath $C -PathType Leaf)) { continue }
+            if ($C -match '\\scoop\\shims\\smartctl\.exe$') {
+                $ScoopRoot = Split-Path (Split-Path $C -Parent) -Parent
+                $Real = Join-Path $ScoopRoot 'apps\smartmontools\current\bin\smartctl.exe'
+                if (Test-Path -LiteralPath $Real -PathType Leaf) { return $Real }
+            }
+            return $C
+        } catch {
+            continue
+        }
+    }
+    return $null
+}
+
+# Test-SmartctlOnMachinePath reports whether a folder on the system
+# (Machine) PATH holds smartctl.exe. That is the only PATH the service
+# sees: it runs as SYSTEM, which does not get the installing user's PATH.
+function Test-SmartctlOnMachinePath {
+    $MachinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    if (-not $MachinePath) { return $false }
+    foreach ($Entry in ($MachinePath -split ';')) {
+        try {
+            $Dir = [Environment]::ExpandEnvironmentVariables($Entry.Trim())
+            if ($Dir -eq '') { continue }
+            if (Test-Path -LiteralPath (Join-Path $Dir 'smartctl.exe') -PathType Leaf) { return $true }
+        } catch {
+            continue
+        }
+    }
+    return $false
+}
+
+# Format-SmartctlPathYaml returns the config.yaml line for smartctl_path.
+# Single-quoted YAML keeps backslashes literal; a quote is doubled.
+function Format-SmartctlPathYaml {
+    param([string]$Path)
+    return "smartctl_path: '" + ($Path -replace "'", "''") + "'"
+}
+
 # ---------------------------------------------------------------------------
 # Banner
 # ---------------------------------------------------------------------------
@@ -551,6 +609,24 @@ try {
     Ensure-SmartmontoolsInPath
 
     # ---------------------------------------------------------------------------
+    # smartctl the service cannot see (GH #60)
+    # ---------------------------------------------------------------------------
+    #
+    # Scoop and winget portable installs put smartctl on the user PATH
+    # only. The service runs as SYSTEM with the system PATH, so it would
+    # fail to start with "smartctl not found" (event ID 100). In that case
+    # the config pins the path with smartctl_path.
+    $SmartctlExe = Find-SmartctlExe
+    $SmartctlConfigPath = $null
+    if ($SmartctlExe -and -not (Test-SmartctlOnMachinePath)) {
+        $SmartctlConfigPath = $SmartctlExe
+        Write-Step "smartctl is not on the system PATH the service uses."
+        Write-Step "The config will set smartctl_path: $SmartctlExe"
+    }
+    $SmartctlCmd = 'smartctl'
+    if ($SmartctlExe) { $SmartctlCmd = $SmartctlExe }
+
+    # ---------------------------------------------------------------------------
     # Upgrade detection -- mirror install.sh's config-preservation UX
     # ---------------------------------------------------------------------------
     #
@@ -601,6 +677,19 @@ try {
         $Port         = $ExistingPort
         $Token        = $ExistingToken
         $ScanInterval = $ExistingInterval
+
+        # --- Upgrade path: pin smartctl the service cannot see (GH #60) ---
+        $ExistingSmartctl = Read-YamlScalar -Path $ConfigFile -Key 'smartctl_path'
+        if ($ExistingSmartctl) {
+            if (-not (Test-Path -LiteralPath ($ExistingSmartctl -replace '\\\\', '\') -PathType Leaf)) {
+                Write-Warn "smartctl_path in your config does not exist: $ExistingSmartctl"
+                Write-Warn "The agent will log this and search for smartctl itself. Edit $ConfigFile to fix or remove it."
+            }
+        } elseif ($SmartctlConfigPath) {
+            Add-Content -Path $ConfigFile -Value "" -Encoding UTF8
+            Add-Content -Path $ConfigFile -Value (Format-SmartctlPathYaml $SmartctlConfigPath) -Encoding UTF8
+            Write-Ok "smartctl_path added to existing config."
+        }
 
         # --- Upgrade path: offer interface picker if field is missing ---
         if (-not $ExistingIface -and (Test-Interactive)) {
@@ -681,9 +770,9 @@ try {
         $StandbyMode = "never"
         $HasHDD = $false
         try {
-            $ScanJson = & smartctl --json --scan 2>$null | ConvertFrom-Json
+            $ScanJson = & $SmartctlCmd --json --scan 2>$null | ConvertFrom-Json
             foreach ($Dev in $ScanJson.devices) {
-                $DevInfo = & smartctl --json -i $Dev.name 2>$null | ConvertFrom-Json
+                $DevInfo = & $SmartctlCmd --json -i $Dev.name 2>$null | ConvertFrom-Json
                 if ($DevInfo.rotation_rate -and $DevInfo.rotation_rate -gt 0) {
                     $HasHDD = $true
                     break
@@ -768,6 +857,9 @@ try {
         }
         if ($StandbyMode -and $StandbyMode -ne "never") {
             $ConfigContent += "`nstandby_mode: $StandbyMode"
+        }
+        if ($SmartctlConfigPath) {
+            $ConfigContent += "`n" + (Format-SmartctlPathYaml $SmartctlConfigPath)
         }
         if ($PickedFS) {
             $ConfigContent += "`n$PickedFS"
