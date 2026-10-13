@@ -622,6 +622,11 @@ class AgentHealthCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_seen: str | None = None
         self._last_os: str = ""
         self._last_uptime: int | None = None
+        # The agent's own host name and OS name (v0.8.3 agents; "" from older
+        # ones). Kept for later use in naming; nothing reads them yet.
+        self._last_hostname: str = ""
+        self._last_os_name: str = ""
+        self._last_os_version: str = ""
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Ping the agent health endpoint. Never raises UpdateFailed."""
@@ -644,12 +649,16 @@ class AgentHealthCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._last_seen = now.isoformat()
                 self._last_os = data.get("os", "")
                 self._last_uptime = data.get("uptime_seconds")
+                self._last_hostname = _text(data.get("hostname"))
+                self._last_os_name = _text(data.get("os_name"))
+                self._last_os_version = _text(data.get("os_version"))
                 return {
                     "connected": True,
                     "version": self._last_version,
                     "os": self._last_os,
                     "uptime_seconds": self._last_uptime,
                     "last_seen": self._last_seen,
+                    **self._identity(),
                 }
         except (aiohttp.ClientError, asyncio.TimeoutError, TimeoutError):
             return {
@@ -658,4 +667,18 @@ class AgentHealthCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "os": self._last_os,
                 "uptime_seconds": None,
                 "last_seen": self._last_seen,
+                **self._identity(),
             }
+
+    def _identity(self) -> dict[str, str]:
+        """The agent's host name and OS name, last known."""
+        return {
+            "hostname": self._last_hostname,
+            "os_name": self._last_os_name,
+            "os_version": self._last_os_version,
+        }
+
+
+def _text(value: Any) -> str:
+    """A health field as text: "" when missing or not a string."""
+    return value if isinstance(value, str) else ""

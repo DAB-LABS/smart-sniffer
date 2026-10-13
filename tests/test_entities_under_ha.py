@@ -444,3 +444,54 @@ def test_lost_smart_entities(monkeypatch):
     assert attention_entity.native_value == "NO"
     assert reasons_entity.native_value == "No issues detected"
     assert health_entity.is_on is False
+
+
+class _HealthSession:
+    """Session stand-in for the health coordinator: one body, or a timeout."""
+
+    def __init__(self, body):
+        self.body = body
+
+    def get(self, url, headers=None, timeout=None):
+        body = self.body
+
+        class _Resp:
+            async def __aenter__(self):
+                if body is None:
+                    raise TimeoutError
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            def raise_for_status(self):
+                return None
+
+            async def json(self):
+                return body
+
+        return _Resp()
+
+
+def test_health_keeps_the_agent_host_and_os_name(monkeypatch):
+    session = _HealthSession({
+        "status": "ok", "version": "0.8.3", "os": "darwin", "uptime_seconds": 5,
+        "hostname": "fake-mac", "os_name": "macOS 15.1", "os_version": "15.1",
+    })
+    monkeypatch.setattr(coordinator_mod, "async_get_clientsession", lambda hass: session)
+    health = object.__new__(coordinator_mod.AgentHealthCoordinator)
+    health.hass, health.host, health.port, health.token = _Hass(), "10.0.0.5", 9099, ""
+    health._last_version, health._last_seen, health._last_os, health._last_uptime = "", None, "", None
+    health._last_hostname = health._last_os_name = health._last_os_version = ""
+
+    data = asyncio.run(health._async_update_data())
+    assert data["connected"] and data["os"] == "darwin"
+    assert (data["hostname"], data["os_name"], data["os_version"]) == ("fake-mac", "macOS 15.1", "15.1")
+
+    session.body = None  # agent down: last known values stay
+    data = asyncio.run(health._async_update_data())
+    assert not data["connected"] and data["hostname"] == "fake-mac" and data["os_name"] == "macOS 15.1"
+
+    session.body = {"status": "ok", "version": "0.8.2", "os": "linux"}  # older agent
+    data = asyncio.run(health._async_update_data())
+    assert (data["hostname"], data["os_name"], data["os_version"]) == ("", "", "")
