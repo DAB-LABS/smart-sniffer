@@ -32,6 +32,8 @@ The attention sensor is an enum sensor (`device_class: enum`) with four possible
 | **YES** | `critical` | Data integrity at risk. | **Back up immediately.** Replace drive at first opportunity. |
 | **UNSUPPORTED** | `none` | Drive returned no usable SMART data. | SMART monitoring is not possible for this drive. Common with USB enclosures. |
 
+A drive that gave SMART data earlier and gives none now (v0.8.3, [#61](https://github.com/DAB-LABS/smart-sniffer/issues/61)) is not UNSUPPORTED: Attention Needed is `unknown`, its `reasons` attribute and the Attention Reasons sensor say "SMART data not available right now", and no notification is raised. It goes back to its normal state when SMART data returns. "Earlier" means earlier in this Home Assistant run, or earlier in the agent's run (the agent's `smart_lost` field). On macOS this is what a USB drive looks like when the driver that passes SMART through the USB bridge stops working.
+
 ### Attributes
 
 The attention sensor carries these attributes for automations and dashboards:
@@ -159,8 +161,9 @@ The coordinator (`coordinator.py`) evaluates attention after every poll and mana
 | `MAYBE` | `YES` | Update notification → escalate to CRITICAL |
 | `YES` | `MAYBE` | Update notification → de-escalate to WARNING |
 | `YES` / `MAYBE` | `NO` | Dismiss notification (resolved) |
-| any | `UNSUPPORTED` | Fire ℹ️ informational notification |
+| any | `UNSUPPORTED` | Fire the informational notification. Since v0.8.3 this is not reached: only a drive that gave SMART data can leave a first-poll state for UNSUPPORTED, and that drive is shown as "not available right now" instead (below). |
 | `UNSUPPORTED` | any | Dismiss informational notification |
+| `NO` / `MAYBE` / `YES` | SMART data gone | No notification, one log line. The state before the loss is kept as the baseline, so SMART data coming back to it is not news (v0.8.3). |
 | Drive removed | — | Dismiss notification, clean up state |
 
 ### Notification Examples

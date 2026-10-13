@@ -516,6 +516,8 @@ External drives connected via USB enclosures typically block SMART passthrough. 
 
 This is the most common "why isn't my drive showing data?" scenario. It's a hardware limitation of the USB bridge chip, not a bug.
 
+If a USB drive gave SMART data before and stops, it is not marked `UNSUPPORTED`: Attention Needed shows unknown and Attention Reasons says "SMART data not available right now" until the data comes back. On macOS, USB drives only give SMART data through a third-party SAT driver; if it stops working, reinstalling it and allowing it when macOS asks has brought the data back. The agent's `/api/drives` shows `smart_available: false` for such a drive.
+
 </details>
 
 <br>

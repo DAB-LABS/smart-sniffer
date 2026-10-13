@@ -4,11 +4,11 @@ All notable changes to SMART Sniffer are documented here.
 
 ## v0.8.3 -- 2026-10-12
 
-**Agent and Windows installer. Windows users with smartmontools from Scoop:
-update the agent.** The Windows service no longer fails to start when
-smartctl is only on your user PATH, and `smartctl_path` in `config.yaml` now
-works on every platform. The integration is unchanged apart from its version
-number; take the HACS update so the versions match.
+**Agent, Windows installer and integration. Update the agent and take the
+HACS update.** The Windows service no longer fails to start when smartctl is
+only on your user PATH, and `smartctl_path` in `config.yaml` now works on
+every platform. A drive that stops giving SMART data (seen on Mac USB drives)
+now shows "not available right now" instead of being called unsupported.
 
 ### Fixed
 - **Windows service would not start (error 100, "smartctl not found") when
@@ -18,12 +18,21 @@ number; take the HACS update so the versions match.
 - **`smartctl_path` in `config.yaml` was ignored.** It is now used when set.
   A path that is missing, not executable or too old is logged as an `ERROR`
   with the reason, and the agent falls back to its normal search (#60).
+- **Mac USB drives went to unknown with a notification blaming the USB
+  enclosure.** The driver that passes SMART through had stopped working, so
+  the drive answered with no SMART data. Such a drive now shows Attention
+  Needed as unknown, "SMART data not available right now", no notification,
+  and recovers by itself when SMART data returns. Thanks @spry-salt (#61).
 
 ### Changed
 - **The Windows installer writes `smartctl_path`** when smartctl is only on
   your user PATH (Scoop, winget portable), on new installs and upgrades.
 - **Windows Event Viewer shows which smartctl the service uses** (event ID
   3), and a `smartctl_path` that cannot be used as a warning (event ID 103).
+- **The agent says when a drive stops or starts giving SMART data**: one log
+  line each way, and `smart_available` on `/api/drives` and
+  `/api/drives/{id}` (with `smart_unavailable_reason` and `smart_lost` on
+  the drive) (#61).
 
 ## v0.8.2 -- 2026-10-12
 
