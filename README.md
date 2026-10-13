@@ -180,6 +180,7 @@ standby_mode: standby          # optional -- never, standby, sleep, or idle
 advertise_interface: eth0      # optional -- restrict mDNS to this interface
 exclude_devices:               # optional -- set by installer's drive picker
   - /dev/sdb
+smartctl_path: /usr/local/bin/smartctl  # optional -- only when smartctl is not on PATH or the usual install locations
 zfs_pool_status: true          # optional -- report ZFS pool health when zpool is found
 device_statistics: true        # optional -- read each SATA drive's Device Statistics log (always off on macOS)
 filesystems:                   # optional -- set by installer's disk usage picker
@@ -202,6 +203,8 @@ docker run -v /:/host:ro -e SMARTHA_MOUNT_PREFIX=/host ...
 The equivalent config file setting is `mount_prefix: /host`. Configured mountpoints are then read through that prefix, while the paths reported to Home Assistant stay as the host sees them. This affects disk usage reporting only; reading SMART data from host drives additionally requires passing the devices through to the container.
 
 **Exclude devices:** Device paths listed in `exclude_devices` are skipped during every scan. The agent resolves symlinks at startup, so `/dev/disk/by-id/...` paths and their `/dev/sdX` equivalents both match. The installer's drive picker (Linux) shows all detected drives and lets you choose which ones to monitor -- useful for excluding iSCSI LUNs, USB backup drives, or anything you don't want polled. Drives with remote-storage transports (iSCSI, Fibre Channel) are flagged in yellow and excluded from the default selection. You can also add paths manually and restart the service. If a device appears in both `exclude_devices` and `device_overrides`, the exclusion wins and a warning is logged.
+
+**smartctl location:** The agent looks for `smartctl` on PATH, then in the usual install locations for the platform (Synology and QNAP packages, Entware, Unraid, Homebrew, MacPorts; on Windows, Program Files, Chocolatey, winget and Scoop in every user profile). Set `smartctl_path` to the full path of the binary to use a specific one. If that file is missing, not executable or older than smartctl 7.0, the agent logs `ERROR: smartctl_path "..." in config cannot be used: <reason>` and carries on with its normal search. On Windows, write the path in single quotes (`smartctl_path: 'C:\tools\smartctl.exe'`) or in double quotes with doubled backslashes.
 
 **ZFS pool health:** On a machine with ZFS the agent reads `zpool status` on every scan and reports each pool at `/api/pools`. Nothing to configure; machines without ZFS are unaffected. Set `zfs_pool_status: false` to turn it off, or `zpool_path: /path/to/zpool` if `zpool` is not on the usual paths. Pool level only: the error counts add up every disk in the pool, and the disks with problems are named in the Problem sensor and the notification.
 
@@ -317,6 +320,8 @@ irm https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.ps1 | 
 > **Important:** This must be run from **PowerShell**, not Command Prompt (CMD). If you see `'irm' is not recognized`, you're in CMD -- open PowerShell as Administrator instead. Right-click the Start button and select **Terminal (Admin)** or search for "PowerShell" in the Start menu.
 
 > **Note:** Requires v0.5.1 or later. Earlier Windows builds had a service startup bug tracked as [#13](https://github.com/DAB-LABS/smart-sniffer/issues/13). Service events appear in Event Viewer under Windows Logs → Application with source `SmartHA-Agent`.
+
+> **Scoop or winget portable smartmontools:** The agent runs as a service under the SYSTEM account, which only sees the system PATH, not your user PATH. Since v0.8.3 the agent also looks in every user's Scoop folder and winget links folder, and the installer writes `smartctl_path` into `config.yaml` when smartctl is only on your user PATH. On older versions the service failed to start with "smartctl not found" (event ID 100, [#60](https://github.com/DAB-LABS/smart-sniffer/issues/60)). Each service start now records the smartctl in use in Event Viewer (event ID 3), and a `smartctl_path` that cannot be used as a warning (event ID 103).
 
 > **Firewall:** The installer adds an inbound Windows Firewall rule for the agent's TCP port (default 9099) so Home Assistant can reach it from another machine. If you run the agent binary manually instead of using the installer, allow inbound TCP 9099 yourself.
 

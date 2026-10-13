@@ -114,11 +114,13 @@ which smartctl
 /usr/local/bin/smartctl --version
 ```
 
-If `/usr/local/bin/smartctl` shows 7.4+ but the agent isn't using it, you can set the path explicitly in `config.yaml`:
+If `/usr/local/bin/smartctl` shows 7.4+ but the agent isn't using it, set the path explicitly in `config.yaml` and restart the agent (agent v0.8.3 or later; older agents ignore this key):
 
 ```yaml
 smartctl_path: /usr/local/bin/smartctl
 ```
+
+The startup log then shows `using smartctl_path from config: /usr/local/bin/smartctl`. If the file is missing, not executable or older than smartctl 7.0, the agent logs an `ERROR: smartctl_path ...` line with the reason and falls back to its normal search.
 
 ### No drives detected
 
