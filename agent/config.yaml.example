@@ -26,9 +26,14 @@ mdns: true
 #
 # When not set (default), the agent auto-filters known virtual
 # interfaces (Docker, ZeroTier, Tailscale, WireGuard, etc.) and
-# advertises on all remaining physical interfaces.
+# advertises on all remaining physical interfaces. If those offer only a
+# public address or none, a LAN bridge named br-lan or vmbr0 (or its
+# lowest VLAN, br-lan.N / vmbr0.N) with a private address is used. If
+# they have no IPv4 at all, another non-Docker bridge (vmbr*, ovs_*,
+# br-<name>) supplies it. The startup log says which rule chose it.
+# Setting advertise_interface always wins over these rules.
 #
-# Examples: eth0, enp1s0, en0, bond0
+# Examples: eth0, enp1s0, en0, bond0, vmbr0, br-lan
 # advertise_interface: eth0
 
 # Filesystem monitoring (optional).

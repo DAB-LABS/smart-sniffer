@@ -210,13 +210,12 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 			authFlag = "1"
 		}
 
-		// Resolve which interfaces to advertise on.
-		ifaces, ifaceDesc := cfg.ResolveAdvertiseInterfaces()
-		log.Printf("mDNS: interfaces: %s", ifaceDesc)
-
-		// Determine preferred IP for TXT record so the HA integration
-		// doesn't have to guess which IP is the real LAN address.
-		preferredIP := PreferredIP(ifaces)
+		// Resolve which interfaces to advertise on and the ip= address,
+		// so the HA integration doesn't have to guess which IP is the real
+		// LAN address. See advertise.go for the rules.
+		plan := cfg.ResolveAdvertise()
+		log.Printf("mDNS: interfaces: %s", plan.Desc)
+		log.Print(plan.LogLine())
 
 		// Build the mDNS instance name. Use --mdns-name / mdns_name if
 		// provided (e.g. by the HA add-on to avoid container hostname
@@ -231,20 +230,9 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 			instance = instance[:63]
 		}
 
-		txt := []string{
-			"txtvers=1",
-			"version=" + version,
-			"hostname=" + hostname,
-			"os=" + detectOS(),
-			"auth=" + authFlag,
-			"drives=" + strconv.Itoa(len(drives)),
-		}
-		if preferredIP != "" {
-			txt = append(txt, "ip="+preferredIP)
-			log.Printf("mDNS: preferred IP: %s", preferredIP)
-		}
+		txt := buildTXT(hostname, authFlag, len(drives), plan.IP)
 
-		mdnsServer, err = zeroconf.Register(instance, "_smartha._tcp", "local.", cfg.Port, txt, ifaces)
+		mdnsServer, err = zeroconf.Register(instance, "_smartha._tcp", "local.", cfg.Port, txt, plan.Ifaces)
 		if err != nil {
 			log.Printf("WARNING: mDNS registration failed: %v", err)
 		} else {
@@ -318,6 +306,22 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 	}
 
 	return nil
+}
+
+// buildTXT returns the mDNS TXT record. ip= is left out when empty.
+func buildTXT(hostname, authFlag string, driveCount int, ip string) []string {
+	txt := []string{
+		"txtvers=1",
+		"version=" + version,
+		"hostname=" + hostname,
+		"os=" + detectOS(),
+		"auth=" + authFlag,
+		"drives=" + strconv.Itoa(driveCount),
+	}
+	if ip != "" {
+		txt = append(txt, "ip="+ip)
+	}
+	return txt
 }
 
 // detectOS returns the runtime OS as a short string for mDNS TXT records

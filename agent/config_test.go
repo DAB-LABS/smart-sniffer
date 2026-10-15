@@ -1,22 +1,11 @@
 package main
 
 import (
-	"strings"
 	"testing"
 )
 
-// shouldSkip mirrors the prefix-matching logic used by ResolveAdvertiseInterfaces
-// and PreferredIP. It returns true if the interface name matches any entry in
-// defaultSkipPrefixes.
-func shouldSkip(ifaceName string) bool {
-	nameLower := strings.ToLower(ifaceName)
-	for _, prefix := range defaultSkipPrefixes {
-		if strings.HasPrefix(nameLower, prefix) {
-			return true
-		}
-	}
-	return false
-}
+// The skip-list tests call isSkippedInterface, the function the agent
+// itself uses (advertise.go), not a copy.
 
 // TestSkipPrefixes_Filtered confirms that known virtual/container/VPN interface
 // names are correctly identified for skipping.
@@ -101,7 +90,7 @@ func TestSkipPrefixes_Filtered(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if !shouldSkip(tc.name) {
+			if !isSkippedInterface(tc.name) {
 				t.Errorf("%s (%s) should be filtered but was not", tc.name, tc.reason)
 			}
 		})
@@ -141,7 +130,7 @@ func TestSkipPrefixes_NotFiltered(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if shouldSkip(tc.name) {
+			if isSkippedInterface(tc.name) {
 				t.Errorf("%s (%s) should NOT be filtered but was", tc.name, tc.reason)
 			}
 		})
@@ -162,7 +151,7 @@ func TestSkipPrefixes_CaseInsensitive(t *testing.T) {
 
 	for _, name := range cases {
 		t.Run(name, func(t *testing.T) {
-			if !shouldSkip(name) {
+			if !isSkippedInterface(name) {
 				t.Errorf("%s should be filtered (case-insensitive) but was not", name)
 			}
 		})
