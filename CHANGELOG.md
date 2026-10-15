@@ -2,68 +2,75 @@
 
 All notable changes to SMART Sniffer are documented here.
 
-## v0.8.3 -- 2026-10-14
+## v0.8.3 -- 2026-10-15
 
-**Agent, both installers, integration and release workflow. Update the
-agent and take the HACS update.** The Windows service no longer fails to
-start when smartctl is only on your user PATH, and `smartctl_path` in
-`config.yaml` now works on every platform. A drive that stops giving SMART
-data (seen on Mac USB drives) now shows "not available right now" instead of
-being called unsupported. A timed-out poll now names the agent in the log.
-OpenWrt and Proxmox agents are discovered at their LAN address. On Synology, re-run the installer to get disk usage for `/volume1`.
+**Agent, both installers and integration. Update the agent on every
+machine, then take the HACS update.** The Windows service starts again
+when smartctl came from Scoop. A WD Blue / Red / Green SSD no longer reads
+as 99% worn. An agent you already added is no longer offered again as
+discovered or added twice. On Synology, re-run the installer to get disk
+usage for `/volume1`.
 
 ### Fixed
-- **Windows service would not start (error 100, "smartctl not found") when
-  smartmontools came from Scoop.** The service runs as SYSTEM and never saw
-  the user PATH. The agent now also looks in Program Files, Chocolatey,
-  winget and Scoop folders, in every user profile. Thanks @SiriosDev (#60).
-- **`smartctl_path` in `config.yaml` was ignored.** It is now used when set.
-  A path that is missing, not executable or too old is logged as an `ERROR`
-  with the reason, and the agent falls back to its normal search (#60).
-- **Mac USB drives went to unknown with a notification blaming the USB
-  enclosure.** The driver that passes SMART through had stopped working, so
-  the drive answered with no SMART data. Such a drive now shows Attention
-  Needed as unknown, "SMART data not available right now", no notification,
-  and recovers by itself when SMART data returns. Thanks @spry-salt (#61).
-- **"Timeout fetching smart_sniffer data" did not say which agent.** The log
-  now names the agent's host and port and the request that timed out, once
-  when it starts and once when the agent answers again.
-- **On a Mac, disk usage could not be tied to its drive.** A filesystem such
-  as `/System/Volumes/Data` sits on an APFS volume that names no drive.
-  `/api/filesystems` now gives each one on macOS `physical_devices` and the
-  `drive_id` of its drive, for the SMART Sniffer app's Control Center.
-- **No disk usage for `/volume1` on Synology with SHR.** The installer
-  offered only `/`, because the volume's device (`/dev/vg1000/lv`) was not a
-  name it knew. Every `/volumeN` and USB share is now offered. Re-run the
-  installer, or add the volume to `config.yaml` as in the Synology guide.
-  Thanks @Symbiot78 (#62).
-- **OpenWrt agents were discovered at their public WAN address, and Proxmox
-  agents at no address.** When the usual pick is not a private address, the
-  agent now uses the `br-lan` or `vmbr0` bridge. A host that advertised a
-  private address before keeps it; `advertise_interface` still wins. Thanks
-  @DanaGoyette (smart-sniffer-app#12).
+- **Windows service would not start (error 100) when smartmontools came
+  from Scoop.** The agent now also searches the Scoop, winget, Chocolatey
+  and Program Files folders, and `smartctl_path` in `config.yaml`, which
+  was ignored, now works on every platform. Thanks @SiriosDev (#60).
+- **Mac USB drives went to unknown with a notification blaming the
+  enclosure** when the SAT SMART driver stopped passing SMART through. The
+  drive now shows "SMART data not available right now", no notification,
+  and recovers by itself. Thanks @spry-salt (#61).
+- **"Timeout fetching smart_sniffer data" did not say which agent.** The
+  log now names the agent and the request that timed out.
+- **No disk usage for `/volume1` on Synology with SHR.** The installer now
+  offers every `/volumeN` and USB share. Thanks @Symbiot78 (#62).
+- **A WD Blue / Red / Green SATA SSD showed "Wear Level 99%" and a wear
+  warning when nearly new.** These drives count wear up, not down, and are
+  now read that way. Thanks @Baxxy13 (#63).
+- **One agent could be added twice, giving every entity on its drives a
+  `_2` twin** that voice assistants cannot tell apart. The setup flow now
+  refuses the second entry, also when a waiting discovery is confirmed
+  later. Thanks @Sudo-Rob (#64).
+- **An agent added from the app's Control Center was still offered as
+  discovered.** OpenWrt and Proxmox agents now advertise their LAN address
+  (`br-lan`, `vmbr0`), and discovery recognises an agent already added
+  under another address by its host name and drives. Thanks @DanaGoyette
+  (smart-sniffer-app#12).
+- **Discovery could move a working entry to a wrong address.** An entry
+  now moves only when its old address stops answering and the same agent
+  answers at the new one. Entries added by address or from the Control
+  Center never move.
+- **Discovery picked a link-local (169.254.x.x) address over a Tailscale
+  one** for agents that do not advertise a preferred address.
+- **Two diagnostic entities with the same name** on SK hynix and SandForce
+  drives now include the attribute ID, such as "Program Fail Count (ID
+  181)" (#64).
 
 ### Changed
 - **The Windows installer writes `smartctl_path`** when smartctl is only on
-  your user PATH (Scoop, winget portable), on new installs and upgrades.
-- **Windows Event Viewer shows which smartctl the service uses** (event ID
-  3), and a `smartctl_path` that cannot be used as a warning (event ID 103).
-- **The agent says when a drive stops or starts giving SMART data**: one log
-  line each way, and `smart_available` on `/api/drives` and
-  `/api/drives/{id}` (with `smart_unavailable_reason` and `smart_lost` on
-  the drive) (#61).
-- **`/api/health` reports the host name and OS name**: `hostname`,
-  `os_name` (such as "macOS 15.1") and `os_version`. `os` is unchanged.
-- **`/api/pools` describes each pool's layout**: every vdev, healthy or
-  not, as a tree (`vdevs`, plus `logs`, `cache`, `spares`, `special`,
-  `dedup` when present), with the device path of each disk where zpool
-  gives one. `problem_vdevs` and the other fields are unchanged.
-- **Each agent reports a random `agent_id`** in `/api/health` and mDNS, saved
-  as `agent_id.json` next to `config.yaml`. On OpenWrt, add that file to
-  `/etc/sysupgrade.conf`; in Docker, mount a directory rather than only the
-  config file (see the guides).
-- **Release notes no longer carry emoji** in the update and install steps
-  added under each release.
+  your user PATH, and Event Viewer shows which smartctl the service uses.
+- **`/api/health` reports `hostname`, `os_name`, `os_version` and a random
+  `agent_id`**, saved as `agent_id.json` next to `config.yaml`.
+- **`/api/drives` reports `smart_available`**, and the agent logs when a
+  drive stops or starts giving SMART data.
+- **`/api/filesystems` ties each macOS filesystem to its drive, and
+  `/api/pools` gives each ZFS pool's full layout**, for the SMART Sniffer
+  app's Control Center.
+
+### Upgrade notes
+- **Same agent listed twice** under Settings > Devices & services > SMART
+  Sniffer? Delete the extra entry. This release stops new duplicates but
+  does not remove old ones. Renamed entities keep their entity IDs.
+- **WD Blue / Red / Green SATA SSDs: Wear Level drops** from near 100% to
+  its real value (often 1-5%), and the wear warning clears.
+- **Docker:** mount a directory at `/etc/smartha-agent`, not only the
+  config file, or set `agent_id:` in `config.yaml`. Otherwise the agent
+  gets a new ID each time the container is recreated.
+- **OpenWrt:** add `/etc/smartha-agent/agent_id.json` to
+  `/etc/sysupgrade.conf` so the ID survives a sysupgrade.
+- **Entries are no longer moved on rediscovery while their address still
+  answers.** If an agent changed address and something else now answers at
+  the old one, delete the entry and add the agent again.
 
 ## v0.8.2 -- 2026-10-12
 
