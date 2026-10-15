@@ -40,6 +40,7 @@ from .attention import (
     STATE_NO,
     STATE_UNSUPPORTED,
     STATE_YES,
+    ata_wear_note,
     coerce_smart_data,
     compose_reasons_text,
     evaluate_attention,
@@ -500,6 +501,12 @@ class SmartSnifferSensor(CoordinatorEntity[SmartSnifferCoordinator], SensorEntit
         if drive_data.get("in_standby"):
             attrs["in_standby"] = True
             attrs["data_as_of"] = drive_data.get("last_updated", "unknown")
+        if self.entity_description.key == _NVME_WEAR_KEY:
+            # Why a WD wear reading is unknown, or that it came from Device
+            # Statistics (GH #63). Absent for every other drive.
+            wear_note = ata_wear_note(drive_data)
+            if wear_note:
+                attrs["wear_note"] = wear_note
         page_attrs = page_attributes(drive_data, self.entity_description.key)
         if page_attrs and self.hass is not None:
             page_attrs = temperature_attrs_in_unit(

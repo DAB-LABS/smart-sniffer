@@ -544,3 +544,39 @@ def test_health_keeps_the_agent_host_and_os_name(monkeypatch):
     session.body = {"status": "ok", "version": "0.8.2", "os": "linux"}  # older agent
     data = asyncio.run(health._async_update_data())
     assert (data["hostname"], data["os_name"], data["os_version"]) == ("", "", "")
+
+
+def _wd_red_sa500(wear_value):
+    from tests.golden_payloads import FIXTURES, drive_payload
+
+    with (FIXTURES / "v083" / "ata_wd_red_sa500.json").open(encoding="utf-8") as handle:
+        smart_data = json.load(handle)
+    for attr in smart_data["ata_smart_attributes"]["table"]:
+        if attr["id"] == 230:
+            attr["value"] = wear_value
+    return drive_payload("wd_red_sa500", smart_data)
+
+
+def _attention(added):
+    (entity,) = [e for e in added["sensor"] if type(e).__name__ == "SmartSnifferAttentionSensor"]
+    return entity.native_value
+
+
+def test_wd_wear_level_and_its_note():
+    """GH #63: 230 read as percent used; a cross-check disagreement leaves the
+    Wear Level unknown and says why in a wear_note attribute."""
+    drive = _wd_red_sa500(1)
+    _, added = _setup({drive["id"]: drive})
+    by_key = {e.entity_description.key: e for e in added["sensor"] if hasattr(e, "entity_description")}
+    wear = by_key["wear_leveling_count"]
+    assert wear.native_value == 1
+    assert "wear_note" not in wear.extra_state_attributes
+    assert _attention(added) == "NO"
+
+    drive = _wd_red_sa500(99)
+    _, added = _setup({drive["id"]: drive})
+    by_key = {e.entity_description.key: e for e in added["sensor"] if hasattr(e, "entity_description")}
+    wear = by_key["wear_leveling_count"]
+    assert wear.native_value is None
+    assert wear.extra_state_attributes["wear_note"].startswith("wear unknown: attribute 230")
+    assert _attention(added) == "NO"

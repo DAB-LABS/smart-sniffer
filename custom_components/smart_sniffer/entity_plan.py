@@ -28,7 +28,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
-from .attention import coerce_smart_data, is_dead_wear_attr
+from .attention import ata_wear_note, coerce_smart_data, is_dead_wear_attr
 from .const import FILESYSTEMS_KEY
 from .devstat import data_volume
 from .extract import (
@@ -248,7 +248,13 @@ def _drive_sensor_specs(
                 "Skipping NVMe-only sensor '%s' for ATA/SATA drive %s", key, drive_id
             )
             continue
-        if key in SKIP_IF_NOT_PRESENT and _extract_attribute(drive_data, key) is None:
+        if (
+            key in SKIP_IF_NOT_PRESENT
+            and _extract_attribute(drive_data, key) is None
+            # A WD wear reading the cross-check rejected is unknown, not
+            # absent: keep the entity so it can say why (GH #63).
+            and not (key == "wear_leveling_count" and ata_wear_note(drive_data))
+        ):
             _LOGGER.debug(
                 "Skipping sensor '%s' for drive %s — not in SMART data", key, drive_id
             )

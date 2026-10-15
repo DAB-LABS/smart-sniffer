@@ -129,6 +129,98 @@ def is_dead_wear_attr(attr: dict[str, Any]) -> bool:
         isinstance(f, int) and not isinstance(f, bool) and f == 0 for f in fields
     )
 
+
+# WD's Marvell-based SATA SSDs (WD Blue 3D, WD Red SA500, WD Blue SA510, WD
+# Green; drivedb family "WD Blue / Red / Green SSDs") count attribute 230
+# Media_Wearout_Indicator UP: its normalized value is percent of life used,
+# not life remaining. Inverting it showed a near-new WD Red SA500 as 99 % used
+# and raised an SSD wear warning (GH #63). Matched on smartctl's drivedb
+# family string, so a drive smartctl does not recognise keeps the usual rule.
+WD_COUNT_UP_WEAR_FAMILY = "WD Blue / Red / Green SSDs"
+_WD_WEAR_ATTR_ID = 230
+_WD_AVG_PE_NAME = "Average_PE_Cycles_TLC"  # attribute 173 on this family
+# Cross-check rating: a conservative TLC endurance in program/erase cycles.
+# Only used to tell "about new" from "heavily worn", never shown as a value.
+_WD_ASSUMED_PE_RATING = 1000
+
+
+def _is_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _wd_average_pe(table: list[dict[str, Any]]) -> int | None:
+    """Average_PE_Cycles_TLC's raw count, or None when absent or not a count."""
+    for attr in table:
+        if isinstance(attr, dict) and attr.get("name") == _WD_AVG_PE_NAME:
+            raw = attr.get("raw")
+            value = raw.get("value") if isinstance(raw, dict) else None
+            if _is_int(value) and 0 <= value <= 0xFFFFFFFF:
+                return value
+            return None
+    return None
+
+
+def ata_wear_used(
+    attr: dict[str, Any],
+    smart_data: dict[str, Any],
+    devstat: dict[str, Any] | None = None,
+) -> tuple[int | None, str | None]:
+    """Percent of rated life used from one usable wear-named ATA row.
+
+    Returns ``(percent_used, note)``. ``percent_used`` is None when the drive
+    gives no trustworthy reading; ``note`` says why, or where a value came
+    from when it is not the row itself.
+
+    Every family but one: the normalized value is life remaining, inverted.
+
+    WD Blue / Red / Green SSDs, attribute 230 (GH #63):
+      1. Device Statistics "Percentage Used Endurance Indicator" when the
+         merged readings hold it: the standard, vendor-neutral source.
+      2. Else 230's normalized value, as percent used (no inversion),
+         cross-checked against Average_PE_Cycles_TLC (173) at an assumed
+         1000-cycle rating. If they disagree badly (230 under 10 % while the
+         cycles imply 50 % or more, or 230 over 90 % while they imply under
+         10 %) neither is trusted: the reading is unknown, so no wear warning.
+    """
+    normalized = attr.get("value")
+    if not _is_int(normalized):
+        return None, None
+
+    if not (
+        smart_data.get("model_family") == WD_COUNT_UP_WEAR_FAMILY
+        and attr.get("id") == _WD_WEAR_ATTR_ID
+    ):
+        return max(0, 100 - normalized), None
+
+    wear_from_devstat = (devstat or {}).get("wear_used")
+    if _is_int(wear_from_devstat) and wear_from_devstat >= 0:
+        return wear_from_devstat, "from device statistics"
+
+    used = max(0, normalized)
+    table = (smart_data.get("ata_smart_attributes") or {}).get("table") or []
+    avg_pe = _wd_average_pe(table)
+    if avg_pe is None:
+        return used, None
+    implied = avg_pe * 100 // _WD_ASSUMED_PE_RATING
+    if (used < 10 and implied >= 50) or (used > 90 and implied < 10):
+        return None, (
+            f"wear unknown: attribute 230 reads {used}% used but average P/E "
+            f"cycles ({avg_pe}) suggest about {implied}%"
+        )
+    return used, None
+
+
+def ata_wear_note(drive_data: dict[str, Any]) -> str | None:
+    """The note for the wear reading the Wear Level sensor shows, or None."""
+    smart_data = coerce_smart_data(drive_data)
+    table = (smart_data.get("ata_smart_attributes") or {}).get("table") or []
+    for attr in table:
+        if isinstance(attr, dict) and attr.get("name", "") in _ATA_WEAR_NAMES:
+            if is_dead_wear_attr(attr):
+                continue
+            return ata_wear_used(attr, smart_data, effective_devstat(drive_data))[1]
+    return None
+
 # NVMe available_spare warning tier. The drive's own available_spare_threshold
 # is a separate, non-configurable critical check; this is the earlier heads-up.
 _NVME_SPARE_WARN_BELOW = 20  # percent remaining
@@ -290,9 +382,9 @@ def current_readings(drive_data: dict[str, Any]) -> dict[str, int]:
         if attr.get("name", "") in _ATA_WEAR_NAMES:
             if is_dead_wear_attr(attr):
                 continue  # not a gauge; try the next candidate (GH #55)
-            normalized = attr.get("value")
-            if normalized is not None:
-                readings[LABEL_SSD_WEAR] = max(0, 100 - normalized)
+            pct_used, _ = ata_wear_used(attr, smart_data, effective_devstat(drive_data))
+            if pct_used is not None:
+                readings[LABEL_SSD_WEAR] = pct_used
             break
 
     # Device Statistics fill the labels the attribute table cannot (D4).
@@ -799,15 +891,18 @@ def evaluate_attention(
                 seen_labels.add(label)
 
     # WARNING -- ATA SSD wear leveling.
-    # Normalized VALUE is "life remaining"; invert to "percentage used".
+    # Normalized VALUE is "life remaining"; invert to "percentage used"
+    # (ata_wear_used, which also reads WD's count-up 230 the right way, #63).
+    # An unknown reading (WD cross-check disagreement) raises nothing.
     if "SSD wear" not in seen_labels:
         for attr in ata_attrs:
             if attr.get("name", "") in _ATA_WEAR_NAMES:
                 if is_dead_wear_attr(attr):
                     continue  # not a gauge; try the next candidate (GH #55)
-                normalized = attr.get("value")
-                if normalized is not None:
-                    pct_used = max(0, 100 - normalized)
+                pct_used, _ = ata_wear_used(
+                    attr, smart_data, effective_devstat(drive_data)
+                )
+                if pct_used is not None:
                     breached, was_accepted, limit = _evaluate_label(
                         LABEL_SSD_WEAR, pct_used, thresholds
                     )

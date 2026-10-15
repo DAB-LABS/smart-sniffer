@@ -12,7 +12,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .attention import coerce_smart_data, is_dead_wear_attr, nvme_counter
+from .attention import ata_wear_used, coerce_smart_data, is_dead_wear_attr, nvme_counter
+from .devstat import effective_devstat
 
 # ---------------------------------------------------------------------------
 # Drive-type gate sets
@@ -351,11 +352,12 @@ def _extract_attribute(drive_data: dict[str, Any], key: str) -> Any | None:
                 # erase cycles, etc.) and should not be used directly.
                 # See: https://github.com/DAB-LABS/smart-sniffer/issues/7
                 # See: docs/internal/research/smart-wear-leveling-semantics.md
+                # WD Blue / Red / Green SSDs count attribute 230 up instead
+                # (GH #63); ata_wear_used handles both.
                 if key == "wear_leveling_count":
-                    normalized = attr.get("value")
-                    if normalized is None:
-                        return None
-                    return max(0, 100 - normalized)
+                    return ata_wear_used(
+                        attr, smart_data, effective_devstat(drive_data)
+                    )[0]
 
                 # Everything else: unpack vendor-compound raw values rather
                 # than handing Home Assistant a packed 48-bit integer.  See
