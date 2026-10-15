@@ -20,6 +20,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry
 from homeassistant.helpers.storage import Store
 
+from .agent_identity import ENTRY_IDENTITY_KEYS
 from .attention import evaluate_attention, get_thresholds
 from .const import (
     AGENT_DEVICE_ID,
@@ -147,7 +148,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             supports_response=SupportsResponse.ONLY,
         )
 
-    # Reload the integration when options are changed via the UI.
+    # Reload the integration when options are changed via the UI, but not
+    # when the coordinator only stored what it learned about the agent.
+    hass.data[DOMAIN][entry.entry_id][_SETTINGS] = _settings(entry)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     return True
@@ -249,6 +252,24 @@ def _store_key(entry_id: str) -> str:
     return f"{STORE_KEY_PREFIX}.{entry_id}"
 
 
+# Key under hass.data[DOMAIN][entry_id]: the entry as set up, less the agent
+# identity the coordinator keeps (agent_identity.ENTRY_IDENTITY_KEYS).
+_SETTINGS = "settings_at_setup"
+
+
+def _settings(entry: ConfigEntry) -> tuple[Any, ...]:
+    data = {k: v for k, v in entry.data.items() if k not in ENTRY_IDENTITY_KEYS}
+    return (entry.title, entry.unique_id, data, dict(entry.options))
+
+
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload integration when options change (token, port, interval)."""
+    """Reload integration when options change (token, port, interval).
+
+    An update that only stored the agent's host name, drive digest or
+    agent_id (coordinator._store_identity) changes nothing the entry was set
+    up with, so it does not reload.
+    """
+    at_setup = (hass.data.get(DOMAIN, {}).get(entry.entry_id) or {}).get(_SETTINGS)
+    if at_setup is not None and at_setup == _settings(entry):
+        return
     await hass.config_entries.async_reload(entry.entry_id)

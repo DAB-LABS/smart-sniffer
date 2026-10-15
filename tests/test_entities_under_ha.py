@@ -567,6 +567,146 @@ def test_health_keeps_the_agent_host_and_os_name(monkeypatch):
     assert (data["hostname"], data["os_name"], data["os_version"]) == ("", "", "")
 
 
+class _AgentSession:
+    """Session stand-in for a whole poll: drives, one drive, health."""
+
+    def __init__(self, health):
+        self.health = health
+
+    def get(self, url, headers=None, timeout=None):
+        health = self.health
+        path = url.split("9099", 1)[1]
+
+        class _Resp:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            def raise_for_status(self):
+                return None
+
+            async def json(self):
+                if path == "/api/drives":
+                    return [{"id": "fake-sda", "serial": "FAKE-SER-1"}]
+                if path == "/api/health":
+                    return health
+                return {"id": "fake-sda", "serial": "FAKE-SER-1", "model": "Fake",
+                        "protocol": "ATA", "smart_data": {}}
+
+        return _Resp()
+
+
+class _ConfigEntries:
+    def __init__(self):
+        self.updates = []
+        self.reloads = []
+
+    def async_update_entry(self, entry, data):
+        self.updates.append(data)
+        entry.data = data
+
+    async def async_reload(self, entry_id):
+        self.reloads.append(entry_id)
+
+
+def _identity_coordinator(monkeypatch, health, data=None):
+    monkeypatch.setattr(coordinator_mod, "async_get_clientsession",
+                        lambda hass: _AgentSession(health))
+    monkeypatch.setattr(coordinator_mod, "pn_create", lambda hass, **kw: None)
+    monkeypatch.setattr(coordinator_mod, "pn_dismiss", lambda hass, nid: None)
+    coord = _coordinator()
+    coord.hass.config_entries = _ConfigEntries()
+    coord.config_entry.data = {"host": "10.0.0.5", "port": 9099, **(data or {})}
+    coord.host, coord.port, coord.token = "10.0.0.5", 9099, ""
+    coord._timeouts = coordinator_mod.PollTimeouts(
+        coordinator_mod._LOGGER, coord.host, coord.port, coordinator_mod.AGENT_POLL_TIMEOUT
+    )
+    coord._other_agent_logged = False
+    coord.registered_pool_names = lambda: []
+    coord._check_agent_version = lambda version: None
+    return coord
+
+
+AGENT_ID = "3f9c0e5a7b1d4c2e8a6f0b9d1e2c3a4b"
+
+
+def test_a_poll_stores_the_agents_identity_on_the_entry(monkeypatch):
+    identity = importlib.import_module("custom_components.smart_sniffer.agent_identity")
+    health = {"status": "ok", "version": "0.8.3", "hostname": "Fake-NAS", "agent_id": AGENT_ID}
+    coord = _identity_coordinator(monkeypatch, health)
+    asyncio.run(coord._async_update_data())
+    assert coord.config_entry.data == {
+        "host": "10.0.0.5", "port": 9099,
+        "agent_hostname": "fake-nas",
+        "agent_drives": identity.drive_digest([{"serial": "FAKE-SER-1"}]),
+        "agent_id": AGENT_ID,
+    }
+    asyncio.run(coord._async_update_data())  # unchanged: no second write
+    assert len(coord.hass.config_entries.updates) == 1
+
+
+def test_a_poll_of_another_agent_at_the_address_keeps_the_identity(monkeypatch, caplog):
+    stored = {"agent_hostname": "fake-nas", "agent_drives": "d" * 32, "agent_id": AGENT_ID}
+    other = {"status": "ok", "version": "0.8.3", "hostname": "other-box", "agent_id": "e" * 32}
+    coord = _identity_coordinator(monkeypatch, other, stored)
+    for _ in range(2):
+        asyncio.run(coord._async_update_data())
+    assert coord.hass.config_entries.updates == []
+    warnings = [r for r in caplog.records if "now answers as host other-box" in r.getMessage()]
+    assert len(warnings) == 1
+
+
+def test_an_older_agent_stores_nothing(monkeypatch):
+    coord = _identity_coordinator(monkeypatch, {"status": "ok", "version": "0.8.2"})
+    asyncio.run(coord._async_update_data())
+    assert coord.hass.config_entries.updates == []
+
+
+def _package_init():
+    """The package's __init__.py as a module (conftest registers a bare
+    package so that the plain tests never run it). Executed under the
+    package's own name for its relative imports, but not put in sys.modules,
+    which keeps the bare package."""
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(coordinator_mod.__file__).with_name("__init__.py")
+    spec = importlib.util.spec_from_file_location(
+        "custom_components.smart_sniffer", path
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_storing_the_identity_does_not_reload_the_entry():
+    init = _package_init()
+    hass, entry = _Hass(), _Entry()
+    entry.unique_id = "smartha-fixturehost"
+    hass.config_entries = _ConfigEntries()
+    hass.data[DOMAIN] = {entry.entry_id: {init._SETTINGS: init._settings(entry)}}
+
+    entry.data = {**entry.data, "agent_hostname": "fixturehost", "agent_drives": "d" * 32,
+                  "agent_id": AGENT_ID}
+    asyncio.run(init._async_update_listener(hass, entry))
+    assert hass.config_entries.reloads == []
+
+    for change in ({"port": 9100}, {"token": "new"}, {"thresholds": {"x": {"a": 1}}}):
+        hass.config_entries.reloads.clear()
+        entry.data = {**entry.data, **change}
+        asyncio.run(init._async_update_listener(hass, entry))
+        assert hass.config_entries.reloads == [entry.entry_id], change
+        hass.data[DOMAIN][entry.entry_id][init._SETTINGS] = init._settings(entry)
+
+
+def test_diagnostics_redact_the_drive_digest():
+    diagnostics = importlib.import_module("custom_components.smart_sniffer.diagnostics")
+    assert "agent_drives" in diagnostics.CONFIG_REDACT_KEYS
+    assert "agent_hostname" not in diagnostics.CONFIG_REDACT_KEYS
+
+
 def _wd_red_sa500(wear_value):
     from tests.golden_payloads import FIXTURES, drive_payload
 

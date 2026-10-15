@@ -69,6 +69,7 @@ from homeassistant.helpers.issue_registry import (
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+from .agent_identity import ENTRY_AGENT_HOSTNAME, identity_changes
 from .attention import (
     SEVERITY_CRITICAL,
     STATE_MAYBE,
@@ -225,6 +226,9 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # (poll_timeout.py).
         self._timeouts = PollTimeouts(_LOGGER, self.host, self.port, AGENT_POLL_TIMEOUT)
 
+        # Whether "this address now answers as another agent" was logged.
+        self._other_agent_logged = False
+
     @property
     def _base_url(self) -> str:
         return f"http://{self.host}:{self.port}"
@@ -375,12 +379,38 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ) from err
 
         self._timeouts.succeeded()
+        self._store_identity(health, drives_list)
         self._merge_devstat(result)
         await self._handle_attention_notifications(result)
         self._handle_pool_notifications(
             result.get(POOLS_KEY), result.get(POOLS_MISSING_KEY)
         )
         return result
+
+    def _store_identity(self, health: Any, drives: Any) -> None:
+        """Keep the agent's host name, drive digest and agent_id on the entry.
+
+        Read from this entry's own host in this poll (agent_identity.
+        identity_changes). A rediscovery moves the entry to a new address
+        only when the agent there matches what is kept here. The update
+        listener does not reload the entry for these keys.
+        """
+        entry = self.config_entry
+        changes, other_agent = identity_changes(entry.data, health, drives)
+        if other_agent and not self._other_agent_logged:
+            self._other_agent_logged = True
+            _LOGGER.warning(
+                "SMART Sniffer: %s:%s now answers as host %s, not %s as before. "
+                "If the agent moved, delete this entry and add it again",
+                self.host, self.port,
+                (health or {}).get("hostname"), entry.data.get(ENTRY_AGENT_HOSTNAME),
+            )
+        if changes:
+            _LOGGER.debug("SMART Sniffer: %s:%s identity stored: %s",
+                          self.host, self.port, sorted(changes))
+            self.hass.config_entries.async_update_entry(
+                entry, data={**entry.data, **changes}
+            )
 
     def _merge_devstat(self, result: dict[str, Any]) -> None:
         """Merge each drive's Device Statistics with the held copy (6.3).

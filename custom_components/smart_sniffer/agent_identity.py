@@ -31,10 +31,25 @@ Nothing here imports Home Assistant, so the rules can be tested without it.
 
 from __future__ import annotations
 
+import hashlib
 import ipaddress
+import re
+from collections.abc import Mapping
 from typing import Any
 
 UNIQUE_ID_PREFIX = "smartha-"
+
+# What a config entry keeps about the agent it monitors, written by the
+# coordinator from the entry's own polls (identity_changes below). Changing
+# them never reloads the entry. The rediscovery move (config_flow) needs the
+# host name and the drive digest; agent_id is stored for later releases and
+# read by nothing yet.
+ENTRY_AGENT_HOSTNAME = "agent_hostname"
+ENTRY_AGENT_DRIVES = "agent_drives"
+ENTRY_AGENT_ID = "agent_id"
+ENTRY_IDENTITY_KEYS = frozenset({ENTRY_AGENT_HOSTNAME, ENTRY_AGENT_DRIVES, ENTRY_AGENT_ID})
+
+_AGENT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{7,63}$")
 
 
 def norm_host(name: Any) -> str:
@@ -101,6 +116,64 @@ def confirms_same_agent(
     except (TypeError, ValueError):
         return False
     return count == len(existing)
+
+
+def norm_agent_id(value: Any) -> str:
+    """An agent_id from /api/health, or "" when missing or malformed."""
+    text = (value if isinstance(value, str) else "").strip().lower()
+    return text if _AGENT_ID_RE.match(text) else ""
+
+
+def drive_digest(drives: Any) -> str:
+    """A digest of the drive serials an /api/drives body lists, or "".
+
+    Serials only: an id ("/dev/sda") is the same on every machine. Drives
+    without a serial are left out, and a body with no serial at all (or one
+    that is not a list of drives) gives "", which never matches anything.
+    Stored as a digest so the entry holds no serial numbers.
+    """
+    if not isinstance(drives, list):
+        return ""
+    serials = sorted(
+        {
+            d["serial"].strip()
+            for d in drives
+            if isinstance(d, dict) and isinstance(d.get("serial"), str) and d["serial"].strip()
+        }
+    )
+    if not serials:
+        return ""
+    return hashlib.sha256("\n".join(serials).encode()).hexdigest()[:32]
+
+
+def identity_changes(
+    stored: Mapping[str, Any], health: Any, drives: Any
+) -> tuple[dict[str, str], bool]:
+    """What an entry should store about its agent after one successful poll.
+
+    ``stored`` is the entry's data; ``health`` and ``drives`` the /api/health
+    and /api/drives bodies from the entry's own host, read in that poll.
+    Returns (changes, other_agent). Nothing is stored without a host name
+    (agents before v0.8.3). When the entry already holds a host name and its
+    address now answers with another one, the address belongs to another
+    agent (DHCP gave it away) or the host was renamed: nothing is replaced,
+    so what the entry knew about its own agent is kept, and other_agent is
+    True. An empty drive digest or agent_id never replaces a stored one.
+    """
+    if not isinstance(health, dict):
+        return {}, False
+    live_name = norm_host(health.get("hostname"))
+    if not live_name:
+        return {}, False
+    known_name = norm_host(stored.get(ENTRY_AGENT_HOSTNAME))
+    if known_name and known_name != live_name:
+        return {}, True
+    wanted = {
+        ENTRY_AGENT_HOSTNAME: live_name,
+        ENTRY_AGENT_DRIVES: drive_digest(drives),
+        ENTRY_AGENT_ID: norm_agent_id(health.get("agent_id")),
+    }
+    return {k: v for k, v in wanted.items() if v and stored.get(k) != v}, False
 
 
 # Discovery address preference (lower is better). Python's ipaddress counts

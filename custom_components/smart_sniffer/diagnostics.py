@@ -16,13 +16,15 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
+from .agent_identity import ENTRY_AGENT_DRIVES
 from .attention import evaluate_attention, get_thresholds
 from .const import CONF_TOKEN, DOMAIN
 from .coordinator import SmartSnifferCoordinator
 from .pool_health import pool_problems, reported_missing, reported_pools
 
-# Keys to redact from config entry data (connection secrets).
-CONFIG_REDACT_KEYS = {CONF_TOKEN}
+# Keys to redact from config entry data (connection secrets, and the digest
+# of the drive serials the coordinator keeps for rediscovery).
+CONFIG_REDACT_KEYS = {CONF_TOKEN, ENTRY_AGENT_DRIVES}
 
 # Keys to redact from per-drive SMART data (personally identifiable).
 DRIVE_REDACT_KEYS = {"serial", "serial_number", "firmware_version"}

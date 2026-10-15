@@ -10,7 +10,10 @@ from __future__ import annotations
 
 from custom_components.smart_sniffer.agent_identity import (
     confirms_same_agent,
+    drive_digest,
     drive_set,
+    identity_changes,
+    norm_agent_id,
     norm_host,
 )
 
@@ -86,3 +89,69 @@ def test_ip_order_lan_then_cgnat_then_link_local():
     assert ip_score("172.217.1.1") == ip_score("9.9.9.9")  # public, not RFC 1918
     assert ip_score("not-an-ip") == 99
     assert sorted(["169.254.10.20", "100.101.102.103"], key=ip_score)[0] == "100.101.102.103"
+
+
+# --- what an entry keeps about its agent ---------------------------------------
+
+AGENT_ID = "3f9c0e5a7b1d4c2e8a6f0b9d1e2c3a4b"
+
+
+def test_norm_agent_id():
+    assert norm_agent_id(" 3F9C0E5A7B1D4C2E8A6F0B9D1E2C3A4B ") == AGENT_ID
+    assert norm_agent_id("short") == ""
+    assert norm_agent_id("has space here") == ""
+    assert norm_agent_id(None) == ""
+    assert norm_agent_id(12345678) == ""
+
+
+def test_drive_digest_is_by_serial_only():
+    assert drive_digest(DRIVES) == drive_digest(list(reversed(DRIVES)))
+    assert len(drive_digest(DRIVES)) == 32 and "SER-1" not in drive_digest(DRIVES)
+    assert drive_digest(DRIVES) != drive_digest(DRIVES[:1])
+    # A drive without a serial is left out; none at all gives "".
+    assert drive_digest([*DRIVES, {"id": "/dev/sdz", "serial": ""}]) == drive_digest(DRIVES)
+    assert drive_digest([{"id": "/dev/sda"}]) == ""
+    assert drive_digest([]) == "" and drive_digest(None) == ""
+
+
+def test_identity_first_poll_stores_name_drives_and_id():
+    health = {**HEALTH, "agent_id": AGENT_ID}
+    changes, other = identity_changes({}, health, DRIVES)
+    assert not other
+    assert changes == {
+        "agent_hostname": "testrouter",
+        "agent_drives": drive_digest(DRIVES),
+        "agent_id": AGENT_ID,
+    }
+    # Nothing new: nothing to store.
+    assert identity_changes(changes, health, DRIVES) == ({}, False)
+
+
+def test_identity_follows_its_own_agent():
+    stored = {"agent_hostname": "testrouter", "agent_drives": drive_digest(DRIVES)}
+    # A drive added: the digest follows.
+    more = [*DRIVES, {"id": "id-3", "serial": "SER-3"}]
+    assert identity_changes(stored, HEALTH, more) == ({"agent_drives": drive_digest(more)}, False)
+    # An agent_id appears (agent upgraded) or changes (reinstalled).
+    assert identity_changes(stored, {**HEALTH, "agent_id": AGENT_ID}, DRIVES)[0] == {
+        "agent_id": AGENT_ID
+    }
+
+
+def test_identity_kept_when_the_address_answers_as_another_host():
+    """S6: DHCP gave the entry's address to another agent. What the entry
+    knew about its own agent is kept, agent_id included."""
+    stored = {"agent_hostname": "testrouter", "agent_drives": "d" * 32, "agent_id": AGENT_ID}
+    other = {"status": "ok", "hostname": "othernas", "agent_id": "f" * 32}
+    assert identity_changes(stored, other, [{"id": "x", "serial": "SER-9"}]) == ({}, True)
+
+
+def test_identity_nothing_from_an_older_agent_or_a_failed_read():
+    assert identity_changes({}, {"status": "ok"}, DRIVES) == ({}, False)
+    assert identity_changes({}, None, DRIVES) == ({}, False)
+
+
+def test_identity_empty_values_never_replace_stored_ones():
+    stored = {"agent_hostname": "testrouter", "agent_drives": "d" * 32, "agent_id": AGENT_ID}
+    assert identity_changes(stored, HEALTH, []) == ({}, False)
+    assert identity_changes(stored, {**HEALTH, "agent_id": "bad id"}, None) == ({}, False)
