@@ -2,14 +2,15 @@
 
 All notable changes to SMART Sniffer are documented here.
 
-## v0.8.3 -- 2026-10-12
+## v0.8.3 -- 2026-10-14
 
-**Agent, Windows installer, integration and release workflow. Update the
+**Agent, both installers, integration and release workflow. Update the
 agent and take the HACS update.** The Windows service no longer fails to
 start when smartctl is only on your user PATH, and `smartctl_path` in
 `config.yaml` now works on every platform. A drive that stops giving SMART
 data (seen on Mac USB drives) now shows "not available right now" instead of
 being called unsupported. A timed-out poll now names the agent in the log.
+On Synology, re-run the installer to get disk usage for `/volume1`.
 
 ### Fixed
 - **Windows service would not start (error 100, "smartctl not found") when
@@ -31,6 +32,11 @@ being called unsupported. A timed-out poll now names the agent in the log.
   as `/System/Volumes/Data` sits on an APFS volume that names no drive.
   `/api/filesystems` now gives each one on macOS `physical_devices` and the
   `drive_id` of its drive, for the SMART Sniffer app's Control Center.
+- **No disk usage for `/volume1` on Synology with SHR.** The installer
+  offered only `/`, because the volume's device (`/dev/vg1000/lv`) was not a
+  name it knew. Every `/volumeN` and USB share is now offered. Re-run the
+  installer, or add the volume to `config.yaml` as in the Synology guide.
+  Thanks @Symbiot78 (#62).
 
 ### Changed
 - **The Windows installer writes `smartctl_path`** when smartctl is only on
@@ -43,6 +49,10 @@ being called unsupported. A timed-out poll now names the agent in the log.
   the drive) (#61).
 - **`/api/health` reports the host name and OS name**: `hostname`,
   `os_name` (such as "macOS 15.1") and `os_version`. `os` is unchanged.
+- **`/api/pools` describes each pool's layout**: every vdev, healthy or
+  not, as a tree (`vdevs`, plus `logs`, `cache`, `spares`, `special`,
+  `dedup` when present), with the device path of each disk where zpool
+  gives one. `problem_vdevs` and the other fields are unchanged.
 - **Release notes no longer carry emoji** in the update and install steps
   added under each release.
 
