@@ -93,6 +93,32 @@ btrfs_usage_for() {
   printf '%s\t%s\n' "$total" "$used"
 }
 
+# Synology DSM data volumes. DSM mounts each storage volume at /volumeN and
+# USB drives at /volumeUSBN/usbshare (or usbshareN-M per partition). The
+# device behind /volumeN depends on the DSM version and storage layout:
+# /dev/mdN, /dev/mapper/cachedev_N, or /dev/vg1000/lv on SHR (LVM). The
+# last one fails the device-name filter below, so these mountpoints are
+# matched by path and always offered (GH #62).
+is_synology_volume_mp() {
+  [[ "$1" =~ ^/volume[0-9]+$ ]] && return 0
+  [[ "$1" =~ ^/volumeUSB[0-9]+/usbshare[0-9-]*$ ]] && return 0
+  return 1
+}
+
+# Returns 0 if a mount with this source device, fstype and mountpoint should
+# be offered in the picker's first pass (before virtual-fstype filtering).
+# Real block devices and ZFS datasets pass, plus Synology data volumes
+# whatever their device is called.
+fs_source_admitted() {
+  local dev="$1" fstype="$2" mp="$3"
+  case "$dev" in
+    /dev/sd*|/dev/nvme*|/dev/md*|/dev/mapper/*|/dev/vd*|/dev/xvd*|/dev/hd*|/dev/disk*) return 0 ;;
+  esac
+  [ "$fstype" = "zfs" ] && return 0
+  is_synology_volume_mp "$mp" && return 0
+  return 1
+}
+
 pick_filesystems() {
   FS_YAML=""
   FS_DISPLAY=""
@@ -188,11 +214,9 @@ pick_filesystems() {
       dev="$(unescape_mountinfo_path "$dev")"
     fi
 
-    # Filter to real block devices and common filesystems.
-    case "$dev" in
-      /dev/sd*|/dev/nvme*|/dev/md*|/dev/mapper/*|/dev/vd*|/dev/xvd*|/dev/hd*|/dev/disk*) ;;
-      *) case "$fstype" in zfs) ;; *) continue ;; esac ;;
-    esac
+    # Filter to real block devices and common filesystems. Synology data
+    # volumes are admitted by mountpoint (see is_synology_volume_mp).
+    fs_source_admitted "$dev" "$fstype" "$mp" || continue
 
     # Skip virtual/special filesystems.
     case "$fstype" in
@@ -430,6 +454,12 @@ pick_filesystems() {
     done
     for ((i=0; i<count; i++)); do
       grp="${fs_devs[$i]}|${fs_types[$i]}"
+      # A Synology data volume is never hidden as a bind mount: it is the
+      # mountpoint a DSM user expects to see, whatever else shares its device.
+      if is_synology_volume_mp "${fs_mps[$i]}"; then
+        is_canonical[$i]="1"
+        continue
+      fi
       if [ "${group_has_root_slash[$grp]:-}" = "1" ] && [ "${is_canonical[$i]}" = "0" ]; then
         is_hidden[$i]="1"
         group_hidden_count[$grp]=$((${group_hidden_count[$grp]:-0} + 1))

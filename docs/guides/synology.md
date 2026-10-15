@@ -126,6 +126,28 @@ The startup log then shows `using smartctl_path from config: /usr/local/bin/smar
 
 Run `smartha-agent --discover` to see what the agent finds. If it shows drives but the running agent doesn't, the config may not have the `device_overrides` entries. Check `/etc/smartha-agent/config.yaml` (or the install path shown during setup).
 
+### No disk usage for /volume1
+
+The installer's disk usage picker used to offer only `/` on some Synology boxes.
+On SHR the data volume's device is `/dev/vg1000/lv` (LVM), a name the picker did
+not recognise, so `/volume1` was skipped and no usage sensors appeared. Since the
+v0.8.3 installer, every `/volumeN` mountpoint is offered whatever its device is
+called, and so are USB shares at `/volumeUSBN/usbshare`.
+
+On an existing install, either re-run the installer, or add the volume to
+`config.yaml` by hand and restart the agent:
+
+```yaml
+filesystems:
+  - path: "/"
+  - path: "/volume1"
+    fstype: "btrfs"
+```
+
+Set `fstype` to what `df -T /volume1` shows (`btrfs` or `ext4`); `path` is the
+only required key, and `fstype` lets the agent correct btrfs usage if the kernel
+reports it as zero.
+
 ### Drives show as UNSUPPORTED
 
 This usually means the agent is querying with the wrong protocol. Synology drives need SAT. Run `--discover` and let it write the config, or add the overrides manually:
