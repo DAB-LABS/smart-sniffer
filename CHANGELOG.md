@@ -10,7 +10,7 @@ start when smartctl is only on your user PATH, and `smartctl_path` in
 `config.yaml` now works on every platform. A drive that stops giving SMART
 data (seen on Mac USB drives) now shows "not available right now" instead of
 being called unsupported. A timed-out poll now names the agent in the log.
-On Synology, re-run the installer to get disk usage for `/volume1`.
+OpenWrt and Proxmox agents are discovered at their LAN address. On Synology, re-run the installer to get disk usage for `/volume1`.
 
 ### Fixed
 - **Windows service would not start (error 100, "smartctl not found") when
@@ -37,6 +37,11 @@ On Synology, re-run the installer to get disk usage for `/volume1`.
   name it knew. Every `/volumeN` and USB share is now offered. Re-run the
   installer, or add the volume to `config.yaml` as in the Synology guide.
   Thanks @Symbiot78 (#62).
+- **OpenWrt agents were discovered at their public WAN address, and Proxmox
+  agents at no address.** When the usual pick is not a private address, the
+  agent now uses the `br-lan` or `vmbr0` bridge. A host that advertised a
+  private address before keeps it; `advertise_interface` still wins. Thanks
+  @DanaGoyette (smart-sniffer-app#12).
 
 ### Changed
 - **The Windows installer writes `smartctl_path`** when smartctl is only on
@@ -53,6 +58,10 @@ On Synology, re-run the installer to get disk usage for `/volume1`.
   not, as a tree (`vdevs`, plus `logs`, `cache`, `spares`, `special`,
   `dedup` when present), with the device path of each disk where zpool
   gives one. `problem_vdevs` and the other fields are unchanged.
+- **Each agent reports a random `agent_id`** in `/api/health` and mDNS, saved
+  as `agent_id.json` next to `config.yaml`. On OpenWrt, add that file to
+  `/etc/sysupgrade.conf`; in Docker, mount a directory rather than only the
+  config file (see the guides).
 - **Release notes no longer carry emoji** in the update and install steps
   added under each release.
 
