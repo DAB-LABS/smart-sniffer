@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from .attention import ata_wear_note, coerce_smart_data, is_dead_wear_attr
@@ -124,6 +124,36 @@ class EntitySpec:
     key: str | None = None
     attr_id: int | None = None
     attr_name: str | None = None
+    # The diagnostic entity's display name. Only the name: the unique_id (and
+    # so every existing entity_id) is unchanged by it.
+    label: str | None = None
+
+
+def diagnostic_label(attr_name: str) -> str:
+    """smartctl's attribute name as a display name: "Total_SLC_Erase_Ct" ->
+    "Total SLC Erase Ct"."""
+    return attr_name.replace("_", " ")
+
+
+def _unique_labels(specs: list[EntitySpec]) -> list[EntitySpec]:
+    """Give the drive's diagnostic entities names of their own (GH #64).
+
+    A drive can report one attribute name at two ids (SK hynix reports
+    Program_Fail_Count at 175 and 181, #27), and two entities with one name
+    on one device make Home Assistant suffix the entity_id with _2 and leave
+    voice assistants unable to tell them apart. Each name that occurs more
+    than once gets its attribute id: "Program Fail Count (ID 175)".
+    """
+    counts: dict[str, int] = {}
+    for spec in specs:
+        if spec.kind == KIND_DIAGNOSTIC_ATTR and spec.label:
+            counts[spec.label] = counts.get(spec.label, 0) + 1
+    return [
+        replace(spec, label=f"{spec.label} (ID {spec.attr_id})")
+        if spec.kind == KIND_DIAGNOSTIC_ATTR and spec.label and counts[spec.label] > 1
+        else spec
+        for spec in specs
+    ]
 
 
 @dataclass(frozen=True)
@@ -298,9 +328,10 @@ def _drive_sensor_specs(
                     key=f"smart_attr_{attr_id}",
                     attr_id=attr_id,
                     attr_name=attr_name,
+                    label=diagnostic_label(attr_name),
                 )
             )
-    return specs
+    return _unique_labels(specs)
 
 
 def sensor_specs(

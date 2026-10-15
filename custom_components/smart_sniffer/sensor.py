@@ -367,11 +367,12 @@ def _build_sensor(
     if kind == KIND_ATTENTION_REASONS:
         return SmartSnifferAttentionReasonsSensor(coordinator, drive_id, drive_data)
     if kind == KIND_DIAGNOSTIC_ATTR:
-        # Convert smartctl name to friendly name:
-        # "Total_SLC_Erase_Ct" -> "Total SLC Erase Ct"
+        # smartctl's name as a display name ("Total_SLC_Erase_Ct" -> "Total
+        # SLC Erase Ct"), with the attribute id added where the drive reports
+        # one name twice (entity_plan._unique_labels, GH #64).
         diag_description = SensorEntityDescription(
             key=spec.key,
-            name=spec.attr_name.replace("_", " "),
+            name=spec.label or spec.attr_name.replace("_", " "),
             icon="mdi:database-search-outline",
             entity_category=EntityCategory.DIAGNOSTIC,
             entity_registry_enabled_default=False,

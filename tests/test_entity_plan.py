@@ -251,3 +251,29 @@ def test_force_update_kinds():
     assert not ep.wants_force_update(agent, True)
     health = ep.EntitySpec(ep.BINARY_SENSOR, ep.KIND_HEALTH, "u", "d")
     assert not ep.wants_force_update(health, True)
+
+
+# --- GH #64: one name per entity on a device ---------------------------------------
+
+
+def test_diagnostic_names_are_unique_per_drive():
+    """A drive reporting one attribute name at two ids (SK hynix 175 and 181,
+    SandForce 171/181, 172/182, 233/234) names those entities with the id;
+    every other diagnostic name, and every unique_id, is as before."""
+    data = golden_payload()
+    specs = _plan(data)
+    by_drive: dict[str, list[str]] = {}
+    for s in specs:
+        if s.kind == ep.KIND_DIAGNOSTIC_ATTR:
+            by_drive.setdefault(s.device, []).append(s.label)
+            assert s.unique_id.endswith(f"_smart_attr_{s.attr_id}")
+            if "(ID " not in s.label:
+                assert s.label == s.attr_name.replace("_", " ")
+    for device, labels in by_drive.items():
+        assert len(labels) == len(set(labels)), device
+    hynix = by_drive["fx-ata-skhynix"]
+    assert "Program Fail Count (ID 175)" in hynix
+    assert "Program Fail Count (ID 181)" in hynix
+    assert "Program Fail Count" not in hynix
+    renamed = [label for labels in by_drive.values() for label in labels if "(ID " in label]
+    assert len(renamed) == 8

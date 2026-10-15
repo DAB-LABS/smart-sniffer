@@ -127,10 +127,31 @@ def _setup(data, force=False):
     return coord, added
 
 
+# v0.8.3 (GH #64): a drive reporting one attribute name at two ids now names
+# those diagnostic entities with the id. Names only; unique_ids are as v0.7.0.
+V083_RENAMED = {
+    "fx-ata-sandforce-force-gt_smart_attr_171": "Program Fail Count (ID 171)",
+    "fx-ata-sandforce-force-gt_smart_attr_172": "Erase Fail Count (ID 172)",
+    "fx-ata-sandforce-force-gt_smart_attr_181": "Program Fail Count (ID 181)",
+    "fx-ata-sandforce-force-gt_smart_attr_182": "Erase Fail Count (ID 182)",
+    "fx-ata-sandforce-force-gt_smart_attr_233": "SandForce Internal (ID 233)",
+    "fx-ata-sandforce-force-gt_smart_attr_234": "SandForce Internal (ID 234)",
+    "fx-ata-skhynix_smart_attr_175": "Program Fail Count (ID 175)",
+    "fx-ata-skhynix_smart_attr_181": "Program Fail Count (ID 181)",
+}
+
+
 @pytest.mark.parametrize("force", [False, True])
 def test_the_v070_golden_rebuilt(force):
     with (GOLDEN / "v070-entities.json").open(encoding="utf-8") as handle:
         golden = json.load(handle)["force_update_on" if force else "force_update_off"]
+    renamed = 0
+    for row in golden:
+        new_name = V083_RENAMED.get(row["unique_id"].removeprefix(f"{ENTRY_ID}_"))
+        if new_name is not None:
+            row["name"] = new_name
+            renamed += 1
+    assert renamed == len(V083_RENAMED)
     data = golden_payload()
     _, added = _setup(data, force)
     rows = [_describe(e, "sensor") for e in added["sensor"]] + [
@@ -580,3 +601,48 @@ def test_wd_wear_level_and_its_note():
     assert wear.native_value is None
     assert wear.extra_state_attributes["wear_note"].startswith("wear unknown: attribute 230")
     assert _attention(added) == "NO"
+
+
+_TRANSLATIONS = None
+
+
+def _entity_name(e, platform):
+    """The name Home Assistant shows after the device name."""
+    global _TRANSLATIONS
+    name = getattr(e, "_attr_name", None)
+    desc = getattr(e, "entity_description", None)
+    if name is None and desc is not None and isinstance(desc.name, str):
+        name = desc.name
+    if name is None and e.translation_key:
+        if _TRANSLATIONS is None:
+            path = sensor.__file__.rsplit("/", 1)[0] + "/translations/en.json"
+            with open(path, encoding="utf-8") as handle:
+                _TRANSLATIONS = json.load(handle)["entity"]
+        name = _TRANSLATIONS[platform][e.translation_key]["name"]
+    return name
+
+
+def _names_by_device(added):
+    by_device = {}
+    for platform in ("sensor", "binary_sensor"):
+        for e in added[platform]:
+            device = sorted((e.device_info or {}).get("identifiers"))[0][1]
+            by_device.setdefault(device, []).append(_entity_name(e, platform))
+    return by_device
+
+
+def test_entity_names_are_unique_per_device():
+    """GH #64: two entities with one name on one device get an entity_id
+    ending _2 and confuse voice assistants. Every fixture (ATA, NVMe, SCSI,
+    devstat, standby, pools, filesystems, the agent) is checked."""
+    drive = _wd_red_sa500(1)
+    data = golden_payload()
+    data[drive["id"]] = drive
+    _, added = _setup(data)
+    by_device = _names_by_device(added)
+    protocols = {d.get("protocol") for d in data.values() if isinstance(d, dict)}
+    assert {"ATA", "NVMe", "SCSI"} <= protocols
+    for device, names in by_device.items():
+        assert None not in names, device
+        dupes = sorted({n for n in names if names.count(n) > 1})
+        assert dupes == [], (device, dupes)
