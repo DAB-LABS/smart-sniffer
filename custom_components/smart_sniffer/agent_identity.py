@@ -101,3 +101,43 @@ def confirms_same_agent(
     except (TypeError, ValueError):
         return False
     return count == len(existing)
+
+
+# Discovery address preference (lower is better). Python's ipaddress counts
+# 169.254/16 as private and 100.64/10 (CGNAT: Tailscale, carrier NAT) as
+# neither private nor global, so the ranges are spelled out.
+_LAN_NETS = (ipaddress.ip_network("192.168.0.0/16"), ipaddress.ip_network("10.0.0.0/8"))
+_CONTAINER_NET = ipaddress.ip_network("172.16.0.0/12")
+_CGNAT_NET = ipaddress.ip_network("100.64.0.0/10")
+_LINK_LOCAL_NET = ipaddress.ip_network("169.254.0.0/16")
+
+
+def ip_score(ip_str: str) -> int:
+    """How much discovery prefers an advertised address; lower is better.
+
+      10  192.168/16, 10/8      almost always the physical LAN
+      50  172.16/12             RFC 1918, often Docker/container bridges
+      70  100.64/10             CGNAT: Tailscale, WireGuard, carrier NAT
+      80  other private IPv4
+      85  IPv6                  unreliable across VLANs at home
+      90  public IPv4           a WAN address (smart-sniffer-app#12)
+      95  169.254/16            link-local, no DHCP: rarely reachable
+      99  not an address
+    """
+    try:
+        addr = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return 99
+    if addr.version == 6:
+        return 85
+    if any(addr in net for net in _LAN_NETS):
+        return 10
+    if addr in _CONTAINER_NET:
+        return 50
+    if addr in _CGNAT_NET:
+        return 70
+    if addr in _LINK_LOCAL_NET:
+        return 95
+    if addr.is_private:
+        return 80
+    return 90

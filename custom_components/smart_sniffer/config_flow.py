@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import ipaddress
 import logging
 from typing import Any
 
@@ -34,7 +33,7 @@ from homeassistant.helpers.selector import (
     SelectSelectorMode,
 )
 
-from .agent_identity import UNIQUE_ID_PREFIX, confirms_same_agent
+from .agent_identity import UNIQUE_ID_PREFIX, confirms_same_agent, ip_score
 from .attention import (
     current_readings,
     form_order,
@@ -131,12 +130,9 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
     def _pick_best_ip(discovery_info: ZeroconfServiceInfo) -> str:
         """Choose the best IP from discovery info.
 
-        Prioritizes real LAN addresses over virtual/tunnel IPs:
-          1. IPv4 192.168.x.x, 10.x.x.x  (almost always physical LAN)
-          2. IPv4 172.16-31.x.x           (RFC 1918, but often Docker/container bridges)
-          3. IPv4 100.64-127.x.x          (CGNAT — Tailscale, WireGuard, etc.)
-          4. IPv6                          (deprioritized — unreliable across VLANs)
-          5. Anything else
+        Prioritizes real LAN addresses over virtual/tunnel IPs, then IPv6,
+        public and link-local addresses (agent_identity.ip_score has the
+        order). Used only when the agent's TXT record has no "ip".
 
         Falls back to whatever is available.
         """
@@ -150,29 +146,7 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
         if not candidates:
             return str(discovery_info.ip_address)
 
-        def _score(ip_str: str) -> int:
-            """Lower score = more preferred."""
-            try:
-                addr = ipaddress.ip_address(ip_str)
-            except ValueError:
-                return 99
-            # IPv6 — deprioritize; unreliable across VLANs in home/SMB networks.
-            if addr.version == 6:
-                return 85
-            if not addr.is_private:
-                return 90
-            # 192.168.x.x and 10.x.x.x — almost always a real LAN interface.
-            if ip_str.startswith("192.168.") or ip_str.startswith("10."):
-                return 10
-            # 172.16-31.x.x — RFC 1918 but frequently Docker/container bridges.
-            if ip_str.startswith("172."):
-                return 50
-            # 100.64-127.x.x — CGNAT range (Tailscale, WireGuard, etc.)
-            if ip_str.startswith("100."):
-                return 70
-            return 80
-
-        candidates.sort(key=_score)
+        candidates.sort(key=ip_score)
         return candidates[0]
 
     async def _get_json(self, host: str, port: int, token: str, path: str) -> Any:

@@ -342,3 +342,10 @@ def test_user_step_existing_unreachable_is_created():
     flow = _flow([entry], SOURCE_USER, {"testnas-box:9099": ("testnas", ["SER-T1"], "")})
     result = _user(flow, "testnas-box")
     assert result["type"] == "create_entry"
+
+
+def test_pick_best_ip_prefers_tailscale_over_link_local():
+    info = _discovery("nas", "169.254.10.20", "100.101.102.103", "9.9.9.9")
+    assert config_flow.SmartSnifferConfigFlow._pick_best_ip(info) == "100.101.102.103"
+    info = _discovery("nas", "169.254.10.20", "100.101.102.103", "192.168.40.5")
+    assert config_flow.SmartSnifferConfigFlow._pick_best_ip(info) == "192.168.40.5"
