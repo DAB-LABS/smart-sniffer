@@ -429,6 +429,11 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected error during zeroconf confirm")
                 errors["base"] = "unknown"
             else:
+                # The card may have waited while the same agent was added
+                # another way (the Control Center): the duplicate checks
+                # again, as they stand now.
+                if await self._added_since_discovery(token):
+                    return self.async_abort(reason="already_configured")
                 title = f"SMART Sniffer ({self._discovery_hostname})"
                 return self.async_create_entry(
                     title=title,
@@ -467,6 +472,32 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=schema,
             errors=errors,
             description_placeholders=placeholders,
+        )
+
+    async def _added_since_discovery(self, token: str) -> bool:
+        """At confirm: is this agent now configured, by its unique_id, by an
+        entry at its address, or by an entry the agent itself confirms
+        (host name and drives, _configured_elsewhere)?"""
+        host, port = self._discovery_host, self._discovery_port
+        hostname = self._discovery_hostname
+        if self.unique_id and any(
+            entry.unique_id == self.unique_id for entry in self._async_current_entries()
+        ):
+            return True
+        if await self._entry_at(host, port) is not None:
+            return True
+        if hostname == host:
+            return False
+        return (
+            await self._configured_elsewhere(
+                hostname,
+                host,
+                port,
+                token,
+                advertised_drive_count=self._discovery_drives,
+                exclude_unique_id=self.unique_id or "",
+            )
+            is not None
         )
 
     async def _abort_for_known_entry(

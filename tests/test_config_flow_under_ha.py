@@ -501,6 +501,63 @@ def test_user_step_other_port_same_address_is_created():
     assert _user(flow, OLD, port=9100)["type"] == "create_entry"
 
 
+# --- zeroconf confirm: added another way while the card waited (S2) --------------
+
+
+def _card(entries, agents, dns=None, address=LAN, hostname="testrouter"):
+    flow = _flow(entries, SOURCE_ZEROCONF, agents, dns)
+    result = _run(flow.async_step_zeroconf(_discovery(hostname, address, preferred=address)))
+    assert result["type"] == "form" and result["step_id"] == "zeroconf_confirm"
+    return flow
+
+
+def _confirm(flow):
+    return _run(flow.async_step_zeroconf_confirm({}))
+
+
+def test_confirm_with_nothing_added_creates_the_entry():
+    flow = _card([], {f"{LAN}:9099": ROUTER})
+    result = _confirm(flow)
+    assert result["type"] == "create_entry" and result["data"]["host"] == LAN
+
+
+def test_confirm_after_the_same_address_was_added_aborts():
+    flow = _card([], {f"{LAN}:9099": ROUTER})
+    flow.hass.config_entries.entries.append(_entry("e1", f"{LAN}:9099", LAN))
+    assert _confirm(flow)["reason"] == "already_configured"
+
+
+def test_confirm_after_the_agent_was_added_by_another_address_aborts():
+    """The Control Center added it by its WAN address; the agent at both
+    addresses has the same host name and drives."""
+    flow = _card([], {f"{LAN}:9099": ROUTER, f"{WAN}:9099": ROUTER})
+    flow.hass.config_entries.entries.append(_entry("e1", f"{WAN}:9099", WAN))
+    assert _confirm(flow)["reason"] == "already_configured"
+
+
+def test_confirm_after_a_name_resolving_to_it_was_added_aborts():
+    flow = _card([], {f"{LAN}:9099": ROUTER}, dns={"router-box": [LAN]})
+    flow.hass.config_entries.entries.append(_entry("e1", "router-box:9099", "router-box"))
+    assert _confirm(flow)["reason"] == "already_configured"
+
+
+def test_confirm_after_the_same_unique_id_appeared_aborts():
+    flow = _card([], {f"{LAN}:9099": ROUTER})
+    flow.hass.config_entries.entries.append(
+        _entry("e1", "smartha-testrouter", "192.168.40.99", source="zeroconf")
+    )
+    assert _confirm(flow)["reason"] == "already_configured"
+
+
+def test_confirm_after_another_agent_with_the_name_was_added_creates():
+    """Two routers called OpenWrt: the one added meanwhile has other drives."""
+    flow = _card([], {f"{LAN}:9099": ("OpenWrt", ["SER-A1"], ""),
+                      "192.168.50.1:9099": ("OpenWrt", ["SER-B1"], "")},
+                 hostname="OpenWrt")
+    flow.hass.config_entries.entries.append(_entry("e1", "192.168.50.1:9099", "192.168.50.1"))
+    assert _confirm(flow)["type"] == "create_entry"
+
+
 def test_pick_best_ip_prefers_tailscale_over_link_local():
     info = _discovery("nas", "169.254.10.20", "100.101.102.103", "9.9.9.9")
     assert config_flow.SmartSnifferConfigFlow._pick_best_ip(info) == "100.101.102.103"
