@@ -615,3 +615,74 @@ def test_mdns_name_is_never_the_real_agents(monkeypatch):
     (info,) = registered
     assert info.name == "smartha-mock-labhost._smartha._tcp.local."
     assert info.kwargs["port"] == 9100
+
+
+# --- agent_id -----------------------------------------------------------------------
+
+
+def _health_of(args: list[str]) -> dict[str, Any]:
+    server, zc, _ = mock.build_server(["--port", "0", "--host", "127.0.0.1", "--no-mdns", *args])
+    assert zc is None
+    threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
+    try:
+        return Client(f"http://127.0.0.1:{server.server_address[1]}").get("/api/health")
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_health_reports_a_random_agent_id(client):
+    agent_id = client.get("/api/health")["agent_id"]
+    assert len(agent_id) == 32 and int(agent_id, 16) >= 0
+    assert mock.norm_agent_id(agent_id) == agent_id
+
+
+def test_agent_id_survives_a_restart_with_data_dir(tmp_path):
+    first = _health_of(["--data-dir", str(tmp_path)])["agent_id"]
+    assert json.loads((tmp_path / "mock-agent-id.json").read_text())["agent_id"] == first
+    assert _health_of(["--data-dir", str(tmp_path)])["agent_id"] == first
+    # Another data dir is another mock.
+    assert _health_of(["--data-dir", str(tmp_path / "other")])["agent_id"] != first
+
+
+def test_agent_id_changes_each_start_without_data_dir():
+    assert _health_of([])["agent_id"] != _health_of([])["agent_id"]
+
+
+def test_agent_id_flag_pins_it_and_writes_nothing(tmp_path):
+    health = _health_of(["--data-dir", str(tmp_path), "--agent-id", "  My-Mock-01 "])
+    assert health["agent_id"] == "my-mock-01"
+    assert not (tmp_path / "mock-agent-id.json").exists()
+
+
+def test_a_bad_agent_id_flag_is_refused():
+    with pytest.raises(SystemExit):
+        mock.build_server(["--port", "0", "--host", "127.0.0.1", "--no-mdns", "--agent-id", "no"])
+
+
+def test_a_malformed_id_file_is_replaced(tmp_path):
+    (tmp_path / "mock-agent-id.json").write_text("garbage{")
+    agent_id = _health_of(["--data-dir", str(tmp_path)])["agent_id"]
+    assert len(agent_id) == 32
+    assert json.loads((tmp_path / "mock-agent-id.json").read_text())["agent_id"] == agent_id
+
+
+def test_mdns_txt_carries_the_agent_id(monkeypatch):
+    registered = []
+
+    class FakeInfo:
+        def __init__(self, stype, name, **kwargs):
+            self.kwargs = kwargs
+
+    class FakeZeroconf:
+        def register_service(self, info):
+            registered.append(info)
+
+    fake = type(sys)("zeroconf")
+    fake.ServiceInfo = FakeInfo
+    fake.Zeroconf = FakeZeroconf
+    monkeypatch.setitem(sys.modules, "zeroconf", fake)
+    monkeypatch.setattr(mock, "AGENT_ID", "0123456789abcdef0123456789abcdef")
+    mock.start_mdns(9100, "")
+    (info,) = registered
+    assert info.kwargs["properties"][b"agent_id"] == b"0123456789abcdef0123456789abcdef"

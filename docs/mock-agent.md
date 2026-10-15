@@ -70,7 +70,8 @@ Both agents appear independently in HA. Your real drives keep reporting normally
 | `--token` | *(none)* | Bearer token. When set, every `GET /api/*` request except `/api/health` needs `Authorization: Bearer <token>`, as on the real agent |
 | `--no-mdns` | *(off)* | Disable mDNS/Zeroconf advertisement |
 | `--preload` | *(none)* | Comma-separated old preset keys or replica file ids (drives and pools) to load on startup |
-| `--data-dir` | *(none)* | Directory for `mock-drives.json`, which keeps drives, pools and every edit across restarts. When the file has anything in it, `--preload` is skipped. Without the flag the mock keeps everything in memory |
+| `--data-dir` | *(none)* | Directory for `mock-drives.json`, which keeps drives, pools and every edit across restarts, and `mock-agent-id.json`, which keeps this mock's `agent_id`. When the drives file has anything in it, `--preload` is skipped. Without the flag the mock keeps everything in memory and reports a new `agent_id` at every start |
+| `--agent-id ID` | *(random)* | The `agent_id` to report in `/api/health` and the mDNS TXT record: 8 to 64 characters of a-z, 0-9 and `-` (lowercased). Nothing is written. Without it, each mock process has its own random ID, never derived from the host name or port |
 | `--replicas DIR` | `tools/replicas` and `tools/replicas/extra` beside the script | A read-only folder of replica files. Repeat the flag for more than one. Giving it at all replaces the default |
 | `--user-replicas DIR` | *(none)* | The read-write folder where uploaded and saved replicas go. Without it, uploads and saves are refused |
 | `--extra-fs` | *(off)* | Also serve `/mnt/nas` on device `nas:/export` (`nfs`, 8 TB, about 64 % used), a filesystem on no drive or pool. Not saved with `--data-dir`: the flag adds it again, as the file has it, at every start |
@@ -404,11 +405,12 @@ The replica and control routes below are the mock's own.
   "status": "ok", "version": "0.8.0-mock", "os": "mock", "uptime_seconds": 42,
   "endpoints": ["/api/health", "/api/drives", "/api/drives/{id}", "/api/filesystems", "/api/pools"],
   "drives": 4, "filesystems": 7, "pools": 1, "pools_status": "ok",
+  "agent_id": "3f9c0e5a7b1d4c2e8a6f0b9d1e2c3a4b",
   "mock": true, "hostname": "labhost", "port": 9100, "auth_enabled": false, "drive_count": 4
 }
 ```
 
-The keys up to `pools_status` are the real agent's (`healthResponse` in `agent/main.go`). `filesystems` counts every filesystem, unavailable ones included, and `/api/filesystems` is listed only while that is above 0. `/api/pools`, `pools` and `pools_status` are there only while the mock has at least one pool; `pools` counts the ones served. The last five keys are not in the real agent: they are for the app's Control Center and the dashboard.
+The keys up to `agent_id` are the real agent's (`healthResponse` in `agent/main.go`); `agent_id` is also in the mock's mDNS TXT record when it advertises. `filesystems` counts every filesystem, unavailable ones included, and `/api/filesystems` is listed only while that is above 0. `/api/pools`, `pools` and `pools_status` are there only while the mock has at least one pool; `pools` counts the ones served. The last five keys are not in the real agent: they are for the app's Control Center and the dashboard.
 
 ### `device_statistics` and `derived`
 

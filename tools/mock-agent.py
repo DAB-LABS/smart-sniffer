@@ -18,7 +18,8 @@ Usage:
     python3 mock-agent.py --port 9100           # custom port
     python3 mock-agent.py --token mysecret      # enable bearer auth
     python3 mock-agent.py --no-mdns             # disable mDNS advertisement
-    python3 mock-agent.py --data-dir /data      # keep drives and pools across restarts
+    python3 mock-agent.py --data-dir /data      # keep drives, pools and agent_id across restarts
+    python3 mock-agent.py --agent-id my-mock-01 # pin the agent_id this mock reports
     python3 mock-agent.py --preload sata_hdd,nvme,zfs_pool
     python3 mock-agent.py --preload nvme --extra-fs   # plus /mnt/nas, on no drive
     python3 mock-agent.py --replicas /opt/replicas --user-replicas /share/smart-sniffer/replicas
@@ -35,6 +36,7 @@ import json
 import math
 import os
 import re
+import secrets
 import socket
 import threading
 import time
@@ -52,6 +54,52 @@ VERSION = "0.8.0-mock"
 
 # Set when the server is built; /api/health reports uptime from it.
 STARTED_AT = time.time()
+
+# ── Agent ID ─────────────────────────────────────────────────────────────────
+# As the real agent: a random ID reported as agent_id in /api/health and the
+# mDNS TXT record. Every mock process has its own (never derived from the
+# host name or port: two HA systems can both run a replica on homeassistant
+# port 9100). With --data-dir it is kept in mock-agent-id.json there, a name
+# the real agent never uses, so the app's agent and replica never share one.
+AGENT_ID = ""
+AGENT_ID_FILE = "mock-agent-id.json"
+_AGENT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{7,63}$")
+
+
+def norm_agent_id(value: Any) -> str:
+    """The agent's rule: trimmed, lowercase, 8 to 64 of a-z 0-9 -. "" if not."""
+    if not isinstance(value, str):
+        return ""
+    value = value.strip().lower()
+    return value if _AGENT_ID_RE.match(value) else ""
+
+
+def resolve_agent_id(pinned: str, data_dir: str) -> str:
+    """--agent-id, else the saved file in data_dir, else a new random ID."""
+    if pinned:
+        return pinned
+    path = os.path.join(data_dir, AGENT_ID_FILE) if data_dir else ""
+    if path:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                saved = norm_agent_id(json.load(fh).get("agent_id"))
+            if saved:
+                return saved
+            print(f"[mock] {path} holds no valid agent_id, writing a new one")
+        except FileNotFoundError:
+            pass
+        except (OSError, ValueError, AttributeError) as err:
+            print(f"[mock] Cannot read {path} ({err}), writing a new agent_id")
+    new_id = secrets.token_hex(16)
+    if path:
+        tmp = path + ".tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump({"agent_id": new_id}, fh)
+            os.replace(tmp, path)
+        except OSError as err:
+            print(f"[mock] Cannot save {path} ({err}); agent_id changes on restart")
+    return new_id
 
 # ── Pool records ─────────────────────────────────────────────────────────────
 # A pool is not a drive: it lives in its own collection and is served on
@@ -2596,6 +2644,8 @@ class MockHandler(BaseHTTPRequestHandler):
             "drives": drive_count,
             "filesystems": fs_count,
         }
+        if AGENT_ID:
+            health["agent_id"] = AGENT_ID
         # As the agent: /api/filesystems only while there is one to serve.
         if fs_count:
             endpoints.append("/api/filesystems")
@@ -2836,6 +2886,8 @@ def start_mdns(port: int, token: str) -> Any:
         b"auth": b"1" if token else b"0",
         b"drives": str(len(store.drives)).encode(),
     }
+    if AGENT_ID:
+        props[b"agent_id"] = AGENT_ID.encode()
 
     info = ServiceInfo(
         stype,
@@ -2882,13 +2934,21 @@ def build_server(argv: list[str] | None = None) -> tuple[MockHTTPServer, Any, ar
                              "(default: tools/replicas and tools/replicas/extra beside this script)")
     parser.add_argument("--user-replicas", type=str, default="", metavar="DIR",
                         help="Read-write folder for uploaded and saved replica files (default: none)")
+    parser.add_argument("--agent-id", type=str, default="", metavar="ID",
+                        help="agent_id to report (8 to 64 of a-z, 0-9, -; default: random, "
+                             "kept in --data-dir when given)")
     parser.add_argument("--extra-fs", action="store_true",
                         help="Also serve /mnt/nas (nfs, nas:/export, about 64%% used), "
                              "a filesystem on no drive or pool")
     args = parser.parse_args(argv)
+    pinned = ""
+    if args.agent_id:
+        pinned = norm_agent_id(args.agent_id)
+        if not pinned:
+            parser.error(f"--agent-id {args.agent_id!r}: use 8 to 64 characters of a-z, 0-9 and -")
 
     # The replica files, then the store with optional persistence.
-    global store, library, STARTED_AT
+    global store, library, STARTED_AT, AGENT_ID
     STARTED_AT = time.time()
     library = ReplicaLibrary(args.replicas or DEFAULT_REPLICA_DIRS, args.user_replicas or None)
     persist_path = None
@@ -2896,6 +2956,7 @@ def build_server(argv: list[str] | None = None) -> tuple[MockHTTPServer, Any, ar
         os.makedirs(args.data_dir, exist_ok=True)
         persist_path = os.path.join(args.data_dir, "mock-drives.json")
     store = DriveStore(persist_path=persist_path)
+    AGENT_ID = resolve_agent_id(pinned, args.data_dir)
 
     # Try to load saved drives first; only preload if nothing was saved.
     loaded = store.load()
@@ -2942,6 +3003,7 @@ def main(argv: list[str] | None = None) -> None:
     print(f"  Dashboard:  http://localhost:{port}/")
     print(f"  API:        http://localhost:{port}/api/drives")
     print(f"  Auth:       {auth_str}")
+    print(f"  Agent ID:   {AGENT_ID}")
     print(f"  Drives:     {len(store.drives)}")
     print(f"  Pools:      {len(store.pools)}")
     print(f"  Filesystems: {store.filesystem_count()}")
