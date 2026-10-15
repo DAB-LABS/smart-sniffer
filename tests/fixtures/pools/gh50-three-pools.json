@@ -14,7 +14,177 @@
     "last_scrub_end": "2026-09-01T03:05:34Z",
     "last_scrub_repaired": 0,
     "last_scrub_errors": 0,
-    "problem_vdevs": []
+    "problem_vdevs": [],
+    "vdevs": [
+      {
+        "name": "mirror-0",
+        "type": "mirror",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0,
+        "children": [
+          {
+            "name": "ata-Hitachi_xxxxxxxx",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/ata-Hitachi_xxxxxxxx-part1"
+          },
+          {
+            "name": "ata-TOSHIBA_xxxx",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/ata-TOSHIBA_xxxx-part1"
+          }
+        ]
+      },
+      {
+        "name": "mirror-1",
+        "type": "mirror",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0,
+        "children": [
+          {
+            "name": "ata-ST500LM000xxxx",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/ata-ST500LM000xxxx-part1"
+          },
+          {
+            "name": "ata-TOSHIBA_Mxxxxx",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/ata-TOSHIBA_Mxxxxx-part1"
+          }
+        ]
+      },
+      {
+        "name": "mirror-2",
+        "type": "mirror",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0,
+        "children": [
+          {
+            "name": "ata-TOSHIBA_xxxx-2",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/ata-TOSHIBA_xxxx-2-part1"
+          },
+          {
+            "name": "ata-Hitachi_xxxxxx",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/ata-Hitachi_xxxxxx-part1"
+          }
+        ]
+      },
+      {
+        "name": "mirror-3",
+        "type": "mirror",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0,
+        "children": [
+          {
+            "name": "ata-ST500LM000-xxxx-3a",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/ata-ST500LM000-xxxx-3a-part1"
+          },
+          {
+            "name": "ata-ST500LM000-xxxx-3b",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/ata-ST500LM000-xxxx-3b-part1"
+          }
+        ]
+      },
+      {
+        "name": "mirror-4",
+        "type": "mirror",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0,
+        "children": [
+          {
+            "name": "ata-ST500LM000-xxxx-4a",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/ata-ST500LM000-xxxx-4a-part1"
+          },
+          {
+            "name": "ata-ST500LM000-xxxx-4b",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/ata-ST500LM000-xxxx-4b-part1"
+          }
+        ]
+      },
+      {
+        "name": "mirror-5",
+        "type": "mirror",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0,
+        "children": [
+          {
+            "name": "ata-WDC_WD5xxxxxxx",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/ata-WDC_WD5xxxxxxx-part1"
+          },
+          {
+            "name": "ata-Hitachi_Hxxxxxxxx",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/ata-Hitachi_Hxxxxxxxx-part1"
+          }
+        ]
+      }
+    ]
   },
   {
     "name": "rpool",
@@ -31,7 +201,37 @@
     "last_scrub_end": "2026-09-01T01:00:33Z",
     "last_scrub_repaired": 0,
     "last_scrub_errors": 0,
-    "problem_vdevs": []
+    "problem_vdevs": [],
+    "vdevs": [
+      {
+        "name": "mirror-0",
+        "type": "mirror",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0,
+        "children": [
+          {
+            "name": "wwn-0x5axxxxxxxxxxxx-part3",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/wwn-0x5axxxxxxxxxxxx-part3-part1"
+          },
+          {
+            "name": "ata-ADATA_xxxxxx-part3",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/ata-ADATA_xxxxxx-part3-part1"
+          }
+        ]
+      }
+    ]
   },
   {
     "name": "storage",
@@ -48,6 +248,118 @@
     "last_scrub_end": "2026-09-01T09:39:32Z",
     "last_scrub_repaired": 0,
     "last_scrub_errors": 0,
-    "problem_vdevs": []
+    "problem_vdevs": [],
+    "vdevs": [
+      {
+        "name": "raidz1-0",
+        "type": "raidz",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0,
+        "children": [
+          {
+            "name": "scsi-35000c500xxxxxx0",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/scsi-35000c500xxxxxx0-part1"
+          },
+          {
+            "name": "scsi-35000c500xxxxxx1",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/scsi-35000c500xxxxxx1-part1"
+          },
+          {
+            "name": "scsi-35000c500xxxxxx2",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/scsi-35000c500xxxxxx2-part1"
+          },
+          {
+            "name": "scsi-35000c500xxxxxx3",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/scsi-35000c500xxxxxx3-part1"
+          },
+          {
+            "name": "wwn-0x5000cxxxxxxxxx",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/wwn-0x5000cxxxxxxxxx-part1"
+          }
+        ]
+      },
+      {
+        "name": "raidz1-1",
+        "type": "raidz",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0,
+        "children": [
+          {
+            "name": "scsi-35000c500xxxxxx4",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/scsi-35000c500xxxxxx4-part1"
+          },
+          {
+            "name": "scsi-35000c500xxxxxx5",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/scsi-35000c500xxxxxx5-part1"
+          },
+          {
+            "name": "scsi-35000c500xxxxxx6",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/scsi-35000c500xxxxxx6-part1"
+          },
+          {
+            "name": "scsi-35000c500xxxxxx7",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/scsi-35000c500xxxxxx7-part1"
+          },
+          {
+            "name": "scsi-35000c500xxxxxx8",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/scsi-35000c500xxxxxx8-part1"
+          }
+        ]
+      }
+    ]
   }
 ]

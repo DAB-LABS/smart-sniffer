@@ -457,7 +457,7 @@ The agent's `FilesystemInfo` (`agent/filesystem.go`): a bare list, not wrapped i
 }]
 ```
 
-The agent's `PoolInfo` (`agent/zpool_status.go`). The error totals are the sums over the pool's disks. `problem_vdevs` lists `mirror-0` (type `mirror`) when a disk is not ONLINE, and each disk that is not ONLINE or has errors, each as `{"name", "type", "state", "read_errors", "write_errors", "checksum_errors"}`.
+The agent's `PoolInfo` (`agent/zpool_status.go`). The error totals are the sums over the pool's disks. `problem_vdevs` lists `mirror-0` (type `mirror`) when a disk is not ONLINE, and each disk that is not ONLINE or has errors, each as `{"name", "type", "state", "read_errors", "write_errors", "checksum_errors"}`. The mock does not serve the pool layout fields the agent added in v0.8.3 (`vdevs`, `logs`, `cache`, `spares`, `special`, `dedup`).
 
 ### Replica and control routes
 

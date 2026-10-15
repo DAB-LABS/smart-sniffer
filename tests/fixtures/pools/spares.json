@@ -23,6 +23,47 @@
         "write_errors": 0,
         "checksum_errors": 0
       }
+    ],
+    "vdevs": [
+      {
+        "name": "mirror-0",
+        "type": "mirror",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0,
+        "children": [
+          {
+            "name": "nvme-Samsung_SSD_990_PRO_2TB_S7DNNJ0001",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/nvme-Samsung_SSD_990_PRO_2TB_S7DNNJ0001-part1"
+          },
+          {
+            "name": "nvme-Samsung_SSD_990_PRO_2TB_S7DNNJ0002",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/nvme-Samsung_SSD_990_PRO_2TB_S7DNNJ0002-part1"
+          }
+        ]
+      }
+    ],
+    "spares": [
+      {
+        "name": "sdh",
+        "type": "disk",
+        "state": "UNAVAIL",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0,
+        "path": "/dev/sdh1"
+      }
     ]
   },
   {
@@ -72,6 +113,134 @@
         "read_errors": 12,
         "write_errors": 0,
         "checksum_errors": 0
+      }
+    ],
+    "vdevs": [
+      {
+        "name": "raidz1-0",
+        "type": "raidz",
+        "state": "DEGRADED",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0,
+        "children": [
+          {
+            "name": "sda",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/sda1"
+          },
+          {
+            "name": "sdb",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 5,
+            "path": "/dev/sdb1"
+          },
+          {
+            "name": "spare-2",
+            "type": "spare",
+            "state": "DEGRADED",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "children": [
+              {
+                "name": "sdc",
+                "type": "disk",
+                "state": "FAULTED",
+                "read_errors": 12,
+                "write_errors": 0,
+                "checksum_errors": 0,
+                "path": "/dev/sdc1"
+              },
+              {
+                "name": "sde",
+                "type": "disk",
+                "state": "ONLINE",
+                "read_errors": 0,
+                "write_errors": 0,
+                "checksum_errors": 0,
+                "path": "/dev/sde1"
+              }
+            ]
+          },
+          {
+            "name": "sdd",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/sdd1"
+          }
+        ]
+      }
+    ],
+    "logs": [
+      {
+        "name": "mirror-1",
+        "type": "mirror",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0,
+        "children": [
+          {
+            "name": "nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0002-part1",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0002-part1-part1"
+          },
+          {
+            "name": "nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0003-part1",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0003-part1-part1"
+          }
+        ]
+      }
+    ],
+    "cache": [
+      {
+        "name": "nvme-WD_Red_SN700_500GB_22002",
+        "type": "disk",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0,
+        "path": "/dev/disk/by-id/nvme-WD_Red_SN700_500GB_22002-part1"
+      }
+    ],
+    "spares": [
+      {
+        "name": "sde",
+        "type": "disk",
+        "state": "INUSE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0,
+        "path": "/dev/sde1"
+      },
+      {
+        "name": "sdf",
+        "type": "disk",
+        "state": "AVAIL",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0,
+        "path": "/dev/sdf1"
       }
     ]
   }

@@ -14,6 +14,17 @@
     "last_scrub_end": null,
     "last_scrub_repaired": null,
     "last_scrub_errors": null,
-    "problem_vdevs": []
+    "problem_vdevs": [],
+    "vdevs": [
+      {
+        "name": "nvme-Samsung_SSD_980_1TB_S64ANS0001",
+        "type": "disk",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0,
+        "path": "/dev/disk/by-id/nvme-Samsung_SSD_980_1TB_S64ANS0001-part1"
+      }
+    ]
   }
 ]

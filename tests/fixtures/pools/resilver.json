@@ -39,6 +39,55 @@
         "write_errors": 37,
         "checksum_errors": 0
       }
+    ],
+    "vdevs": [
+      {
+        "name": "mirror-0",
+        "type": "mirror",
+        "state": "DEGRADED",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0,
+        "children": [
+          {
+            "name": "ata-ST4000VN008-2DR166_ZDH0001",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/ata-ST4000VN008-2DR166_ZDH0001-part1"
+          },
+          {
+            "name": "replacing-1",
+            "type": "replacing",
+            "state": "DEGRADED",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "children": [
+              {
+                "name": "ata-ST4000VN008-2DR166_ZDH0002",
+                "type": "disk",
+                "state": "FAULTED",
+                "read_errors": 0,
+                "write_errors": 37,
+                "checksum_errors": 0,
+                "path": "/dev/disk/by-id/ata-ST4000VN008-2DR166_ZDH0002-part1"
+              },
+              {
+                "name": "ata-ST4000VN008-2DR166_ZDH0009",
+                "type": "disk",
+                "state": "ONLINE",
+                "read_errors": 0,
+                "write_errors": 0,
+                "checksum_errors": 0,
+                "path": "/dev/disk/by-id/ata-ST4000VN008-2DR166_ZDH0009-part1"
+              }
+            ]
+          }
+        ]
+      }
     ]
   }
 ]

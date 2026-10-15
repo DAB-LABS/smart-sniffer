@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -201,6 +202,8 @@ func TestZpoolParsers_EveryFixtureBothForms(t *testing.T) {
 			if err != nil {
 				t.Fatalf("text: %v", err)
 			}
+			// Health fields only; the layout has its own tests below.
+			fromJSON, fromText = healthOnly(fromJSON), healthOnly(fromText)
 			if !reflect.DeepEqual(fromJSON, want) {
 				t.Errorf("json reader:\n%s\nwant:\n%s", jsonOf(t, fromJSON), jsonOf(t, want))
 			}
@@ -499,5 +502,315 @@ func TestZpoolIntegrationFixturesMatchAgentOutput(t *testing.T) {
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("tests/fixtures/pools/%s.json differs from what the agent serves", stem)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Layout (v0.8.3): the whole vdev tree, served beside problem_vdevs.
+// ---------------------------------------------------------------------------
+
+// healthOnly returns pools with the layout fields cleared, for comparisons
+// that predate the layout.
+func healthOnly(pools []PoolInfo) []PoolInfo {
+	out := make([]PoolInfo, len(pools))
+	for i, p := range pools {
+		p.Vdevs, p.Logs, p.Cache, p.Spares, p.Special, p.Dedup = nil, nil, nil, nil, nil, nil
+		p.LayoutTruncated = false
+		out[i] = p
+	}
+	return out
+}
+
+// withoutPaths returns the layout with every path cleared, for comparing the
+// JSON reader with the text reader, which has no paths.
+func withoutPaths(vs []PoolVdev) []PoolVdev {
+	if vs == nil {
+		return nil
+	}
+	out := make([]PoolVdev, len(vs))
+	for i, v := range vs {
+		v.Path = ""
+		v.Children = withoutPaths(v.Children)
+		out[i] = v
+	}
+	return out
+}
+
+func layoutOf(p PoolInfo) map[string][]PoolVdev {
+	return map[string][]PoolVdev{
+		"vdevs": p.Vdevs, "logs": p.Logs, "cache": p.Cache,
+		"spares": p.Spares, "special": p.Special, "dedup": p.Dedup,
+	}
+}
+
+func lv(name, vtype, state string, r, w, c uint64, path string, children ...PoolVdev) PoolVdev {
+	return PoolVdev{Name: name, Type: vtype, State: state, ReadErrors: r, WriteErrors: w, ChecksumErrors: c,
+		Path: path, Children: children}
+}
+
+func poolNamed(t *testing.T, pools []PoolInfo, name string) PoolInfo {
+	t.Helper()
+	for _, p := range pools {
+		if p.Name == name {
+			return p
+		}
+	}
+	t.Fatalf("pool %s not found", name)
+	return PoolInfo{}
+}
+
+// The spares fixture has every group but special and dedup: a raidz1 with a
+// hot spare standing in, a log mirror, a cache device and two spares.
+func TestZpoolLayoutJSONSpares(t *testing.T) {
+	pools, err := parseZpoolStatusJSON(readFixture(t, "spares.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault := poolNamed(t, pools, "vault")
+	logDisk := func(n string) PoolVdev {
+		return lv("nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX000"+n+"-part1", "disk", "ONLINE", 0, 0, 0,
+			"/dev/disk/by-id/nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX000"+n+"-part1-part1")
+	}
+	want := map[string][]PoolVdev{
+		"vdevs": {lv("raidz1-0", "raidz", "DEGRADED", 0, 0, 0, "",
+			lv("sda", "disk", "ONLINE", 0, 0, 0, "/dev/sda1"),
+			lv("sdb", "disk", "ONLINE", 0, 0, 5, "/dev/sdb1"),
+			lv("spare-2", "spare", "DEGRADED", 0, 0, 0, "",
+				lv("sdc", "disk", "FAULTED", 12, 0, 0, "/dev/sdc1"),
+				lv("sde", "disk", "ONLINE", 0, 0, 0, "/dev/sde1")),
+			lv("sdd", "disk", "ONLINE", 0, 0, 0, "/dev/sdd1"),
+		)},
+		"logs":    {lv("mirror-1", "mirror", "ONLINE", 0, 0, 0, "", logDisk("2"), logDisk("3"))},
+		"cache":   {lv("nvme-WD_Red_SN700_500GB_22002", "disk", "ONLINE", 0, 0, 0, "/dev/disk/by-id/nvme-WD_Red_SN700_500GB_22002-part1")},
+		"spares":  {lv("sde", "disk", "INUSE", 0, 0, 0, "/dev/sde1"), lv("sdf", "disk", "AVAIL", 0, 0, 0, "/dev/sdf1")},
+		"special": nil,
+		"dedup":   nil,
+	}
+	if got := layoutOf(vault); !reflect.DeepEqual(got, want) {
+		t.Errorf("vault layout:\n%s\nwant:\n%s", jsonOf(t, got), jsonOf(t, want))
+	}
+	if vault.LayoutTruncated {
+		t.Error("vault layout marked truncated")
+	}
+	// problem_vdevs is unchanged by the layout.
+	if len(vault.ProblemVdevs) != 4 {
+		t.Errorf("problem_vdevs changed: %+v", vault.ProblemVdevs)
+	}
+}
+
+// Both readers build the same tree; only the JSON reader has paths.
+func TestZpoolLayoutTextMatchesJSON(t *testing.T) {
+	for stem := range expected {
+		if stem == "gh50-three-pools" {
+			continue // the reporter's redaction made disk names repeat in the text; see below
+		}
+		t.Run(stem, func(t *testing.T) {
+			fromJSON, err := parseZpoolStatusJSON(readFixture(t, stem+".json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			fromText, err := parseZpoolStatusText(readFixture(t, stem+".txt"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := range fromJSON {
+				j, x := layoutOf(fromJSON[i]), layoutOf(fromText[i])
+				for group := range j {
+					j[group] = withoutPaths(j[group])
+				}
+				if !reflect.DeepEqual(j, x) {
+					t.Errorf("pool %s: text layout:\n%s\njson layout without paths:\n%s",
+						fromJSON[i].Name, jsonOf(t, x), jsonOf(t, j))
+				}
+				if len(fromJSON[i].Vdevs) == 0 {
+					t.Errorf("pool %s: no data vdevs", fromJSON[i].Name)
+				}
+			}
+		})
+	}
+}
+
+// The real GH #50 paste (spaces for tabs, redacted names): the text reader
+// still finds the tree's shape.
+func TestZpoolLayoutTextFromPastedOutput(t *testing.T) {
+	pools, err := parseZpoolStatusText(readFixture(t, "gh50-three-pools.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raid10 := poolNamed(t, pools, "raid10")
+	if len(raid10.Vdevs) != 6 {
+		t.Fatalf("raid10: %d top-level vdevs, want 6 mirrors", len(raid10.Vdevs))
+	}
+	for i, m := range raid10.Vdevs {
+		if m.Name != "mirror-"+string(rune('0'+i)) || m.Type != "mirror" || len(m.Children) != 2 {
+			t.Errorf("raid10 vdev %d: %+v", i, m)
+		}
+		for _, d := range m.Children {
+			if d.Type != "disk" || d.State != "ONLINE" || len(d.Children) != 0 || d.Path != "" {
+				t.Errorf("raid10 %s disk: %+v", m.Name, d)
+			}
+		}
+	}
+	fromJSON, err := parseZpoolStatusJSON(readFixture(t, "gh50-three-pools.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	shape := func(vs []PoolVdev) string {
+		var b strings.Builder
+		var walk func([]PoolVdev, int)
+		walk = func(vs []PoolVdev, d int) {
+			for _, v := range vs {
+				b.WriteString(strings.Repeat(" ", d) + v.Type + " " + v.State + "\n")
+				walk(v.Children, d+1)
+			}
+		}
+		walk(vs, 0)
+		return b.String()
+	}
+	for i := range pools {
+		if a, b := shape(pools[i].Vdevs), shape(fromJSON[i].Vdevs); a != b {
+			t.Errorf("pool %s shape differs:\ntext:\n%s\njson:\n%s", pools[i].Name, a, b)
+		}
+	}
+}
+
+// Served JSON: empty groups are left out, interior vdevs have no path, and
+// problem_vdevs is still [] on a healthy pool.
+func TestZpoolLayoutJSONShape(t *testing.T) {
+	pools, err := parseZpoolStatusJSON(readFixture(t, "never-scrubbed.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(pools[0])
+	var m map[string]any
+	json.Unmarshal(b, &m)
+	for _, absent := range []string{"logs", "cache", "spares", "special", "dedup", "layout_truncated"} {
+		if _, ok := m[absent]; ok {
+			t.Errorf("%s present on a pool without it: %s", absent, b)
+		}
+	}
+	if pv, ok := m["problem_vdevs"].([]any); !ok || len(pv) != 0 {
+		t.Errorf("problem_vdevs = %v, want []", m["problem_vdevs"])
+	}
+	vdevs, ok := m["vdevs"].([]any)
+	if !ok || len(vdevs) == 0 {
+		t.Fatalf("vdevs missing: %s", b)
+	}
+
+	pools, err = parseZpoolStatusJSON(readFixture(t, "data-errors.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ = json.Marshal(pools[0].Vdevs[0])
+	if strings.Contains(string(b[:strings.Index(string(b), "children")]), `"path"`) {
+		t.Errorf("interior vdev carries a path: %s", b)
+	}
+	if !strings.Contains(string(b), `"path":"/dev/`) {
+		t.Errorf("leaf disks carry no path: %s", b)
+	}
+}
+
+// Special and dedup vdevs are their own groups.
+func TestZpoolLayoutSpecialAndDedup(t *testing.T) {
+	in := `{"pools":{"t":{"name":"t","state":"ONLINE","error_count":0,
+		"vdevs":{"t":{"name":"t","vdev_type":"root","state":"ONLINE","vdevs":{
+			"sda":{"name":"sda","vdev_type":"disk","path":"/dev/sda1","state":"ONLINE"}}}},
+		"special":{"mirror-1":{"name":"mirror-1","vdev_type":"mirror","state":"ONLINE","vdevs":{
+			"nvme0n1":{"name":"nvme0n1","vdev_type":"disk","path":"/dev/nvme0n1p1","state":"ONLINE"},
+			"nvme1n1":{"name":"nvme1n1","vdev_type":"disk","path":"/dev/nvme1n1p1","state":"ONLINE","checksum_errors":2}}}},
+		"dedup":{"sdq":{"name":"sdq","vdev_type":"disk","path":"/dev/sdq1","state":"ONLINE"}}}}}`
+	pools, err := parseZpoolStatusJSON([]byte(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := pools[0]
+	if len(p.Special) != 1 || len(p.Special[0].Children) != 2 || p.Special[0].Children[1].ChecksumErrors != 2 {
+		t.Errorf("special: %+v", p.Special)
+	}
+	if len(p.Dedup) != 1 || p.Dedup[0].Path != "/dev/sdq1" {
+		t.Errorf("dedup: %+v", p.Dedup)
+	}
+
+	text := "  pool: t\n state: ONLINE\nconfig:\n\n" +
+		"\tNAME         STATE     READ WRITE CKSUM\n" +
+		"\tt            ONLINE       0     0     0\n" +
+		"\t  sda        ONLINE       0     0     0\n" +
+		"\tdedup\n" +
+		"\t  sdq        ONLINE       0     0     0\n" +
+		"\tspecial\n" +
+		"\t  mirror-1   ONLINE       0     0     0\n" +
+		"\t    nvme0n1  ONLINE       0     0     0\n" +
+		"\t    nvme1n1  ONLINE       0     0     2\n" +
+		"\nerrors: No known data errors\n"
+	tp, err := parseZpoolStatusText([]byte(text))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := layoutOf(tp[0]), layoutOf(p); !reflect.DeepEqual(got, map[string][]PoolVdev{
+		"vdevs": withoutPaths(want["vdevs"]), "logs": nil, "cache": nil, "spares": nil,
+		"special": withoutPaths(want["special"]), "dedup": withoutPaths(want["dedup"]),
+	}) {
+		t.Errorf("text layout:\n%s\njson:\n%s", jsonOf(t, got), jsonOf(t, want))
+	}
+}
+
+// A pool with more vdevs than the bound is cut short and says so; the health
+// fields still count every vdev.
+func TestZpoolLayoutBounded(t *testing.T) {
+	var disks, rows []string
+	n := maxLayoutVdevs + 10
+	for i := 0; i < n; i++ {
+		disks = append(disks, fmt.Sprintf(`"d%d":{"name":"d%d","vdev_type":"disk","state":"ONLINE","checksum_errors":1}`, i, i))
+		rows = append(rows, fmt.Sprintf("\t  d%-6d ONLINE       0     0     1", i))
+	}
+	in := `{"pools":{"big":{"name":"big","state":"ONLINE","error_count":0,"vdevs":{"big":{"name":"big","vdev_type":"root","state":"ONLINE","vdevs":{` +
+		strings.Join(disks, ",") + `}}}}}}`
+	text := "  pool: big\n state: ONLINE\nconfig:\n\n\tNAME     STATE     READ WRITE CKSUM\n\tbig      ONLINE       0     0     0\n" +
+		strings.Join(rows, "\n") + "\n\nerrors: No known data errors\n"
+	fromJSON, err := parseZpoolStatusJSON([]byte(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fromText, err := parseZpoolStatusText([]byte(text))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for form, p := range map[string]PoolInfo{"json": fromJSON[0], "text": fromText[0]} {
+		if len(p.Vdevs) != maxLayoutVdevs || !p.LayoutTruncated {
+			t.Errorf("%s: %d vdevs, truncated %v; want %d, true", form, len(p.Vdevs), p.LayoutTruncated, maxLayoutVdevs)
+		}
+		if p.ChecksumErrors != uint64(n) || len(p.ProblemVdevs) != n {
+			t.Errorf("%s: health fields cut short: %d errors, %d problem vdevs", form, p.ChecksumErrors, len(p.ProblemVdevs))
+		}
+	}
+}
+
+// Rows nested deeper than the bound are left out, with the vdevs under them.
+func TestZpoolLayoutTextDepthBound(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("  pool: deep\n state: ONLINE\nconfig:\n\n\tNAME  STATE  READ WRITE CKSUM\n\tdeep  ONLINE  0 0 0\n")
+	for d := 1; d <= maxLayoutDepth+3; d++ {
+		fmt.Fprintf(&b, "\t%smirror-%d  ONLINE  0 0 0\n", strings.Repeat("  ", d), d)
+	}
+	b.WriteString("\t  sdz  ONLINE  0 0 0\n\nerrors: No known data errors\n")
+	pools, err := parseZpoolStatusText([]byte(b.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := pools[0]
+	if !p.LayoutTruncated {
+		t.Error("not marked truncated")
+	}
+	depth, v := 0, p.Vdevs
+	for len(v) > 0 {
+		depth++
+		v = v[0].Children
+	}
+	if depth != maxLayoutDepth {
+		t.Errorf("depth %d, want %d", depth, maxLayoutDepth)
+	}
+	// The row back at depth 1 after the deep chain is a top-level vdev again.
+	if len(p.Vdevs) != 2 || p.Vdevs[1].Name != "sdz" {
+		t.Errorf("top level: %+v", p.Vdevs)
 	}
 }

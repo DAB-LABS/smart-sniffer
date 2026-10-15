@@ -22,7 +22,10 @@
 //
 // Both readers produce the same PoolInfo for the same pool. The vdev tree is
 // walked to sum its counters and to name the vdevs that are in trouble
-// (problem_vdevs); healthy vdevs are not served.
+// (problem_vdevs). Since v0.8.3 the whole tree is served as well, healthy
+// vdevs included (vdevs, logs, cache, spares, special, dedup), so a consumer
+// can draw the pool's layout. The text reader builds the same tree from the
+// config table's indentation, without device paths.
 //
 // ZFS is never required. No zpool binary means pool status is off, nothing is
 // advertised and nothing is logged. A zpool that exists but fails (module not
@@ -95,6 +98,60 @@ type PoolInfo struct {
 	// well as disks. Spares are listed only when they are neither AVAIL nor
 	// INUSE. Never null; [] for a healthy pool.
 	ProblemVdevs []ProblemVdev `json:"problem_vdevs"`
+
+	// The pool's layout (v0.8.3): every vdev, healthy or not, as a tree. Vdevs
+	// holds the data vdevs (the children of the pool's root vdev); the other
+	// groups are present only when the pool has them. Leaves carry the device
+	// path zpool reports, when it reports one (the JSON reader only; the text
+	// form prints names, not paths), so a disk can be matched to a drive.
+	// Bounded at maxLayoutVdevs per pool; LayoutTruncated is true when more
+	// were left out. Consumers that only want health read the fields above.
+	Vdevs           []PoolVdev `json:"vdevs,omitempty"`
+	Logs            []PoolVdev `json:"logs,omitempty"`
+	Cache           []PoolVdev `json:"cache,omitempty"`
+	Spares          []PoolVdev `json:"spares,omitempty"`
+	Special         []PoolVdev `json:"special,omitempty"`
+	Dedup           []PoolVdev `json:"dedup,omitempty"`
+	LayoutTruncated bool       `json:"layout_truncated,omitempty"`
+}
+
+// PoolVdev is one vdev in a pool's layout. Interior vdevs (mirror-0,
+// raidz2-0, spare-1, replacing-0) have Children; disks and files do not.
+// Spares carry no error counters, so theirs read 0.
+type PoolVdev struct {
+	Name           string     `json:"name"`
+	Type           string     `json:"type"`
+	State          string     `json:"state"`
+	ReadErrors     uint64     `json:"read_errors"`
+	WriteErrors    uint64     `json:"write_errors"`
+	ChecksumErrors uint64     `json:"checksum_errors"`
+	Path           string     `json:"path,omitempty"`
+	Children       []PoolVdev `json:"children,omitempty"`
+}
+
+// Layout bounds. A pool with hundreds of disks still fits; a malformed tree
+// cannot make /api/pools unbounded.
+const (
+	maxLayoutVdevs = 1024 // vdevs per pool, over every group
+	maxLayoutDepth = 8    // levels below a group; real pools use at most 4
+)
+
+// layoutBudget counts the vdevs added to one pool's layout.
+type layoutBudget struct {
+	left      int
+	truncated bool
+}
+
+func newLayoutBudget() *layoutBudget { return &layoutBudget{left: maxLayoutVdevs} }
+
+// take reserves room for one vdev at depth, or records that it was left out.
+func (b *layoutBudget) take(depth int) bool {
+	if b.left <= 0 || depth >= maxLayoutDepth {
+		b.truncated = true
+		return false
+	}
+	b.left--
+	return true
 }
 
 // ProblemVdev is one vdev that needs attention.
@@ -551,6 +608,7 @@ type zpoolJSONPool struct {
 type zpoolJSONVdev struct {
 	Name           string         `json:"name"`
 	VdevType       string         `json:"vdev_type"`
+	Path           string         `json:"path"`
 	State          string         `json:"state"`
 	ReadErrors     zfsNum         `json:"read_errors"`
 	WriteErrors    zfsNum         `json:"write_errors"`
@@ -646,6 +704,30 @@ func jsonProblemVdev(nv zpoolJSONNamedVdev, r, w, c uint64) ProblemVdev {
 	return ProblemVdev{Name: name, Type: vtype, State: nv.Vdev.State, ReadErrors: r, WriteErrors: w, ChecksumErrors: c}
 }
 
+// jsonLayout converts a JSON vdev tree into layout vdevs, parent before
+// children, within the pool's budget.
+func jsonLayout(tree zpoolJSONVdevs, depth int, budget *layoutBudget) []PoolVdev {
+	var out []PoolVdev
+	for _, nv := range tree {
+		if !budget.take(depth) {
+			continue
+		}
+		v := nv.Vdev
+		name := nv.name()
+		vtype := v.VdevType
+		if vtype == "" {
+			vtype = vdevTypeFromName(name)
+		}
+		out = append(out, PoolVdev{
+			Name: name, Type: vtype, State: v.State,
+			ReadErrors: uint64(v.ReadErrors), WriteErrors: uint64(v.WriteErrors), ChecksumErrors: uint64(v.ChecksumErrors),
+			Path:     v.Path,
+			Children: jsonLayout(v.Vdevs, depth+1, budget),
+		})
+	}
+	return out
+}
+
 type zpoolJSONScan struct {
 	Function     string                          `json:"function"`
 	State        string                          `json:"state"`
@@ -714,6 +796,23 @@ func parseZpoolStatusJSON(out []byte) ([]PoolInfo, error) {
 				p.ProblemVdevs = append(p.ProblemVdevs, jsonProblemVdev(nv, 0, 0, 0))
 			}
 		}
+
+		// Layout, in the same order: data vdevs, then dedup, special, logs,
+		// cache, spares, so the budget is spent on the main tree first.
+		budget := newLayoutBudget()
+		for _, nv := range jp.Vdevs {
+			if nv.Vdev.VdevType == "root" || nv.name() == name {
+				p.Vdevs = append(p.Vdevs, jsonLayout(nv.Vdev.Vdevs, 0, budget)...)
+			} else {
+				p.Vdevs = append(p.Vdevs, jsonLayout(zpoolJSONVdevs{nv}, 0, budget)...)
+			}
+		}
+		p.Dedup = jsonLayout(jp.Dedup, 0, budget)
+		p.Special = jsonLayout(jp.Special, 0, budget)
+		p.Logs = jsonLayout(jp.Logs, 0, budget)
+		p.Cache = jsonLayout(jp.L2cache, 0, budget)
+		p.Spares = jsonLayout(jp.Spares, 0, budget)
+		p.LayoutTruncated = budget.truncated
 
 		if jp.ErrorCount != nil {
 			p.DataErrors = u64Ptr(uint64(*jp.ErrorCount))
@@ -791,6 +890,96 @@ var ansiEscape = regexp.MustCompile("\x1b\\[[0-9;]*m")
 // classHeadings are the lines that introduce the vdevs outside the main tree.
 var classHeadings = map[string]bool{"dedup": true, "special": true, "logs": true, "cache": true, "spares": true}
 
+// textLayout builds a pool's layout from the config table's indentation.
+// print_status_config() indents each level two spaces deeper than its parent,
+// starting from the pool row; class headings sit at the pool row's level.
+type textLayout struct {
+	rootWidth int
+	groups    map[string][]*textVdev // keyed by class heading; "" is the data vdevs
+	stack     []*textVdev            // stack[i] is the last vdev seen at depth i+1; nil if left out
+	budget    *layoutBudget
+}
+
+type textVdev struct {
+	vdev     PoolVdev
+	children []*textVdev
+}
+
+func newTextLayout() *textLayout {
+	return &textLayout{groups: map[string][]*textVdev{}, budget: newLayoutBudget()}
+}
+
+// indentWidth is the width of a line's leading whitespace, with tab stops
+// every eight columns (pasted output turns the tab into eight spaces).
+func indentWidth(line string) int {
+	w := 0
+	for _, r := range line {
+		switch r {
+		case ' ':
+			w++
+		case '\t':
+			w = (w/8 + 1) * 8
+		default:
+			return w
+		}
+	}
+	return w
+}
+
+// heading starts a new class group.
+func (tl *textLayout) heading() { tl.stack = tl.stack[:0] }
+
+// add places a vdev printed at width under class. A nil vdev is a row that is
+// not a counted vdev: it is left out, and so are the rows under it.
+func (tl *textLayout) add(class string, width int, v *PoolVdev) {
+	depth := (width - tl.rootWidth) / 2
+	if depth < 1 {
+		depth = 1
+	}
+	if depth > len(tl.stack)+1 {
+		depth = len(tl.stack) + 1
+	}
+	tl.stack = tl.stack[:depth-1]
+	var parent *textVdev
+	if depth > 1 {
+		parent = tl.stack[depth-2]
+	}
+	var node *textVdev
+	if v != nil && (depth == 1 || parent != nil) && tl.budget.take(depth-1) {
+		node = &textVdev{vdev: *v}
+		if parent != nil {
+			parent.children = append(parent.children, node)
+		} else {
+			tl.groups[class] = append(tl.groups[class], node)
+		}
+	}
+	tl.stack = append(tl.stack, node)
+}
+
+func textLayoutVdevs(nodes []*textVdev) []PoolVdev {
+	if len(nodes) == 0 {
+		return nil
+	}
+	out := make([]PoolVdev, 0, len(nodes))
+	for _, n := range nodes {
+		v := n.vdev
+		v.Children = textLayoutVdevs(n.children)
+		out = append(out, v)
+	}
+	return out
+}
+
+// apply stores the layout on p.
+func (tl *textLayout) apply(p *PoolInfo) {
+	p.Vdevs = textLayoutVdevs(tl.groups[""])
+	p.Dedup = textLayoutVdevs(tl.groups["dedup"])
+	p.Special = textLayoutVdevs(tl.groups["special"])
+	p.Logs = textLayoutVdevs(tl.groups["logs"])
+	p.Cache = textLayoutVdevs(tl.groups["cache"])
+	p.Spares = textLayoutVdevs(tl.groups["spares"])
+	p.LayoutTruncated = tl.budget.truncated
+}
+
 // dataErrorsLine matches "2 data errors, use '-v' for a list".
 var dataErrorsLine = regexp.MustCompile(`^(\d+) data errors`)
 
@@ -808,6 +997,7 @@ func parseZpoolStatusText(out []byte) ([]PoolInfo, error) {
 	var scanLines []string   // first scan block of the current pool
 	var tableHeaderSeen, rootRowSeen bool
 	var class string // class heading the config rows are under: "", logs, cache, special, dedup, spares
+	var layout *textLayout
 
 	flush := func() {
 		if cur == nil {
@@ -838,8 +1028,9 @@ func parseZpoolStatusText(out []byte) ([]PoolInfo, error) {
 				return err
 			}
 		}
+		layout.apply(cur)
 		pools = append(pools, *cur)
-		cur, scanLines = nil, nil
+		cur, scanLines, layout = nil, nil, nil
 		return nil
 	}
 
@@ -854,6 +1045,7 @@ func parseZpoolStatusText(out []byte) ([]PoolInfo, error) {
 				}
 				cur = &PoolInfo{Name: value, ProblemVdevs: []ProblemVdev{}}
 				tableHeaderSeen, rootRowSeen, class = false, false, ""
+				layout = newTextLayout()
 			case "state":
 				if cur != nil {
 					cur.State = value
@@ -904,13 +1096,16 @@ func parseZpoolStatusText(out []byte) ([]PoolInfo, error) {
 				if len(fields) < 5 || fields[0] != cur.Name {
 					return nil, fmt.Errorf("%w: pool %q: unexpected first config row %q", errZpoolParse, cur.Name, trimmed)
 				}
+				layout.rootWidth = indentWidth(line)
 			}
 			// Class headings stand alone on their line (print_class_vdevs,
 			// print_l2cache, print_spares).
 			if len(fields) == 1 && classHeadings[fields[0]] {
 				class = fields[0]
+				layout.heading()
 				continue
 			}
+			width := indentWidth(line)
 			// Spares print a name and a state and no counters
 			// (print_status_config with isspare).
 			if class == "spares" {
@@ -919,11 +1114,19 @@ func parseZpoolStatusText(out []byte) ([]PoolInfo, error) {
 						Name: fields[0], Type: vdevTypeFromName(fields[0]), State: fields[1],
 					})
 				}
+				if len(fields) >= 2 {
+					layout.add(class, width, &PoolVdev{Name: fields[0], Type: vdevTypeFromName(fields[0]), State: fields[1]})
+				} else {
+					layout.add(class, width, nil)
+				}
 				continue
 			}
 			// A row whose three counter columns do not all read as numbers
 			// is not a counted vdev.
 			if len(fields) < 5 {
+				if !isRoot {
+					layout.add(class, width, nil)
+				}
 				continue
 			}
 			r, errR := parseZFSCount(fields[2])
@@ -933,6 +1136,7 @@ func parseZpoolStatusText(out []byte) ([]PoolInfo, error) {
 				if fields[0] == cur.Name {
 					return nil, fmt.Errorf("%w: pool %q: counters in %q", errZpoolParse, cur.Name, trimmed)
 				}
+				layout.add(class, width, nil)
 				continue
 			}
 			cur.ReadErrors += r
@@ -940,6 +1144,12 @@ func parseZpoolStatusText(out []byte) ([]PoolInfo, error) {
 			cur.ChecksumErrors += c
 			if !isRoot && vdevNeedsAttention(fields[1], r, w, c) {
 				cur.ProblemVdevs = append(cur.ProblemVdevs, ProblemVdev{
+					Name: fields[0], Type: vdevTypeFromName(fields[0]), State: fields[1],
+					ReadErrors: r, WriteErrors: w, ChecksumErrors: c,
+				})
+			}
+			if !isRoot {
+				layout.add(class, width, &PoolVdev{
 					Name: fields[0], Type: vdevTypeFromName(fields[0]), State: fields[1],
 					ReadErrors: r, WriteErrors: w, ChecksumErrors: c,
 				})

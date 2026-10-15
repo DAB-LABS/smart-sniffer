@@ -14,6 +14,56 @@
     "last_scrub_end": null,
     "last_scrub_repaired": null,
     "last_scrub_errors": null,
-    "problem_vdevs": []
+    "problem_vdevs": [],
+    "vdevs": [
+      {
+        "name": "raidz1-0",
+        "type": "raidz",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0,
+        "children": [
+          {
+            "name": "ata-TOSHIBA_MG08ACA16TE_Y0001",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/ata-TOSHIBA_MG08ACA16TE_Y0001-part1"
+          },
+          {
+            "name": "ata-TOSHIBA_MG08ACA16TE_Y0002",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/ata-TOSHIBA_MG08ACA16TE_Y0002-part1"
+          },
+          {
+            "name": "ata-TOSHIBA_MG08ACA16TE_Y0003",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0,
+            "path": "/dev/disk/by-id/ata-TOSHIBA_MG08ACA16TE_Y0003-part1"
+          }
+        ]
+      }
+    ],
+    "cache": [
+      {
+        "name": "nvme-WD_Red_SN700_500GB_22001",
+        "type": "disk",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0,
+        "path": "/dev/disk/by-id/nvme-WD_Red_SN700_500GB_22001-part1"
+      }
+    ]
   }
 ]

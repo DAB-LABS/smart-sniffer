@@ -240,6 +240,23 @@ The equivalent config file setting is `mount_prefix: /host`. Configured mountpoi
 
 On macOS, `/api/filesystems` also says which drive each filesystem lives on (v0.8.3). A filesystem there sits on a device such as `/dev/disk3s5`, an APFS volume in a container disk macOS synthesizes, while the drive is listed under an IOService path, so the two could not be matched. Each filesystem now carries `physical_devices`, the whole physical disks under it (e.g. `["/dev/disk0"]`, found with `diskutil info -plist` through the APFS physical store), and `drive_id`, the `/api/drives` id of that drive, matched by device path, by the serial `smartctl -i` reads from the disk, or by model when only one drive has it. `drive_id` is left out when the filesystem spans two drives (Fusion) or no drive matches. The lookup runs once per filesystem and is cached. Linux and Windows output is unchanged.
 
+`/api/pools` also serves each pool's layout (v0.8.3), healthy vdevs included, beside the unchanged `problem_vdevs`. `vdevs` is the data vdev tree (the children of the pool's root); `logs`, `cache`, `spares`, `special` and `dedup` appear only when the pool has them. Each vdev is `{"name", "type", "state", "read_errors", "write_errors", "checksum_errors"}` plus `children` for mirrors, raidz, spare and replacing vdevs, and `path` for a disk when zpool reports one (`/dev/sdb1`, `/dev/disk/by-id/...-part1`), so a disk can be matched to a drive. Paths come from `zpool status -j` (OpenZFS 2.3 and later); older releases are read from the text form, which gives the same tree without paths. Spares carry no error counters (always 0). A pool is cut at 1024 vdevs or 8 levels, with `layout_truncated: true`; the error totals and `problem_vdevs` always cover the whole pool. Example, with the health fields left out:
+
+```json
+{
+  "name": "tank", "state": "DEGRADED",
+  "vdevs": [
+    {"name": "raidz1-0", "type": "raidz", "state": "DEGRADED", "read_errors": 0, "write_errors": 0, "checksum_errors": 0,
+     "children": [
+       {"name": "sda", "type": "disk", "state": "ONLINE", "read_errors": 0, "write_errors": 0, "checksum_errors": 0, "path": "/dev/sda1"},
+       {"name": "sdb", "type": "disk", "state": "FAULTED", "read_errors": 12, "write_errors": 0, "checksum_errors": 0, "path": "/dev/sdb1"}
+     ]}
+  ],
+  "logs": [{"name": "nvme0n1", "type": "disk", "state": "ONLINE", "read_errors": 0, "write_errors": 0, "checksum_errors": 0, "path": "/dev/nvme0n1p1"}],
+  "spares": [{"name": "sdf", "type": "disk", "state": "AVAIL", "read_errors": 0, "write_errors": 0, "checksum_errors": 0, "path": "/dev/sdf1"}]
+}
+```
+
 **Service management:**
 
 | Platform | Status | Logs | Restart |

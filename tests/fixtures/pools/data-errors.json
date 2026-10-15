@@ -39,6 +39,47 @@
         "write_errors": 0,
         "checksum_errors": 4
       }
+    ],
+    "vdevs": [
+      {
+        "name": "mirror-0",
+        "type": "mirror",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 4,
+        "children": [
+          {
+            "name": "ata-ST2000DM008-2FR102_ZFL0001",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 4,
+            "path": "/dev/disk/by-id/ata-ST2000DM008-2FR102_ZFL0001-part1"
+          },
+          {
+            "name": "ata-ST2000DM008-2FR102_ZFL0002",
+            "type": "disk",
+            "state": "ONLINE",
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 4,
+            "path": "/dev/disk/by-id/ata-ST2000DM008-2FR102_ZFL0002-part1"
+          }
+        ]
+      }
+    ],
+    "logs": [
+      {
+        "name": "nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0001-part4",
+        "type": "disk",
+        "state": "ONLINE",
+        "read_errors": 0,
+        "write_errors": 0,
+        "checksum_errors": 0,
+        "path": "/dev/disk/by-id/nvme-Samsung_SSD_970_EVO_Plus_250GB_S4EUNX0001-part4"
+      }
     ]
   }
 ]
