@@ -50,6 +50,8 @@ type Config struct {
 	NoWrite            bool               `yaml:"-"`                   // set by --no-write flag; skips config write in discover mode
 	SmartctlPathConfig string             `yaml:"smartctl_path"`       // smartctl binary from config; empty = PATH, then the usual install locations
 	SmartctlPath       string             `yaml:"-"`                   // resolved path to smartctl binary; set by resolveSmartctlPath()
+	AgentID            string             `yaml:"agent_id"`            // pins the agent ID; empty = random ID saved in agent_id.json
+	ConfigPath         string             `yaml:"-"`                   // absolute path of the config file actually read; "" when none
 	excludeSet         map[string]bool    // normalized set built once at load time (unexported, not serialized)
 }
 
@@ -180,6 +182,7 @@ func LoadConfig() (*Config, error) {
 		if err := yaml.Unmarshal(data, &cfg); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", *configPath, err)
 		}
+		cfg.ConfigPath = absPath(*configPath)
 	} else {
 		// Auto-detect: working directory first, then system path.
 		for _, path := range []string{"config.yaml", "/etc/smartha-agent/config.yaml"} {
@@ -190,6 +193,7 @@ func LoadConfig() (*Config, error) {
 			if err := yaml.Unmarshal(data, &cfg); err != nil {
 				return nil, fmt.Errorf("parsing %s: %w", path, err)
 			}
+			cfg.ConfigPath = absPath(path)
 			break
 		}
 	}
@@ -247,6 +251,14 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("scan_interval too short (minimum 5s): %v", cfg.ScanInterval)
 	}
 
+	if cfg.AgentID != "" {
+		id, ok := normAgentID(cfg.AgentID)
+		if !ok {
+			return nil, fmt.Errorf("invalid agent_id %q (use 8 to 64 characters: a-z, 0-9 and -, starting with a letter or digit)", cfg.AgentID)
+		}
+		cfg.AgentID = id
+	}
+
 	// Standby mode validation -- default to "never" if not set.
 	if cfg.StandbyMode == "" {
 		cfg.StandbyMode = "never"
@@ -302,6 +314,14 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// absPath returns p made absolute, or p unchanged if that fails.
+func absPath(p string) string {
+	if a, err := filepath.Abs(p); err == nil {
+		return a
+	}
+	return p
 }
 
 // IsDeviceExcluded returns true if the given device path (or its symlink

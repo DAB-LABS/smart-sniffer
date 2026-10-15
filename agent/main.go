@@ -118,6 +118,9 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 		log.Printf("Excluding %d device(s): %s", len(cfg.ExcludeDevices), strings.Join(cfg.ExcludeDevices, ", "))
 	}
 
+	// --- Agent ID for /api/health and mDNS, resolved once ---
+	agentID = resolveAgentID(cfg.AgentID, agentIDCandidateDirs(cfg.ConfigPath), log.Printf)
+
 	// --- Host OS name for /api/health, read once ---
 	agentSystem = loadSystemInfo(cfg.MountPrefix)
 	if agentSystem.Name != "" {
@@ -230,7 +233,7 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 			instance = instance[:63]
 		}
 
-		txt := buildTXT(hostname, authFlag, len(drives), plan.IP)
+		txt := buildTXT(hostname, authFlag, len(drives), plan.IP, agentID)
 
 		mdnsServer, err = zeroconf.Register(instance, "_smartha._tcp", "local.", cfg.Port, txt, plan.Ifaces)
 		if err != nil {
@@ -308,8 +311,9 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 	return nil
 }
 
-// buildTXT returns the mDNS TXT record. ip= is left out when empty.
-func buildTXT(hostname, authFlag string, driveCount int, ip string) []string {
+// buildTXT returns the mDNS TXT record. ip= and agent_id= are left out
+// when empty.
+func buildTXT(hostname, authFlag string, driveCount int, ip, id string) []string {
 	txt := []string{
 		"txtvers=1",
 		"version=" + version,
@@ -320,6 +324,9 @@ func buildTXT(hostname, authFlag string, driveCount int, ip string) []string {
 	}
 	if ip != "" {
 		txt = append(txt, "ip="+ip)
+	}
+	if id != "" {
+		txt = append(txt, "agent_id="+id)
 	}
 	return txt
 }
@@ -485,6 +492,7 @@ type healthResponse struct {
 	Filesystems int      `json:"filesystems"`
 	Pools       *int     `json:"pools,omitempty"`        // present only when ZFS pool status is on and the last read succeeded
 	PoolsStatus string   `json:"pools_status,omitempty"` // pending, ok or failed; present only when ZFS pool status is on
+	AgentID     string   `json:"agent_id,omitempty"`     // random ID saved next to the config; omitted when it could not be saved
 }
 
 // handleHealth serves GET /api/health — includes available endpoints and counts.
@@ -526,6 +534,7 @@ func handleHealth(cache *DriveCache) http.HandlerFunc {
 			Filesystems: fsCount,
 			Pools:       poolCount,
 			PoolsStatus: poolsStatus,
+			AgentID:     agentID,
 		}
 
 		w.Header().Set("Content-Type", "application/json")

@@ -18,6 +18,8 @@ User=root
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/etc/smartha-agent
+# Fallback location for agent_id.json if /etc/smartha-agent is read-only.
+StateDirectory=smartha-agent
 NoNewPrivileges=false
 PrivateTmp=true
 
