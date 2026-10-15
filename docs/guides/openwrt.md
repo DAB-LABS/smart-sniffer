@@ -141,12 +141,13 @@ manually always works.
 ## Step 7: Keep it across OpenWrt upgrades
 
 A `sysupgrade` replaces the system and keeps only the files it has been told to
-keep. Add these lines to `/etc/sysupgrade.conf` so the agent, its config and its
-service survive an upgrade:
+keep. Add these lines to `/etc/sysupgrade.conf` so the agent, its config, its
+agent ID and its service survive an upgrade:
 
 ```
 # Home Assistant SMART Sniffer
 /etc/smartha-agent/config.yaml
+/etc/smartha-agent/agent_id.json
 /usr/bin/smartha-agent
 /etc/init.d/smartha-agent
 /etc/rc.d/K10smartha-agent
@@ -157,6 +158,10 @@ smartmontools is a package, so reinstall it after an upgrade with
 `opkg install smartmontools` if your upgrade did not keep packages.
 
 Thanks to [@DanaGoyette](https://github.com/DanaGoyette) for this list.
+
+`agent_id.json` holds the random ID the agent (v0.8.3 and later) creates on
+first start and reports to Home Assistant. Without that line an upgrade gives
+the agent a new ID; nothing breaks, but keeping it is better.
 
 ## Known rough edges
 

@@ -39,6 +39,8 @@ The installer will:
 
 **Important: pick the right mDNS interface.** Proxmox hosts typically have multiple interfaces -- the physical NIC (`eno1`, `enp0s25`, etc.), the bridge (`vmbr0`), and possibly Docker/Tailscale/ZeroTier interfaces. Pick `vmbr0` (or your main bridge) so the HA VM can see the mDNS advertisement. If you pick the physical NIC, the VM may not see it depending on your network topology.
 
+Since v0.8.3, when no interface is picked and the other interfaces have no private address (the usual Proxmox layout, where the NIC is a bridge port with no IP), the agent picks `vmbr0` by itself, or the lowest `vmbr0.N` if the host's address is on a VLAN. If no other interface has any IPv4, another `vmbr*` bridge is used, preferring the one with the default route. Setting `advertise_interface: vmbr0` is still recommended: it is explicit and always wins. The startup log says which rule chose the address (`mDNS: preferred IP: ...`).
+
 Verify the agent is running:
 
 ```bash

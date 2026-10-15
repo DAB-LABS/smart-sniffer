@@ -42,13 +42,19 @@ The Go agent (`smartha-agent`) searches for `config.yaml` in two locations, in o
 
 The systemd service unit sets `WorkingDirectory` to match `INSTALL_CFG`, so the relative path resolves correctly regardless of where the config was installed. No changes to the Go binary are needed for alternate install paths.
 
+### Agent ID file
+
+Since v0.8.3 the agent saves its random ID as `agent_id.json` in the same directory as the `config.yaml` it loaded (so `INSTALL_CFG` on every installer platform, and `C:\Program Files\SmartHA-Agent` on Windows). If that directory is read-only it tries `/var/lib/smartha-agent` (Linux), `%ProgramData%\SmartHA-Agent` (Windows) or `/Library/Application Support/SmartHA-Agent` (macOS); the Home Assistant app uses `/data`. If none can be written, no ID is reported. `agent_id:` in `config.yaml` pins it. `install.sh --uninstall` removes the config directory, so a reinstall gets a new ID.
+
 ## Network Interface Filtering
 
 Machines with Docker, VPNs (ZeroTier, Tailscale, WireGuard), or virtual bridges have multiple network interfaces. Without filtering, the agent advertises mDNS on all of them, causing Home Assistant to see duplicate discoveries at unreachable IPs.
 
 ### Smart Defaults
 
-When no `advertise_interface` is configured, the agent automatically skips known virtual interface prefixes: `docker*`, `br-*`, `veth*`, `zt*`, `tailscale*`, `ts*`, `wg*`, `virbr*`, `vbox*`, `vmnet*`, `lo`. It advertises on all remaining interfaces.
+When no `advertise_interface` is configured, the agent automatically skips known virtual interface prefixes (container, VPN, hypervisor, macOS and Windows virtual interfaces; the full list is `defaultSkipPrefixes` in `agent/config.go`), for example `docker*`, `br-*`, `veth*`, `zt*`, `tailscale*`, `wg*`, `virbr*`, `vmbr*`, `ovs*`, `lo`. It advertises on all remaining interfaces.
+
+Since v0.8.3 one skipped bridge can be added back to supply the mDNS `ip=` address, only when the remaining interfaces offer no private address: `br-lan` or `vmbr0` (or their lowest VLAN, `br-lan.N` / `vmbr0.N`) with a private address when the best remaining address is public, CGNAT or link-local, or there is none; and a non-Docker `vmbr*`, `ovs_*` or `br-<name>` bridge, preferring the one with the default route, when the remaining interfaces have no IPv4 at all. A host that advertised a private address before keeps it. See "Preferred address" in the README for the full order.
 
 ### Explicit Interface
 

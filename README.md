@@ -178,6 +178,7 @@ token: "your-secret-token"    # optional -- omit to disable auth
 scan_interval: 60s
 standby_mode: standby          # optional -- never, standby, sleep, or idle
 advertise_interface: eth0      # optional -- restrict mDNS to this interface
+agent_id: my-nas-01            # optional -- pin the agent ID (default: random, saved in agent_id.json)
 exclude_devices:               # optional -- set by installer's drive picker
   - /dev/sdb
 smartctl_path: /usr/local/bin/smartctl  # optional -- only when smartctl is not on PATH or the usual install locations
@@ -216,6 +217,17 @@ The equivalent config file setting is `mount_prefix: /host`. Configured mountpoi
 
 **Network interface:** The `advertise_interface` setting restricts mDNS to a single interface. The installer sets this during setup if you pick a specific interface. When not set, the agent auto-filters known virtual interfaces (Docker, ZeroTier, Tailscale, WireGuard, etc.) and advertises on all remaining physical interfaces. To change the interface after install, edit `config.yaml` and restart the service — no reinstall needed.
 
+**Preferred address (`ip=` in the mDNS record):** Home Assistant connects to the address the agent puts in its mDNS TXT record. The agent picks it in this order (v0.8.3):
+
+1. `advertise_interface`, when set, always wins.
+2. Otherwise the best address on the non-skipped interfaces (192.168.x first, then 10.x, 172.x, 100.x, anything else). Whenever this is a private (RFC 1918) address, it is used, exactly as before v0.8.3.
+3. If that gives a public, CGNAT (100.64.0.0/10) or link-local address, or nothing, and a LAN bridge named `br-lan` (OpenWrt) or `vmbr0` (Proxmox) has a private address, the bridge is used. The bare bridge wins; otherwise its VLAN subinterface (`br-lan.N`, `vmbr0.N`) with the lowest N.
+4. If the non-skipped interfaces have no IPv4 address at all, a skipped bridge that is not Docker's (`vmbr*`, `ovs_*` on Synology, `br-<name>`) supplies it, preferring the one that carries the default route. A link-local address is never used.
+
+The chosen bridge is added to the interfaces the agent advertises on; the other skipped interfaces stay skipped. The agent announces the addresses of every interface it advertises on, on each of them: on OpenWrt, the LAN address is also announced on the WAN, as the WAN address already was on the LAN. One startup line says which rule chose the address, for example `mDNS: preferred IP: 192.168.1.1 (rule 1: LAN bridge br-lan; default scoring gave 203.0.113.7 on eth3)`. If the pick is wrong for your network, set `advertise_interface`.
+
+**Agent ID:** On first start the agent creates a random ID (32 hex characters) and saves it as `agent_id.json` next to `config.yaml`. If that directory is read-only it uses `/var/lib/smartha-agent` (Linux), `%ProgramData%\SmartHA-Agent` (Windows) or `/Library/Application Support/SmartHA-Agent` (macOS), and `/data` in the Home Assistant app. Set `agent_id:` in `config.yaml` to pin it (8 to 64 characters of a-z, 0-9 and `-`); nothing is written then. If the ID cannot be saved anywhere, the agent reports none and logs one warning. The ID is random, not derived from any serial or MAC address; deleting the file gives the agent a new one.
+
 **Authentication:** When a `token` is set, every request to the agent must include an `Authorization: Bearer <token>` header — requests without it receive a `401 Unauthorized` response. When adding the agent in Home Assistant, enter the same token in the integration's config flow. If no token is set, the agent serves data openly without auth.
 
 **Disk usage monitoring:** The installer's Disk Usage Monitoring picker lets you select which mountpoints to track. Each configured mountpoint is polled on the same interval as SMART data and served via `/api/filesystems`. Mountpoints are identified by UUID (via `blkid`) for stable entity identity across reboots. If no filesystems are configured, the endpoint simply isn't registered and callers receive a 404. To add or change monitored mountpoints after install, re-run the installer or edit `config.yaml` directly and restart the service.
@@ -228,7 +240,7 @@ The equivalent config file setting is `mount_prefix: /host`. Configured mountpoi
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /api/health` | Agent status, version, available endpoints, drive/filesystem/pool counts |
+| `GET /api/health` | Agent status, version, agent ID, available endpoints, drive/filesystem/pool counts |
 | `GET /api/drives` | Summary list of all discovered drives |
 | `GET /api/drives/{id}` | Full SMART data for a single drive |
 | `GET /api/filesystems` | Disk usage for all configured mountpoints (only registered when filesystems are configured) |
@@ -237,6 +249,8 @@ The equivalent config file setting is `mount_prefix: /host`. Configured mountpoi
 `/api/drives/{id}` carries two fields added in v0.8.0 beside the unchanged `smart_data`: `device_statistics` says whether the drive's ATA Device Statistics log was read this poll (`present` with the raw pages, `absent`, `unavailable` with a reason, `not_applicable` for NVMe and SCSI, or `off` with `config` or `os`), and `derived` holds `host_writes` and `host_reads` in bytes with their `source`, or `host_writes_omitted` / `host_reads_omitted` with the reason. `unavailable` reasons are `failed`, `timeout`, `standby`, `mismatch` and `stopped`; `source` is `ata_device_statistics`, `ata_attribute` (with `attribute_id` and `attribute_name`) or `nvme`. `/api/health` reports `pools_status` (`pending`, `ok` or `failed`) when pool status is on.
 
 `/api/health` also reports, since v0.8.3, `hostname` (the machine's short host name, the same value as the mDNS TXT record; inside a container it is the container's name, and `mdns_name` never changes it), `os_name` (a friendly name with version, such as `Ubuntu 24.04.1 LTS`, `macOS 15.1` or `Windows 11 Pro 24H2`) and `os_version` (`24.04`, `15.1`, `24H2`). The OS name comes from `/etc/os-release` on Linux (the host's copy under `mount_prefix` when one is set), `sw_vers` on macOS and the registry on Windows, read once at startup. A field that cannot be read is left out; `os` is unchanged (`linux`, `darwin`, `windows`). The integration keeps these three on its agent health coordinator for later use; it does not name devices or entries from them yet.
+
+`/api/health` and the mDNS TXT record also carry `agent_id` (v0.8.3), the agent's random ID (see **Agent ID** above). It is left out of both when the agent could not save one, so it never changes from one restart to the next.
 
 On macOS, `/api/filesystems` also says which drive each filesystem lives on (v0.8.3). A filesystem there sits on a device such as `/dev/disk3s5`, an APFS volume in a container disk macOS synthesizes, while the drive is listed under an IOService path, so the two could not be matched. Each filesystem now carries `physical_devices`, the whole physical disks under it (e.g. `["/dev/disk0"]`, found with `diskutil info -plist` through the APFS physical store), and `drive_id`, the `/api/drives` id of that drive, matched by device path, by the serial `smartctl -i` reads from the disk, or by model when only one drive has it. `drive_id` is left out when the filesystem spans two drives (Fusion) or no drive matches. The lookup runs once per filesystem and is cached. Linux and Windows output is unchanged.
 

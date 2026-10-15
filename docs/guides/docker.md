@@ -69,9 +69,18 @@ Home Assistant by hand, using the NAS's IP address and port `9099`.
 ### 5. Configuration
 
 The agent reads `/etc/smartha-agent/config.yaml`, or any path you pass with
-`--config`. Mount your config file into the container. Common settings:
-`port`, `token`, `scan_interval`, `exclude_devices`, and `device_overrides` for
-NAS drives that need a specific protocol.
+`--config`. Common settings: `port`, `token`, `scan_interval`,
+`exclude_devices`, and `device_overrides` for NAS drives that need a specific
+protocol.
+
+**Mount a directory, not just the file.** Since v0.8.3 the agent saves a random
+ID in `agent_id.json` next to `config.yaml` on first start and reports it to
+Home Assistant. If only the file is mounted, the ID lives in the container and a
+new one is made every time the container is recreated, which is every update.
+Mount a host directory holding `config.yaml` at `/etc/smartha-agent` (writable),
+or set `agent_id:` in the config to pin one (8 to 64 characters of a-z, 0-9 and
+`-`). If the directory is read-only and nothing else is writable, the agent
+reports no ID and logs one warning; it works as before.
 
 ### 6. Disk usage (optional)
 
@@ -145,7 +154,8 @@ Requirements:
 - Use host networking so Home Assistant can discover the agent over mDNS. If my
   platform cannot, tell me, and remind me to add the agent in Home Assistant
   manually using the host IP and port 9099.
-- Mount a config file at /etc/smartha-agent/config.yaml. Start from:
+- Mount a writable host directory at /etc/smartha-agent holding config.yaml
+  (the agent saves agent_id.json there). Start the config from:
     port: 9099
     scan_interval: 60s
 - If I want disk usage, mount the host root read-only at /host and set
