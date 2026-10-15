@@ -40,6 +40,7 @@ except ImportError:  # HA < 2025.x
     from homeassistant.components.zeroconf import ZeroconfServiceInfo
 
 config_flow = importlib.import_module("custom_components.smart_sniffer.config_flow")
+identity = importlib.import_module("custom_components.smart_sniffer.agent_identity")
 
 DOMAIN = "smart_sniffer"
 
@@ -65,12 +66,12 @@ class _Entries:
         return True
 
 
-def _entry(entry_id, unique_id, host, port=9099, title=None, **data):
+def _entry(entry_id, unique_id, host, port=9099, title=None, source="user", **data):
     return SimpleNamespace(
         entry_id=entry_id,
         unique_id=unique_id,
         domain=DOMAIN,
-        source="user",
+        source=source,
         state=None,
         title=title or f"SMART Sniffer ({host}:{port})",
         data={"host": host, "port": port, "token": "", "scan_interval": 60, **data},
@@ -112,7 +113,9 @@ class _Net:
         return {"status": "ok", **({"hostname": hostname} if hostname else {})}
 
 
-def _flow(entries, source, agents=None):
+def _flow(entries, source, agents=None, dns=None):
+    """``dns`` maps a host name to the addresses it resolves to; any other
+    name does not resolve, and an address stands for itself."""
     hass = SimpleNamespace(data={}, config_entries=_Entries(entries))
     flow = config_flow.SmartSnifferConfigFlow()
     flow.hass = hass
@@ -122,6 +125,15 @@ def _flow(entries, source, agents=None):
     flow.net = _Net(agents or {})
     flow._get_json = flow.net.get_json
     flow._test_connection = flow.net.test_connection
+    names = dns or {}
+
+    async def resolve(host):
+        try:
+            return frozenset({str(ip_address(host))})
+        except ValueError:
+            return frozenset(names.get(host, ()))
+
+    flow._resolve = resolve
     return flow
 
 
@@ -250,53 +262,178 @@ def test_a_hand_added_entry_entered_by_name_keeps_its_host():
 # --- zeroconf: rediscovering an entry discovery made ---------------------------
 
 NAS = ("nas", ["SER-N1"], "")
+OLD, NEW = "192.168.40.5", "192.168.40.6"
+
+
+def _known(serials):
+    return identity.drive_digest([{"id": f"id-{s}", "serial": s} for s in serials])
+
+
+def _discovered(host=OLD, hostname="nas", serials=("SER-N1",), port=9099, **data):
+    """An entry discovery made, with what its coordinator stored about the
+    agent (host name and drive digest), unless overridden."""
+    stored = {"agent_hostname": hostname, "agent_drives": _known(serials), **data}
+    stored = {k: v for k, v in stored.items() if v is not None}
+    return _entry("e1", f"smartha-{hostname}", host, port=port, source="zeroconf",
+                  title=f"SMART Sniffer ({hostname})", **stored)
+
+
+def _rediscover(entry, agents, *others, dns=None, port=9099, address=NEW, hostname="nas"):
+    flow = _flow([entry, *others], SOURCE_ZEROCONF, agents, dns)
+    result = _run(flow.async_step_zeroconf(_discovery(hostname, address, port=port)))
+    assert result["type"] == "abort" and result["reason"] == "already_configured"
+    return flow
 
 
 def test_a_working_host_is_not_rewritten():
-    entry = _entry("e1", "smartha-nas", "192.168.40.5", title="SMART Sniffer (nas)")
-    flow = _flow([entry], SOURCE_ZEROCONF, {"192.168.40.5:9099": NAS, "192.168.40.6:9099": NAS})
-    result = _run(flow.async_step_zeroconf(_discovery("nas", "192.168.40.6")))
-    assert result["reason"] == "already_configured"
-    assert entry.data["host"] == "192.168.40.5"
+    entry = _discovered()
+    flow = _rediscover(entry, {f"{OLD}:9099": NAS, f"{NEW}:9099": NAS})
+    assert entry.data["host"] == OLD
     assert flow.hass.config_entries.updates == []
 
 
-def test_a_dead_host_moves_to_a_working_advertised_address():
-    """DHCP gave the agent a new address: the old one no longer answers."""
-    entry = _entry("e1", "smartha-nas", "192.168.40.5", title="SMART Sniffer (nas)")
-    flow = _flow([entry], SOURCE_ZEROCONF, {"192.168.40.6:9099": NAS})
-    result = _run(flow.async_step_zeroconf(_discovery("nas", "192.168.40.6")))
-    assert result["reason"] == "already_configured"
-    assert entry.data["host"] == "192.168.40.6"
+def test_a_dead_host_moves_to_the_same_agent_at_the_advertised_address():
+    """DHCP gave the agent a new address: the old one no longer answers, and
+    the new one answers with the host name and drives the entry knew."""
+    entry = _discovered()
+    flow = _rediscover(entry, {f"{NEW}:9099": NAS})
+    assert entry.data["host"] == NEW
+    assert entry.unique_id == "smartha-nas" and entry.title == "SMART Sniffer (nas)"
+    (change,) = [c for _, c in flow.hass.config_entries.updates]
+    assert set(change) == {"data"}  # host and port only; no unique_id or title
+
+
+def test_a_move_can_change_the_port():
+    entry = _discovered()
+    _rediscover(entry, {f"{NEW}:9100": NAS}, port=9100)
+    assert (entry.data["host"], entry.data["port"]) == (NEW, 9100)
 
 
 def test_a_failing_advertised_address_leaves_the_entry_alone():
-    entry = _entry("e1", "smartha-nas", "192.168.40.5", title="SMART Sniffer (nas)")
+    entry = _discovered()
     flow = _flow([entry], SOURCE_ZEROCONF, {})
     result = _run(flow.async_step_zeroconf(_discovery("nas", WAN, preferred=WAN)))
     assert result["reason"] == "already_configured"
-    assert entry.data["host"] == "192.168.40.5"
+    assert entry.data["host"] == OLD
     assert flow.hass.config_entries.updates == []
+
+
+def test_no_stored_identity_no_move():
+    """An entry whose coordinator has not stored the agent's host name and
+    drives (an agent before v0.8.3, or not polled yet) is never moved."""
+    for missing in ({"agent_hostname": None}, {"agent_drives": None}):
+        entry = _discovered(**missing)
+        flow = _rediscover(entry, {f"{NEW}:9099": NAS})
+        assert entry.data["host"] == OLD and flow.hass.config_entries.updates == []
+        # Decided before any request to either address.
+        assert not [c for c in flow.net.calls if c.startswith((OLD, NEW))]
+
+
+def test_another_host_name_at_the_new_address_is_not_moved_to():
+    """A copied config on another machine announcing the same mDNS name."""
+    entry = _discovered()
+    _rediscover(entry, {f"{NEW}:9099": ("nas-copy", ["SER-N1"], "")})
+    assert entry.data["host"] == OLD
+
+
+def test_other_drives_at_the_new_address_are_not_moved_to():
+    entry = _discovered()
+    _rediscover(entry, {f"{NEW}:9099": ("nas", ["SER-X9"], "")})
+    assert entry.data["host"] == OLD
+
+
+def test_drives_without_serials_are_not_moved_to():
+    entry = _discovered()
+    _rediscover(entry, {f"{NEW}:9099": ("nas", [""], "")})
+    assert entry.data["host"] == OLD
+
+
+def test_not_moved_onto_an_address_another_entry_polls():
+    """B3.2: the new address was added by hand as a second entry; moving the
+    first there would make two entries poll one agent."""
+    entry = _discovered()
+    other = _entry("e2", f"{NEW}:9099", NEW)
+    _rediscover(entry, {f"{NEW}:9099": NAS}, other)
+    assert entry.data["host"] == OLD
+
+
+def test_not_moved_onto_an_address_another_entry_resolves_to():
+    entry = _discovered()
+    other = _entry("e2", "nas-box:9099", "nas-box")
+    _rediscover(entry, {f"{NEW}:9099": NAS}, other, dns={"nas-box": [NEW]})
+    assert entry.data["host"] == OLD
+
+
+def test_another_entry_on_another_port_does_not_block_a_move():
+    entry = _discovered()
+    other = _entry("e2", f"{NEW}:9100", NEW, port=9100)
+    _rediscover(entry, {f"{NEW}:9099": NAS}, other)
+    assert entry.data["host"] == NEW
+
+
+def test_a_hand_added_entry_is_never_moved():
+    """B3.3: an entry added by hand and re-keyed to "smartha-" by an older
+    release still has its address in its title; it stays where it is."""
+    entry = _discovered()
+    entry.source = "user"
+    entry.title = f"SMART Sniffer ({OLD}:9099)"
+    _rediscover(entry, {f"{NEW}:9099": NAS})
+    assert entry.data["host"] == OLD
 
 
 def test_a_legacy_discovered_entry_is_migrated_not_repointed():
     """A pre-v0.4.24 discovered entry ("{ip}:{port}", titled with the host
     name) still moves to the hostname unique_id; its working host stays."""
-    entry = _entry("e1", "192.168.40.5:9099", "192.168.40.5", title="SMART Sniffer (nas)")
-    flow = _flow([entry], SOURCE_ZEROCONF, {"192.168.40.5:9099": NAS, "192.168.40.6:9099": NAS})
-    result = _run(flow.async_step_zeroconf(_discovery("nas", "192.168.40.6")))
+    entry = _entry("e1", f"{OLD}:9099", OLD, title="SMART Sniffer (nas)", source="zeroconf")
+    flow = _flow([entry], SOURCE_ZEROCONF, {f"{OLD}:9099": NAS, f"{NEW}:9099": NAS})
+    result = _run(flow.async_step_zeroconf(_discovery("nas", NEW)))
     assert result["reason"] == "already_configured"
     assert entry.unique_id == "smartha-nas"
-    assert entry.data["host"] == "192.168.40.5"
+    assert entry.data["host"] == OLD
 
 
-def test_title_containing_the_hostname_is_not_migrated():
-    """"pve" is in "SMART Sniffer (pve2)": a different agent, untouched."""
-    entry = _entry("e1", "192.168.40.7:9099", "192.168.40.7", title="SMART Sniffer (pve2)")
-    flow = _flow([entry], SOURCE_ZEROCONF, {"192.168.40.8:9099": ("pve", ["SER-P1"], "")})
-    result = _run(flow.async_step_zeroconf(_discovery("pve", "192.168.40.8", drives="1")))
-    assert result["type"] == "form"
-    assert entry.unique_id == "192.168.40.7:9099"
+def test_a_hand_added_entry_at_the_advertised_address_keeps_its_unique_id():
+    """Older releases re-keyed it to "smartha-{hostname}"; the address check
+    now aborts the discovery without touching it."""
+    entry = _entry("e1", f"{OLD}:9099", OLD)
+    flow = _flow([entry], SOURCE_ZEROCONF, {f"{OLD}:9099": NAS})
+    result = _run(flow.async_step_zeroconf(_discovery("nas", OLD)))
+    assert result["reason"] == "already_configured"
+    assert entry.unique_id == f"{OLD}:9099"
+    assert flow.hass.config_entries.updates == []
+
+
+def test_migration_never_takes_a_unique_id_in_use():
+    entry = _entry("e1", f"{OLD}:9099", OLD, title="SMART Sniffer (nas)", source="zeroconf")
+    taken = _discovered(host="192.168.40.9")
+    taken.entry_id = "e2"
+    flow = _flow([entry, taken], SOURCE_ZEROCONF, {f"{OLD}:9099": NAS, "192.168.40.9:9099": NAS})
+    _run(flow.async_step_zeroconf(_discovery("nas", NEW)))
+    assert entry.unique_id == f"{OLD}:9099"
+
+
+def test_an_entry_under_another_name_at_the_address_aborts():
+    """The host was renamed: its entry keeps "smartha-oldname" and polls the
+    address the new name is advertised at."""
+    entry = _discovered(hostname="oldname")
+    flow = _flow([entry], SOURCE_ZEROCONF, {f"{OLD}:9099": NAS})
+    result = _run(flow.async_step_zeroconf(_discovery("nas", OLD)))
+    assert result["reason"] == "already_configured"
+    assert flow.hass.config_entries.updates == []
+
+
+def test_unique_ids_are_never_changed_on_entries_discovery_did_not_make():
+    hand = [
+        _entry("e1", f"{OLD}:9099", OLD),
+        _entry("e2", "nas-box:9099", "nas-box", title="SMART Sniffer (nas)"),
+        _entry("e3", f"{NEW}:9100", NEW, port=9100),
+    ]
+    before = [e.unique_id for e in hand]
+    for address in (OLD, NEW, WAN):
+        flow = _flow(hand, SOURCE_ZEROCONF, {f"{OLD}:9099": NAS, f"{NEW}:9099": NAS},
+                     dns={"nas-box": [OLD]})
+        _run(flow.async_step_zeroconf(_discovery("nas", address)))
+    assert [e.unique_id for e in hand] == before
 
 
 # --- user step -----------------------------------------------------------------
@@ -342,6 +479,26 @@ def test_user_step_existing_unreachable_is_created():
     flow = _flow([entry], SOURCE_USER, {"testnas-box:9099": ("testnas", ["SER-T1"], "")})
     result = _user(flow, "testnas-box")
     assert result["type"] == "create_entry"
+
+
+def test_user_step_aborts_at_the_address_of_a_discovered_entry():
+    """Discovered first, then added by the same address from the Control
+    Center: _configured_elsewhere skips entries at the same address."""
+    entry = _discovered()
+    flow = _flow([entry], SOURCE_USER, {f"{OLD}:9099": NAS})
+    assert _user(flow, OLD)["reason"] == "already_configured"
+
+
+def test_user_step_aborts_on_a_name_that_resolves_to_an_entry():
+    entry = _discovered()
+    flow = _flow([entry], SOURCE_USER, {"nas-box:9099": NAS}, dns={"nas-box": [OLD]})
+    assert _user(flow, "nas-box")["reason"] == "already_configured"
+
+
+def test_user_step_other_port_same_address_is_created():
+    entry = _discovered()
+    flow = _flow([entry], SOURCE_USER, {f"{OLD}:9100": NAS})
+    assert _user(flow, OLD, port=9100)["type"] == "create_entry"
 
 
 def test_pick_best_ip_prefers_tailscale_over_link_local():

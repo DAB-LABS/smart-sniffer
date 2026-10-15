@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
+import socket
 from typing import Any
 
 import aiohttp
@@ -14,7 +16,7 @@ try:
 except ImportError:  # HA < 2025.x compat
     from homeassistant.components.zeroconf import ZeroconfServiceInfo
 from homeassistant.config_entries import (
-    SOURCE_IGNORE,
+    SOURCE_ZEROCONF,
     ConfigEntry,
     ConfigFlow,
     ConfigFlowResult,
@@ -33,7 +35,15 @@ from homeassistant.helpers.selector import (
     SelectSelectorMode,
 )
 
-from .agent_identity import UNIQUE_ID_PREFIX, confirms_same_agent, ip_score
+from .agent_identity import (
+    ENTRY_AGENT_DRIVES,
+    ENTRY_AGENT_HOSTNAME,
+    UNIQUE_ID_PREFIX,
+    confirms_same_agent,
+    drive_digest,
+    ip_score,
+    norm_host,
+)
 from .attention import (
     current_readings,
     form_order,
@@ -108,6 +118,11 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
             else:
                 await self.async_set_unique_id(f"{host}:{port}")
                 self._abort_if_unique_id_configured()
+
+                # An entry already polls this address (a discovered entry
+                # added again by its address from the Control Center).
+                if await self._entry_at(host, port) is not None:
+                    return self.async_abort(reason="already_configured")
 
                 # The same agent may already be configured under another
                 # address, by discovery or by hand (#64, app#12). Only when
@@ -221,6 +236,54 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
             return False
         return True
 
+    async def _resolve(self, host: str) -> frozenset[str]:
+        """The addresses a host name resolves to, 3 s at most; an address
+        stands for itself; empty when it cannot be resolved."""
+        try:
+            return frozenset({str(ipaddress.ip_address(host))})
+        except ValueError:
+            pass
+        try:
+            infos = await asyncio.wait_for(
+                asyncio.get_running_loop().getaddrinfo(host, None, type=socket.SOCK_STREAM),
+                timeout=3,
+            )
+        except (OSError, UnicodeError, asyncio.TimeoutError, TimeoutError):
+            return frozenset()
+        return frozenset(str(info[4][0]) for info in infos)
+
+    async def _entry_at(
+        self, host: str, port: int, exclude_entry_id: str | None = None
+    ) -> ConfigEntry | None:
+        """An entry (not ignored) that already polls host:port, by the same
+        name or by a name that resolves to the same address; else None.
+
+        One address and port is one agent, so no identity check is needed.
+        A name that does not resolve matches only itself.
+        """
+        same_port = []
+        for entry in self._async_current_entries(include_ignore=False):
+            if exclude_entry_id is not None and entry.entry_id == exclude_entry_id:
+                continue
+            try:
+                entry_port = int(entry.data.get(CONF_PORT, DEFAULT_PORT))
+            except (TypeError, ValueError):
+                continue
+            entry_host = str(entry.data.get(CONF_HOST, "") or "")
+            if entry_port != port or not entry_host:
+                continue
+            if norm_host(entry_host) == norm_host(host):
+                return entry
+            same_port.append((entry, entry_host))
+        if not same_port:
+            return None
+        wanted = await self._resolve(host)
+        if not wanted:
+            return None
+        found = await asyncio.gather(*(self._resolve(h) for _, h in same_port))
+        return next((e for (e, _), addrs in zip(same_port, found, strict=True)
+                     if addrs & wanted), None)
+
     def _migrate_legacy_unique_ids(self, hostname: str, host: str, port: int) -> None:
         """Migrate existing config entries from IP-based to hostname-based unique IDs.
 
@@ -231,13 +294,22 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
         This scans existing entries and updates any that match by IP or hostname
         so the new discovery is properly deduplicated.
         """
-        for entry in self._async_current_entries():
+        entries = self._async_current_entries()
+        for entry in entries:
             if entry.domain != DOMAIN:
                 continue
             old_uid = entry.unique_id or ""
             # Already migrated.
             if old_uid.startswith("smartha-"):
                 continue
+            # Only entries discovery made. A hand-added (or Control Center)
+            # entry keeps its "host:port" unique_id; an entry at the
+            # advertised address is caught by _entry_at instead.
+            if entry.source != SOURCE_ZEROCONF:
+                continue
+            new_uid = f"smartha-{hostname}"
+            if any(other.unique_id == new_uid for other in entries):
+                continue  # taken: two entries must not share a unique_id
             # Match by IP:port (old format) or by hostname in entry title/data.
             entry_host = entry.data.get(CONF_HOST, "")
             entry_port = entry.data.get(CONF_PORT, 0)
@@ -258,7 +330,7 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
                 self.hass.config_entries.async_update_entry(
                     entry,
-                    unique_id=f"smartha-{hostname}",
+                    unique_id=new_uid,
                 )
 
     async def async_step_zeroconf(
@@ -291,6 +363,10 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
         entry = await self.async_set_unique_id(own_id)
         if entry is not None:
             await self._abort_for_known_entry(entry, host, port)
+
+        # An entry under another unique_id already polls this address.
+        if await self._entry_at(host, port) is not None:
+            return self.async_abort(reason="already_configured")
 
         # An entry added by hand or by the Control Center has a "host:port"
         # unique_id, so the unique_id check cannot see it when the
@@ -397,32 +473,69 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
         self, entry: ConfigEntry, host: str, port: int
     ) -> None:
         """Abort a rediscovery of a configured agent, moving the entry to the
-        advertised address only when that is the one that works.
-
-        The entry's host is changed only if it fails a connection test and
-        the advertised address passes one. An entry that works is never
-        repointed, and a wrong advertised address (app#12: a WAN address)
-        cannot break one that does.
-        """
-        entry_host = str(entry.data.get(CONF_HOST, "") or "")
-        entry_port = entry.data.get(CONF_PORT, port)
-        token = str(entry.data.get(CONF_TOKEN, "") or "")
-        if (
-            entry.source != SOURCE_IGNORE
-            and entry_host
-            and entry_host != host
-            and not await self._reachable(entry_host, entry_port, token)
-            and await self._reachable(host, port, token)
-        ):
+        advertised address only when the agent is shown to have moved there
+        (_may_move)."""
+        if await self._may_move(entry, host, port):
             _LOGGER.info(
                 "SMART Sniffer agent %s: %s:%s does not answer, moving to the "
                 "advertised %s:%s",
-                entry.unique_id, entry_host, entry_port, host, port,
+                entry.unique_id, entry.data.get(CONF_HOST), entry.data.get(CONF_PORT),
+                host, port,
             )
             self._abort_if_unique_id_configured(
                 updates={CONF_HOST: host, CONF_PORT: port}
             )
         self._abort_if_unique_id_configured()
+
+    async def _may_move(self, entry: ConfigEntry, host: str, port: int) -> bool:
+        """Whether a rediscovered entry's host may move to host:port.
+
+        Only an entry discovery made (unique_id "smartha-{hostname}", titled
+        with the host name): a hand-added entry's unique_id and title carry
+        its address, and would no longer match it. And only when all hold:
+          a. the entry's own address fails a connection test;
+          b. the advertised address passes one;
+          c. the agent there reports the host name and the drive serials the
+             entry last knew (stored by the coordinator from the entry's own
+             polls; nothing stored, no move);
+          d. no other entry already polls that address.
+        """
+        if entry.source != SOURCE_ZEROCONF or not (entry.unique_id or "").startswith(
+            UNIQUE_ID_PREFIX
+        ):
+            return False
+        entry_host = str(entry.data.get(CONF_HOST, "") or "")
+        try:
+            entry_port = int(entry.data.get(CONF_PORT, port))
+        except (TypeError, ValueError):
+            return False
+        if not entry_host or (entry_host == host and entry_port == port):
+            return False
+        known_name = norm_host(entry.data.get(ENTRY_AGENT_HOSTNAME))
+        known_drives = entry.data.get(ENTRY_AGENT_DRIVES)
+        if not known_name or not known_drives:
+            return False
+        token = str(entry.data.get(CONF_TOKEN, "") or "")
+        if await self._reachable(entry_host, entry_port, token):  # a
+            return False
+        try:
+            health = await self._test_connection(host, port, token)  # b
+        except Exception:  # noqa: BLE001 - any failure means "not usable"
+            return False
+        if norm_host(health.get("hostname")) != known_name:  # c
+            _LOGGER.debug("Not moving %s to %s:%s: another host name",
+                          entry.unique_id, host, port)
+            return False
+        drives = await self._get_json(host, port, token, "/api/drives")
+        if drive_digest(drives) != known_drives:
+            _LOGGER.debug("Not moving %s to %s:%s: other drives",
+                          entry.unique_id, host, port)
+            return False
+        if await self._entry_at(host, port, exclude_entry_id=entry.entry_id):  # d
+            _LOGGER.debug("Not moving %s to %s:%s: another entry polls it",
+                          entry.unique_id, host, port)
+            return False
+        return True
 
     async def _test_connection(self, host: str, port: int, token: str) -> dict[str, Any]:
         """Test that the agent is reachable and returns a healthy status.
