@@ -15,6 +15,7 @@ try:
 except ImportError:  # HA < 2025.x compat
     from homeassistant.components.zeroconf import ZeroconfServiceInfo
 from homeassistant.config_entries import (
+    SOURCE_IGNORE,
     ConfigEntry,
     ConfigFlow,
     ConfigFlowResult,
@@ -33,6 +34,7 @@ from homeassistant.helpers.selector import (
     SelectSelectorMode,
 )
 
+from .agent_identity import UNIQUE_ID_PREFIX, confirms_same_agent
 from .attention import (
     current_readings,
     form_order,
@@ -98,7 +100,7 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
             token = user_input.get(CONF_TOKEN, "")
 
             try:
-                await self._test_connection(host, port, token)
+                health = await self._test_connection(host, port, token)
             except (aiohttp.ClientError, asyncio.TimeoutError, TimeoutError):
                 errors["base"] = "cannot_connect"
             except Exception:  # noqa: BLE001
@@ -107,6 +109,14 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
             else:
                 await self.async_set_unique_id(f"{host}:{port}")
                 self._abort_if_unique_id_configured()
+
+                # The same agent may already be configured under another
+                # address, by discovery or by hand (#64, app#12). Only when
+                # the agents agree on host name and drives (agent_identity).
+                if await self._configured_elsewhere(
+                    health.get("hostname"), host, port, token
+                ):
+                    return self.async_abort(reason="already_configured")
 
                 title = f"SMART Sniffer ({host}:{port})"
                 return self.async_create_entry(title=title, data=user_input)
@@ -165,6 +175,78 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
         candidates.sort(key=_score)
         return candidates[0]
 
+    async def _get_json(self, host: str, port: int, token: str, path: str) -> Any:
+        """One GET to an agent, 5 s at most; None on any failure."""
+        session = async_get_clientsession(self.hass)
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        try:
+            async with session.get(
+                f"http://{host}:{port}{path}",
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=5),
+            ) as resp:
+                resp.raise_for_status()
+                return await resp.json()
+        except (aiohttp.ClientError, asyncio.TimeoutError, TimeoutError, ValueError):
+            return None
+
+    async def _configured_elsewhere(
+        self,
+        hostname: Any,
+        new_host: str,
+        port: int,
+        token: str,
+        advertised_drive_count: Any = None,
+        exclude_unique_id: str = "",
+    ) -> ConfigEntry | None:
+        """The existing entry that is shown to be this agent, or None.
+
+        For each other entry on the same port: its host's /api/health must
+        give the same host name, and the drives at both addresses must match
+        (agent_identity.confirms_same_agent). Host names alone collide (two
+        routers both called "OpenWrt"), so a name match is never enough. An
+        entry whose host cannot be read is not a match. The new address is
+        read with ``token``, or with the existing entry's token when there is
+        none (a discovery: the same agent takes the same token); when it
+        cannot be read, the advertised drive count stands in.
+        """
+        if not isinstance(hostname, str) or not hostname:
+            return None
+        candidates = []
+        for entry in self._async_current_entries(include_ignore=False):
+            if exclude_unique_id and entry.unique_id == exclude_unique_id:
+                continue
+            try:
+                entry_port = int(entry.data.get(CONF_PORT, DEFAULT_PORT))
+            except (TypeError, ValueError):
+                continue
+            entry_host = str(entry.data.get(CONF_HOST, "") or "")
+            if entry_port != port or not entry_host or entry_host == new_host:
+                continue
+            candidates.append(entry)
+
+        async def check(entry: ConfigEntry) -> bool:
+            entry_host = str(entry.data[CONF_HOST])
+            entry_token = str(entry.data.get(CONF_TOKEN, "") or "")
+            health, existing, new = await asyncio.gather(
+                self._get_json(entry_host, port, entry_token, "/api/health"),
+                self._get_json(entry_host, port, entry_token, "/api/drives"),
+                self._get_json(new_host, port, token or entry_token, "/api/drives"),
+            )
+            return confirms_same_agent(
+                hostname, health, existing, new, advertised_drive_count
+            )
+
+        results = await asyncio.gather(*(check(entry) for entry in candidates))
+        return next((e for e, same in zip(candidates, results, strict=True) if same), None)
+
+    async def _reachable(self, host: str, port: int, token: str) -> bool:
+        try:
+            await self._test_connection(host, port, token)
+        except Exception:  # noqa: BLE001 - any failure means "not usable"
+            return False
+        return True
+
     def _migrate_legacy_unique_ids(self, hostname: str, host: str, port: int) -> None:
         """Migrate existing config entries from IP-based to hostname-based unique IDs.
 
@@ -186,10 +268,14 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
             entry_host = entry.data.get(CONF_HOST, "")
             entry_port = entry.data.get(CONF_PORT, 0)
             entry_title = entry.title or ""
+            # The title test is the title discovery gave the entry, exactly.
+            # A hand-added entry is titled "SMART Sniffer (host:port)" and a
+            # substring test matched one entered by the agent's host name,
+            # then rewrote its host to the advertised address (#64).
             if (
                 old_uid == f"{host}:{port}"
                 or (entry_host == host and entry_port == port)
-                or hostname.lower() in entry_title.lower()
+                or entry_title.lower() == f"smart sniffer ({hostname})".lower()
             ):
                 _LOGGER.info(
                     "Migrating SMART Sniffer unique_id: %s → smartha-%s",
@@ -223,11 +309,36 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
         # Migrate any existing IP-based unique IDs to hostname-based.
         self._migrate_legacy_unique_ids(hostname, host, port)
 
+        own_id = f"{UNIQUE_ID_PREFIX}{hostname}"
+
         # Deduplicate — hostname-based ID is stable across interfaces/VLANs.
-        await self.async_set_unique_id(f"smartha-{hostname}")
-        self._abort_if_unique_id_configured(
-            updates={CONF_HOST: host}  # Update IP if it changed (e.g. DHCP)
-        )
+        # First, as it is cheap: a flow already running for this agent, or an
+        # entry discovery made, ends here.
+        entry = await self.async_set_unique_id(own_id)
+        if entry is not None:
+            await self._abort_for_known_entry(entry, host, port)
+
+        # An entry added by hand or by the Control Center has a "host:port"
+        # unique_id, so the unique_id check cannot see it when the
+        # agent advertises another address (app#12: its WAN address; the
+        # App: its container network). Abort only when the agents agree on
+        # host name and drives, and leave that entry's host alone: the
+        # advertised address may be the wrong one.
+        if hostname != host:
+            existing = await self._configured_elsewhere(
+                hostname,
+                host,
+                port,
+                "",
+                advertised_drive_count=properties.get("drives"),
+                exclude_unique_id=own_id,
+            )
+            if existing is not None:
+                _LOGGER.debug(
+                    "Agent %s (%s:%s) is already configured at %s",
+                    hostname, host, port, existing.data.get(CONF_HOST),
+                )
+                return self.async_abort(reason="already_configured")
 
         # Stash discovery data for the confirmation step.
         self._discovery_host = host
@@ -308,8 +419,42 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
             description_placeholders=placeholders,
         )
 
-    async def _test_connection(self, host: str, port: int, token: str) -> None:
-        """Test that the agent is reachable and returns a healthy status."""
+    async def _abort_for_known_entry(
+        self, entry: ConfigEntry, host: str, port: int
+    ) -> None:
+        """Abort a rediscovery of a configured agent, moving the entry to the
+        advertised address only when that is the one that works.
+
+        The entry's host is changed only if it fails a connection test and
+        the advertised address passes one. An entry that works is never
+        repointed, and a wrong advertised address (app#12: a WAN address)
+        cannot break one that does.
+        """
+        entry_host = str(entry.data.get(CONF_HOST, "") or "")
+        entry_port = entry.data.get(CONF_PORT, port)
+        token = str(entry.data.get(CONF_TOKEN, "") or "")
+        if (
+            entry.source != SOURCE_IGNORE
+            and entry_host
+            and entry_host != host
+            and not await self._reachable(entry_host, entry_port, token)
+            and await self._reachable(host, port, token)
+        ):
+            _LOGGER.info(
+                "SMART Sniffer agent %s: %s:%s does not answer, moving to the "
+                "advertised %s:%s",
+                entry.unique_id, entry_host, entry_port, host, port,
+            )
+            self._abort_if_unique_id_configured(
+                updates={CONF_HOST: host, CONF_PORT: port}
+            )
+        self._abort_if_unique_id_configured()
+
+    async def _test_connection(self, host: str, port: int, token: str) -> dict[str, Any]:
+        """Test that the agent is reachable and returns a healthy status.
+
+        Returns the /api/health body.
+        """
         session = async_get_clientsession(self.hass)
         url = f"http://{host}:{port}/api/health"
         headers = {}
@@ -321,8 +466,9 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
         ) as resp:
             resp.raise_for_status()
             data = await resp.json()
-            if data.get("status") != "ok":
+            if not isinstance(data, dict) or data.get("status") != "ok":
                 raise aiohttp.ClientError("Unexpected health response")
+            return data
 
 
 class SmartSnifferOptionsFlow(OptionsFlowWithConfigEntry):
