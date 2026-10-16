@@ -42,6 +42,10 @@ usage for `/volume1`.
   Center never move.
 - **Discovery picked a link-local (169.254.x.x) address over a Tailscale
   one** for agents that do not advertise a preferred address.
+- **Self-built agents showed their version as vv0.8.2, and Home Assistant
+  could not tell when they were out of date.** The agent now reports a
+  plain number, and the outdated-agent warning also reads versions such as
+  `0.8.2-31-g4439849`.
 - **Two diagnostic entities with the same name** on SK hynix and SandForce
   drives now include the attribute ID, such as "Program Fail Count (ID
   181)" (#64).
