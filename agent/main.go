@@ -28,6 +28,25 @@ import (
 // Falls back to "dev" for untagged builds.
 var version = "0.1.0"
 
+func init() {
+	version = normaliseVersion(version)
+}
+
+// normaliseVersion drops leading spaces and "v"s from a version that starts
+// with a number. Self-built agents got "v0.8.2" from git describe, which the
+// banner printed as "vv0.8.2" and Home Assistant could not compare. Anything
+// else, such as "dev", is returned unchanged apart from the spaces. Run once
+// from init, before the version is logged, served in /api/health or put in
+// the mDNS TXT record.
+func normaliseVersion(v string) string {
+	v = strings.TrimSpace(v)
+	rest := strings.TrimLeft(v, "vV")
+	if rest != "" && rest[0] >= '0' && rest[0] <= '9' {
+		return rest
+	}
+	return v
+}
+
 // startTime records when the agent process started, used for the uptime
 // field in /api/health.
 var startTime = time.Now()
