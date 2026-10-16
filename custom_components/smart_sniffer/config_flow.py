@@ -44,6 +44,7 @@ from .agent_identity import (
     ip_score,
     norm_host,
 )
+from .agent_version import agent_is_outdated, display_version
 from .attention import (
     current_readings,
     form_order,
@@ -64,16 +65,6 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def _agent_is_outdated(agent_version: str) -> bool:
-    """Return True if agent_version < MIN_AGENT_VERSION."""
-    try:
-        av = tuple(int(x) for x in agent_version.split("."))
-        mv = tuple(int(x) for x in MIN_AGENT_VERSION.split("."))
-        return av < mv
-    except (ValueError, AttributeError):
-        return False
 
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
@@ -400,7 +391,7 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
         # Check if agent version from mDNS TXT is outdated.
         agent_version = properties.get("version", "")
         self._agent_outdated = bool(
-            agent_version and _agent_is_outdated(agent_version)
+            agent_version and agent_is_outdated(agent_version, MIN_AGENT_VERSION)
         )
         self._agent_version = agent_version
 
@@ -462,7 +453,7 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
         }
         if getattr(self, "_agent_outdated", False):
             placeholders["agent_version_warning"] = (
-                f"\n\n⚠️ This agent is running **v{self._agent_version}** "
+                f"\n\n⚠️ This agent is running **v{display_version(self._agent_version)}** "
                 f"but the integration requires at least **v{MIN_AGENT_VERSION}**. "
                 "You can still add it, but please update the agent afterwards."
             )

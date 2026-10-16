@@ -70,6 +70,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .agent_identity import ENTRY_AGENT_HOSTNAME, identity_changes
+from .agent_version import agent_is_outdated, display_version
 from .attention import (
     SEVERITY_CRITICAL,
     STATE_MAYBE,
@@ -120,19 +121,6 @@ _NOTIF_PREFIX = "smart_sniffer_attention_"
 
 def _notif_id(drive_id: str) -> str:
     return f"{_NOTIF_PREFIX}{drive_id}"
-
-
-def _version_tuple(v: str) -> tuple[int, ...]:
-    """Parse '0.4.28' → (0, 4, 28) for comparison."""
-    return tuple(int(x) for x in v.split("."))
-
-
-def _agent_is_outdated(agent_version: str, min_version: str) -> bool:
-    """Return True if agent_version < min_version."""
-    try:
-        return _version_tuple(agent_version) < _version_tuple(min_version)
-    except (ValueError, AttributeError):
-        return False  # don't raise repair on unparseable versions (e.g. "dev")
 
 
 def _build_notification(
@@ -243,7 +231,7 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Create or clear a HA repair issue based on agent version."""
         issue_id = f"agent_outdated_{self.host}"
 
-        if not agent_version or _agent_is_outdated(agent_version, MIN_AGENT_VERSION):
+        if not agent_version or agent_is_outdated(agent_version, MIN_AGENT_VERSION):
             async_create_issue(
                 self.hass,
                 domain=DOMAIN,
@@ -253,7 +241,7 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 translation_key="agent_outdated",
                 translation_placeholders={
                     "hostname": self._hostname,
-                    "current_version": agent_version or "unknown",
+                    "current_version": display_version(agent_version) or "unknown",
                     "min_version": MIN_AGENT_VERSION,
                     "install_url": AGENT_INSTALL_URL,
                 },

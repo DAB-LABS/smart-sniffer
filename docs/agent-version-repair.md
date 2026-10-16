@@ -59,7 +59,7 @@ def _agent_is_outdated(agent_version: str, min_version: str) -> bool:
         return False  # don't raise repair on unparseable versions
 ```
 
-Strict semver libraries are overkill — we control both version strings and they'll always be `major.minor.patch`.
+Since v0.8.3 the comparison lives in `agent_version.py`, shared by the coordinator and the config flow. It drops leading `v`s and reads only the leading numbers, so `v0.8.2` (what a self-built agent reported before v0.8.3), `0.8.2-31-g4439849` and `0.8.3-pretest5` compare by their numbers. Missing parts count as zero.
 
 **3. Coordinator checks version on each poll (`coordinator.py`):**
 
@@ -167,7 +167,8 @@ No restarts, no reconfiguration, no "mark as resolved" button. It just goes away
 | Agent has `version` in mDNS but not HTTP (pre-this-change) | mDNS warning shows at discovery; coordinator can't check ongoing → repair raised (empty version) |
 | Multiple agents, one outdated | Each gets its own repair card (`issue_id` includes host) |
 | Agent temporarily unreachable | Coordinator raises `UpdateFailed` (existing behavior), no version check runs, no spurious repair |
-| Unparseable version string (e.g., `"dev"`) | `_agent_is_outdated` returns `False` → no repair (benefit of the doubt for dev builds) |
+| Unparseable version string (e.g., `"dev"`) | `agent_is_outdated` returns `False` → no repair (benefit of the doubt for dev builds) |
+| Self-built or test version (`v0.8.2-31-g4439849-dirty`, `0.8.3-pretest5`) | Leading `v` and suffix ignored, compared as `0.8.2` / `0.8.3` (v0.8.3) |
 | Agent newer than integration expects | Totally fine — we only check `<`, not exact match. Forward compatible. |
 
 ## Severity Levels (Future)
