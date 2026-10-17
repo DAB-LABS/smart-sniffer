@@ -239,8 +239,11 @@ func (r *smartctlResolver) resolve(configured, minVersion string) (string, strin
 		}
 		// The path is quoted as typed, not with %q: %q would double every
 		// backslash in a Windows path.
-		msg := fmt.Sprintf(`ERROR: smartctl_path "%s" in config cannot be used: %s. Searching PATH and known locations instead.`, configured, reason)
-		r.logf("%s", msg)
+		// The log line says ERROR: it is a mistake in config.yaml to fix.
+		// The Event Log entry (event 103) is already a Warning, so its
+		// text carries no prefix.
+		msg := fmt.Sprintf(`smartctl_path "%s" in config cannot be used: %s. Searching PATH and known locations instead.`, configured, reason)
+		r.logf("ERROR: %s", msg)
 		r.notice(true, msg)
 		configNote = fmt.Sprintf("\nsmartctl_path \"%s\" in config was not used: %s.\n", configured, reason)
 	}

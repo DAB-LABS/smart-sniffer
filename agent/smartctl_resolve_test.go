@@ -164,8 +164,8 @@ func TestResolveSmartctlConfiguredInvalidFallsBack(t *testing.T) {
 					t.Errorf("log %q lacks %q", line, want)
 				}
 			}
-			if len(r.notices) != 1 || r.notices[0] != line {
-				t.Errorf("service warning = %q, want the log line", r.notices)
+			if len(r.notices) != 1 || "ERROR: "+r.notices[0] != line {
+				t.Errorf("service warning = %q, want the log line without ERROR: %q", r.notices, line)
 			}
 		})
 	}
@@ -195,12 +195,16 @@ func TestResolveSmartctlWindowsPathPrintedAsTyped(t *testing.T) {
 	if err == nil {
 		t.Fatal("want an error when nothing is found")
 	}
-	wantLine := `ERROR: smartctl_path "C:\nope\smartctl.exe" in config cannot be used: file not found. Searching PATH and known locations instead.`
+	wantEvent := `smartctl_path "C:\nope\smartctl.exe" in config cannot be used: file not found. Searching PATH and known locations instead.`
+	wantLine := "ERROR: " + wantEvent
 	if len(r.logs) != 1 || r.logs[0] != wantLine {
 		t.Errorf("log = %q\nwant %q", r.logs, wantLine)
 	}
-	if len(r.notices) != 1 || r.notices[0] != wantLine {
-		t.Errorf("event 103 text = %q, want %q", r.notices, wantLine)
+	// Event 103 is logged at Warning level, so its text does not say ERROR.
+	if len(r.notices) != 1 || r.notices[0] != wantEvent {
+		t.Errorf("event 103 text = %q, want %q", r.notices, wantEvent)
+	} else if strings.Contains(r.notices[0], "ERROR") {
+		t.Errorf("event 103 text says ERROR: %q", r.notices[0])
 	}
 	if !strings.Contains(err.Error(), `smartctl_path "C:\nope\smartctl.exe" in config was not used: file not found.`) {
 		t.Errorf("startup error lacks the plain path:\n%s", err)
