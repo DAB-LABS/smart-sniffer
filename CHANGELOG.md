@@ -2,7 +2,7 @@
 
 All notable changes to SMART Sniffer are documented here.
 
-## v0.8.3 -- 2026-10-15
+## v0.8.3 -- 2026-10-16
 
 **Agent, both installers and integration. Update the agent on every
 machine, then take the HACS update.** The Windows service starts again
