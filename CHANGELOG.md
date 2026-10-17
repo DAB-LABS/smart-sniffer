@@ -2,6 +2,47 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.8.4 -- 2026-10-17
+
+**Integration only: install the update from HACS and restart; no agent update.**
+Every SMART Sniffer device name now starts with its host, so drives, pools
+and disk usage from several machines are easy to tell apart. Entity ids do
+not change. Agents older than v0.8.3 are best updated so they report their
+host name.
+
+### Changed
+- **Device names start with the host:** "nas1 Samsung 870 EVO (S5Y...)",
+  "nas1 ZFS pool rpool", "nas1 Disk Usage". Thanks @spry-salt and
+  @Telejunky (#50).
+- **The agent device is "SMART Sniffer (nas1)".** A name you gave the
+  integration entry stays the agent's name.
+- **The HAOS App's agents are "HAOS" and "Replica".**
+- **Names follow the host.** Rename a machine, or update an older agent so it
+  reports its host name, and its device names follow without a reload.
+- **Drive notifications name the host:** "nas1: Samsung 870 EVO (S5Y...)
+  needs attention". The title no longer starts with "Drive Attention
+  Required". Pool notifications name the host too.
+
+### Upgrade notes
+- **Devices are renamed on the first restart.** Names you set yourself are
+  kept. Friendly names, history and voice assistants show the new names.
+- **Entity ids do not change**, including ones ending in "_2". New entities
+  get the host in their ids, so one machine can have old and new style ids
+  (pools up to three). Rename an id in its entity settings if you like.
+- **Templates or automations that find a device by its name** may need the
+  new name.
+- **An agent older than v0.8.3 added by address shows its IP**, for example
+  "192.168.1.20 Samsung 870 EVO (S5Y...)", until you update it. One found by
+  discovery keeps the name discovery gave it.
+- **A drive without a serial number shows its device id** in brackets, for
+  example "nas1 QEMU HARDDISK (dev-sda)".
+- **Docker:** set `hostname:` on the agent container (or use host
+  networking), or its devices are named after the container or the address.
+
+### Behind the scenes
+- **Mock agent:** `--hostname NAME` (`""` for none) and `--no-agent-id`, so
+  several mocks on one machine can stand in for several hosts.
+
 ## v0.8.3 -- 2026-10-16
 
 **Agent, both installers and integration. Update the agent on every
