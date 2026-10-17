@@ -686,3 +686,32 @@ def test_mdns_txt_carries_the_agent_id(monkeypatch):
     mock.start_mdns(9100, "")
     (info,) = registered
     assert info.kwargs["properties"][b"agent_id"] == b"0123456789abcdef0123456789abcdef"
+
+
+# --- --hostname and --no-agent-id (v0.8.4 testing) -----------------------------------
+
+
+def test_hostname_flag_sets_the_reported_name(monkeypatch):
+    monkeypatch.setattr(mock, "HOSTNAME_OVERRIDE", None)  # restored afterwards
+    monkeypatch.setattr(mock.socket, "gethostname", lambda: "labhost.local")
+    assert _health_of([])["hostname"] == "labhost"
+    assert _health_of(["--hostname", "nas1"])["hostname"] == "nas1"
+
+
+def test_an_empty_hostname_reports_none_like_an_older_agent(monkeypatch):
+    monkeypatch.setattr(mock, "HOSTNAME_OVERRIDE", None)  # restored afterwards
+    monkeypatch.setattr(mock.socket, "gethostname", lambda: "labhost.local")
+    health = _health_of(["--hostname", ""])
+    assert "hostname" not in health and health["mock"] is True
+    # The TXT record keeps the machine's name, as those agents advertised it.
+    assert mock.advertised_hostname() == "labhost"
+
+
+def test_no_agent_id_flag_reports_none(tmp_path, monkeypatch):
+    monkeypatch.setattr(mock, "AGENT_ID", mock.AGENT_ID)  # restored afterwards
+    health = _health_of(["--data-dir", str(tmp_path), "--no-agent-id"])
+    assert "agent_id" not in health
+    assert not (tmp_path / "mock-agent-id.json").exists()
+    with pytest.raises(SystemExit):
+        mock.build_server(["--port", "0", "--host", "127.0.0.1", "--no-mdns",
+                           "--no-agent-id", "--agent-id", "my-mock-01"])

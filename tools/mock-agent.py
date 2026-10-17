@@ -20,6 +20,9 @@ Usage:
     python3 mock-agent.py --no-mdns             # disable mDNS advertisement
     python3 mock-agent.py --data-dir /data      # keep drives, pools and agent_id across restarts
     python3 mock-agent.py --agent-id my-mock-01 # pin the agent_id this mock reports
+    python3 mock-agent.py --no-agent-id         # report no agent_id, as an agent that cannot save one
+    python3 mock-agent.py --hostname nas1       # report another host name
+    python3 mock-agent.py --hostname ""         # report none, as an agent before v0.8.3
     python3 mock-agent.py --preload sata_hdd,nvme,zfs_pool
     python3 mock-agent.py --preload nvme --extra-fs   # plus /mnt/nas, on no drive
     python3 mock-agent.py --replicas /opt/replicas --user-replicas /share/smart-sniffer/replicas
@@ -64,6 +67,30 @@ STARTED_AT = time.time()
 AGENT_ID = ""
 AGENT_ID_FILE = "mock-agent-id.json"
 _AGENT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{7,63}$")
+
+
+# ── Host name ────────────────────────────────────────────────────────────────
+# What /api/health reports as "hostname" and the mDNS TXT record carries:
+# this machine's short host name, unless --hostname gives another. With
+# --hostname "" /api/health leaves it out, like an agent before v0.8.3, and the
+# TXT record keeps the machine's name (those agents advertised it there).
+HOSTNAME_OVERRIDE: str | None = None
+
+
+def machine_hostname() -> str:
+    return socket.gethostname().split(".")[0]
+
+
+def reported_hostname() -> str:
+    """The host name /api/health reports; "" for none."""
+    if HOSTNAME_OVERRIDE is not None:
+        return HOSTNAME_OVERRIDE
+    return machine_hostname()
+
+
+def advertised_hostname() -> str:
+    """The host name in the mDNS TXT record and service name."""
+    return reported_hostname() or machine_hostname()
 
 
 def norm_agent_id(value: Any) -> str:
@@ -2656,11 +2683,13 @@ class MockHandler(BaseHTTPRequestHandler):
         # Not in the real agent: for the app's Control Center and dashboard.
         health.update({
             "mock": True,
-            "hostname": socket.gethostname().split(".")[0],
             "port": self.port,
             "auth_enabled": bool(self.token),
             "drive_count": drive_count,
         })
+        hostname = reported_hostname()
+        if hostname:
+            health["hostname"] = hostname
         return health
 
     def _lab_state(self) -> dict:
@@ -2875,7 +2904,7 @@ def start_mdns(port: int, token: str) -> Any:
         print("[mock] Install with: pip install zeroconf")
         return None
 
-    hostname = socket.gethostname().split(".")[0]
+    hostname = advertised_hostname()
     instance = f"smartha-mock-{hostname}"
     stype = "_smartha._tcp.local."
     props = {
@@ -2937,18 +2966,26 @@ def build_server(argv: list[str] | None = None) -> tuple[MockHTTPServer, Any, ar
     parser.add_argument("--agent-id", type=str, default="", metavar="ID",
                         help="agent_id to report (8 to 64 of a-z, 0-9, -; default: random, "
                              "kept in --data-dir when given)")
+    parser.add_argument("--no-agent-id", action="store_true",
+                        help="Report no agent_id, like an agent that cannot save one")
+    parser.add_argument("--hostname", type=str, default=None, metavar="NAME",
+                        help="Host name to report (default: this machine's); "
+                             '"" reports none, like an agent before v0.8.3')
     parser.add_argument("--extra-fs", action="store_true",
                         help="Also serve /mnt/nas (nfs, nas:/export, about 64%% used), "
                              "a filesystem on no drive or pool")
     args = parser.parse_args(argv)
     pinned = ""
+    if args.agent_id and args.no_agent_id:
+        parser.error("--agent-id and --no-agent-id cannot be used together")
     if args.agent_id:
         pinned = norm_agent_id(args.agent_id)
         if not pinned:
             parser.error(f"--agent-id {args.agent_id!r}: use 8 to 64 characters of a-z, 0-9 and -")
 
     # The replica files, then the store with optional persistence.
-    global store, library, STARTED_AT, AGENT_ID
+    global store, library, STARTED_AT, AGENT_ID, HOSTNAME_OVERRIDE
+    HOSTNAME_OVERRIDE = None if args.hostname is None else args.hostname.strip()
     STARTED_AT = time.time()
     library = ReplicaLibrary(args.replicas or DEFAULT_REPLICA_DIRS, args.user_replicas or None)
     persist_path = None
@@ -2956,7 +2993,7 @@ def build_server(argv: list[str] | None = None) -> tuple[MockHTTPServer, Any, ar
         os.makedirs(args.data_dir, exist_ok=True)
         persist_path = os.path.join(args.data_dir, "mock-drives.json")
     store = DriveStore(persist_path=persist_path)
-    AGENT_ID = resolve_agent_id(pinned, args.data_dir)
+    AGENT_ID = "" if args.no_agent_id else resolve_agent_id(pinned, args.data_dir)
 
     # Try to load saved drives first; only preload if nothing was saved.
     loaded = store.load()
@@ -3003,7 +3040,8 @@ def main(argv: list[str] | None = None) -> None:
     print(f"  Dashboard:  http://localhost:{port}/")
     print(f"  API:        http://localhost:{port}/api/drives")
     print(f"  Auth:       {auth_str}")
-    print(f"  Agent ID:   {AGENT_ID}")
+    print(f"  Agent ID:   {AGENT_ID or '(none)'}")
+    print(f"  Host name:  {reported_hostname() or '(none)'}")
     print(f"  Drives:     {len(store.drives)}")
     print(f"  Pools:      {len(store.pools)}")
     print(f"  Filesystems: {store.filesystem_count()}")
