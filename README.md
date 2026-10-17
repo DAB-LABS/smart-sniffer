@@ -30,7 +30,9 @@ SMART Sniffer follows the trail, sniffing out the [early warning signs](https://
 
 **Disk usage monitoring** — Opt-in filesystem tracking during install. Monitor storage utilization on any mountpoint — the agent reports total, used, available bytes and percentage via a dedicated API endpoint.
 
-**ZFS pool health** -- On a machine with ZFS, each pool appears as its own device with its state, error counts and last scrub. A notification names the pool and the failing disks when a pool degrades, and tells you when a pool disappears. Pool devices are named for their host, "ZFS pool rpool (pve-nas)", so two machines with the same pool name stay apart (v0.8.1).
+**ZFS pool health** -- On a machine with ZFS, each pool appears as its own device with its state, error counts and last scrub. A notification names the pool and the failing disks when a pool degrades, and tells you when a pool disappears. Pool devices are named for their host, "pve-nas ZFS pool rpool", so two machines with the same pool name stay apart.
+
+**Device names start with the host** -- Every device carries the name of the machine it belongs to: "nas1 Samsung 870 EVO (S5Y...)", "nas1 ZFS pool rpool", "nas1 Disk Usage", and "SMART Sniffer (nas1)" for the agent, so drives from several machines are easy to tell apart. The host name comes from the agent (v0.8.3 or later) over HTTP, without mDNS; an older agent keeps the name discovery found for it, or else shows the address you added it with. The HAOS App's agents are "HAOS" and "Replica". Names you give a device yourself are kept, and renaming the machine renames its devices (v0.8.4).
 
 **Data Written** -- Each drive reports how much the host has written to it over its life, in TB, from the drive's own Device Statistics log on SATA and the health log on NVMe, with long-term statistics so you can see the write rate per day or month. Needs the v0.8.0 agent.
 
@@ -65,7 +67,7 @@ Each drive gets its own HA device. Entities are created dynamically — if a dri
 |--------|-------------|
 | Disk Usage — Root (/) | Percentage used for the monitored mountpoint |
 
-Attributes: `mountpoint`, `device`, `fstype`, `total_gb`, `used_gb`, `available_gb`. One sensor per mountpoint configured during agent install. Grouped under a "Disk Usage ({hostname})" device alongside the drive devices.
+Attributes: `mountpoint`, `device`, `fstype`, `total_gb`, `used_gb`, `available_gb`. One sensor per mountpoint configured during agent install. Grouped under a "{host} Disk Usage" device alongside the drive devices.
 
 **Sensors:**
 
@@ -645,6 +647,7 @@ Drive-specific `smartctl -a --json` output samples are especially welcome — th
 - [x] Integration: new drives, pools and filesystems appear without a reload -- shipped v0.8.0
 - [x] Installers: wait up to 90 s for the agent's first drive pass -- shipped v0.8.0 (GH #50)
 - [x] Integration: ZFS pool devices named for their host -- shipped v0.8.1 (GH #50)
+- [x] Integration: every device name starts with its host, and drive notifications name the host -- shipped v0.8.4 (GH #50)
 - [x] Mock agent: replica files (drives and pools in JSON, with scenarios and your own replica folder) and filesystems, for testing without real drives -- shipped v0.8.2
 - [x] HAOS App: the Control Center -- this machine's drives, your other agents and replicas on one page, judged by the integration's rules -- shipped in App v0.3.0
 - [ ] Listed in the HACS default store (submitted, awaiting review)

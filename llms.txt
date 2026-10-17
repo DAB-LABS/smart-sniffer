@@ -39,7 +39,12 @@ Key behaviors:
 - Also v0.8.0+: new drives, pools and filesystems appear without a reload; an NVMe
   media_errors value at or above 2^64 reads as unknown and does not trigger Attention
   (integration side, so it covers older agents); the installers wait up to 90 s for
-  the agent's first drive pass. v0.8.1+: pool devices are named "ZFS pool <name> (<host>)".
+  the agent's first drive pass. v0.8.1+: pool devices carry their host name.
+- Device names (v0.8.4+): every device starts with its host, "nas1 Samsung 870 EVO
+  (S5Y...)", "nas1 ZFS pool rpool", "nas1 Disk Usage", "SMART Sniffer (nas1)". The host
+  name comes from the agent's /api/health (agent v0.8.3+), else the name discovery found
+  (discovered entries), else the configured address;
+  the HAOS App's agents are "HAOS" and "Replica". Entity ids are never changed.
 - Per-drive alert thresholds (v0.6.3+): Configure > Alert thresholds lets a user raise the
   limit for an attribute on one drive, so old stable damage stops alerting while new
   damage still does.

@@ -169,7 +169,7 @@ The coordinator (`coordinator.py`) evaluates attention after every poll and mana
 ### Notification Examples
 
 **Critical:**
-> **🔴 Drive Attention Required — Samsung SSD 870 EVO 500GB (S6PXNS0L100992M)**
+> **🔴 nas1: Samsung SSD 870 EVO 500GB (S6PX...) needs attention**
 >
 > **CRITICAL — Back up your data immediately.**
 >
@@ -177,14 +177,14 @@ The coordinator (`coordinator.py`) evaluates attention after every poll and mana
 > • Current Pending Sector Count: 1 (expected 0)
 
 **Warning:**
-> **⚠️ Drive Attention Required — Seagate Barracuda ST2000DM008 (ZFN4XXXX)**
+> **⚠️ nas1: Seagate Barracuda ST2000DM008 (ZFN4XXXX) needs attention**
 >
 > **WARNING — Monitor closely and plan for replacement.**
 >
 > • Spin Retry Count: 2 (expected 0)
 
 **Unsupported:**
-> **ℹ️ SMART Monitoring Unavailable — Proxmox External 1TB USB Drive**
+> **ℹ️ nas1: SMART monitoring unavailable for Proxmox External 1TB USB Drive**
 >
 > SMART Sniffer cannot read health data from this drive. This commonly happens with USB enclosures that block SMART passthrough. Health monitoring is not available for this drive.
 
@@ -214,7 +214,7 @@ Pools are evaluated separately from drives. Each pool has a **Problem** binary s
 
 The `status:` and `action:` text from `zpool status` is shown as attributes but never counts on its own, so "Some supported and requested features are not enabled" does not raise an alert.
 
-A notification fires when a pool becomes unhealthy, updates when the reasons change, and dismisses when the pool recovers. A pool that is missing when Home Assistant starts notifies; a pool that is already unhealthy at start turns its Problem sensor on but does not notify until something changes. If the agent cannot read `zpool`, pool entities go unavailable and nothing is notified. The notification states each error count once: when a single disk carries the whole pool total, only the disk line shows it (v0.8.0). Pool devices are named "ZFS pool <name> (<host>)" so two hosts with the same pool name stay apart (v0.8.1).
+A notification fires when a pool becomes unhealthy, updates when the reasons change, and dismisses when the pool recovers. A pool that is missing when Home Assistant starts notifies; a pool that is already unhealthy at start turns its Problem sensor on but does not notify until something changes. If the agent cannot read `zpool`, pool entities go unavailable and nothing is notified. The notification states each error count once: when a single disk carries the whole pool total, only the disk line shows it (v0.8.0). Pool devices are named "<host> ZFS pool <name>" so two hosts with the same pool name stay apart (v0.8.1, host first since v0.8.4).
 
 ---
 

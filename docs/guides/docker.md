@@ -66,6 +66,14 @@ Home Assistant finds agents automatically over mDNS, and **mDNS only works with
 host networking**. On a bridged network the agent still runs, but you add it in
 Home Assistant by hand, using the NAS's IP address and port `9099`.
 
+**Give the container the NAS's host name.** Since v0.8.4 Home Assistant starts
+every device name with the host name the agent reports, such as "nas1 ZFS pool
+tank". With host networking that is the NAS's own name. On a bridged network
+the container has a name of its own: Docker's default (a 12 character id) is
+ignored and the NAS's address is used instead, but a compose service or pod
+name is used as it is. Set `hostname:` (compose) or `--hostname` (docker run)
+to the NAS's name so the devices get a stable, recognisable name.
+
 ### 5. Configuration
 
 The agent reads `/etc/smartha-agent/config.yaml`, or any path you pass with
