@@ -13,6 +13,7 @@ import asyncio
 import importlib
 import json
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 
@@ -27,6 +28,7 @@ binary = importlib.import_module("custom_components.smart_sniffer.binary_sensor"
 coordinator_mod = importlib.import_module("custom_components.smart_sniffer.coordinator")
 devstat = importlib.import_module("custom_components.smart_sniffer.devstat")
 smart_presence = importlib.import_module("custom_components.smart_sniffer.smart_presence")
+host_name = importlib.import_module("custom_components.smart_sniffer.host_name")
 
 
 class _Entry:
@@ -34,6 +36,7 @@ class _Entry:
         self.entry_id = ENTRY_ID
         self.data = {"host": "10.0.0.5", "port": 9099, "scan_interval": 60, "force_update": force}
         self.title = "SMART Sniffer (fixturehost)"
+        self.source = "user"
         self.options = {}
         self.unload = []
 
@@ -58,6 +61,10 @@ class _Coord:
         self.drive_classes = {}
         self.smart_presence = smart_presence.SmartPresence()
         self.listeners = []
+
+    @property
+    def display_host(self):
+        return host_name.entry_host(self.config_entry.data, self.config_entry.title)
 
     def registered_pool_names(self):
         return list(REGISTERED_POOLS)
@@ -218,17 +225,111 @@ def test_the_listener_adds_new_entities_once():
     ]
 
 
+def _device_names(added, prefix):
+    return {e.device_info["name"] for e in added["sensor"] + added["binary_sensor"]
+            if e.unique_id.startswith(prefix)}
+
+
 def test_pool_devices_are_named_for_their_host():
     """Two hosts with an rpool must not collide (GH #50): the pool device
-    carries the host the way the Disk Usage device does."""
+    starts with the host the way every device does (v0.8.4). The fixture
+    entry has no stored host name (an agent before v0.8.3), so the host is
+    the address it was added with; the title's text is not used."""
+    names = _device_names(_setup(golden_payload())[1], f"{ENTRY_ID}_zpool_")
+    assert names and all(name.startswith("10.0.0.5 ZFS pool ") for name in names), names
+    assert "10.0.0.5 ZFS pool oldpool" in names
+
+
+def test_pool_devices_use_the_stored_host_name(monkeypatch):
+    monkeypatch.setattr(_Entry, "__init__", _entry_with({"agent_hostname": "fixturehost"}))
+    names = _device_names(_setup(golden_payload())[1], f"{ENTRY_ID}_zpool_")
+    assert "fixturehost ZFS pool oldpool" in names
+    assert all(name.startswith("fixturehost ZFS pool ") for name in names), names
+
+
+def _entry_with(extra, title=None):
+    """An _Entry.__init__ that adds ``extra`` to the entry data (and sets the
+    title), for monkeypatching."""
+    original = _Entry.__init__
+
+    def init(self, force=False):
+        original(self, force)
+        self.data = {**self.data, **extra}
+        if title is not None:
+            self.title = title
+    return init
+
+
+def _all_device_names(added):
+    names = {}
+    for e in added["sensor"] + added["binary_sensor"]:
+        ident = sorted(e.device_info["identifiers"])[0][1]
+        names.setdefault(ident, set()).add(e.device_info["name"])
+    assert all(len(v) == 1 for v in names.values()), names
+    return {k: v.pop() for k, v in names.items()}
+
+
+DRIVE = "fx-ata-devstat-hgst"
+
+
+def _drive_and_fs():
+    drive = _devstat_drive("ata_devstat_hgst")
+    assert drive["id"] == DRIVE
     data = golden_payload()
-    _, added = _setup(data)
-    pool_entities = [e for e in added["sensor"] + added["binary_sensor"]
-                     if e.unique_id.startswith(f"{ENTRY_ID}_zpool_")]
-    assert pool_entities
-    names = {e.device_info["name"] for e in pool_entities}
-    assert all(name.endswith(" (fixturehost)") for name in names), names
-    assert "ZFS pool oldpool (fixturehost)" in names
+    data[DRIVE] = drive
+    return data, f"{drive['model']} ({drive['serial']})"
+
+
+def test_device_names_with_the_agents_host_name(monkeypatch):
+    """The first DNS label, in the case the agent reports it."""
+    monkeypatch.setattr(_Entry, "__init__", _entry_with({"agent_hostname": "NAS1.lan"}))
+    data, label = _drive_and_fs()
+    names = _all_device_names(_setup(data)[1])
+    assert names[DRIVE] == f"NAS1 {label}"
+    assert names[f"{ENTRY_ID}_filesystems"] == "NAS1 Disk Usage"
+    assert names[f"{ENTRY_ID}_zpool_tank"] == "NAS1 ZFS pool tank"
+    assert names[f"{ENTRY_ID}_agent"] == "SMART Sniffer (NAS1)"
+
+
+def test_device_names_fall_back_to_the_address(monkeypatch):
+    """An agent before v0.8.3 reports no host name: the configured address,
+    without a port, stands in."""
+    monkeypatch.setattr(_Entry, "__init__", _entry_with({}, "SMART Sniffer (10.0.0.5:9099)"))
+    data, label = _drive_and_fs()
+    names = _all_device_names(_setup(data)[1])
+    assert names[DRIVE] == f"10.0.0.5 {label}"
+    assert names[f"{ENTRY_ID}_filesystems"] == "10.0.0.5 Disk Usage"
+    assert names[f"{ENTRY_ID}_agent"] == "SMART Sniffer (10.0.0.5)"
+
+
+def test_a_custom_entry_title_stays_the_agent_name(monkeypatch):
+    monkeypatch.setattr(_Entry, "__init__", _entry_with({"agent_hostname": "nas1"}, "Basement NAS"))
+    data, label = _drive_and_fs()
+    names = _all_device_names(_setup(data)[1])
+    assert names[f"{ENTRY_ID}_agent"] == "Basement NAS"
+    assert names[DRIVE] == f"nas1 {label}"
+
+
+def test_app_entries_are_named_haos_and_replica(monkeypatch):
+    app = {"host": "0449a086-smart-sniffer-agent", "agent_hostname": "0449a086-smart-sniffer-agent"}
+    for mock, label in ((False, "HAOS"), (True, "Replica")):
+        monkeypatch.setattr(_Entry, "__init__", _entry_with({**app, "agent_mock": mock}))
+        names = _all_device_names(_setup(golden_payload())[1])
+        assert names[f"{ENTRY_ID}_agent"] == f"SMART Sniffer ({label})"
+        assert names[f"{ENTRY_ID}_filesystems"] == f"{label} Disk Usage"
+
+
+def test_the_builders_need_no_domain_data():
+    """The device info builders read the entry, not hass.data[DOMAIN]."""
+    naming = importlib.import_module("custom_components.smart_sniffer.device_naming")
+    hass, entry = _Hass(), _Entry()
+    entry.data = {**entry.data, "agent_hostname": "nas1"}
+    coord = _Coord(hass, entry, {})
+    assert hass.data == {}
+    info = naming.drive_device_info(coord, "d1", {"model": "M", "serial": "S1"}, "Maker")
+    assert info["name"] == "nas1 M (S1)" and info["identifiers"] == {(DOMAIN, "d1")}
+    assert info["via_device"] == (DOMAIN, f"{ENTRY_ID}_agent")
+    assert naming.agent_device_info(entry)["name"] == "SMART Sniffer (nas1)"
 
 
 def test_a_failing_listener_does_not_raise(caplog):
@@ -262,8 +363,10 @@ def _coordinator(stored=None):
 
     class _E:
         entry_id = ENTRY_ID
-        data = {}
+        title = "SMART Sniffer (fixturehost)"
+        data = {"host": "10.0.0.5"}
     coord.config_entry = _E()
+    coord.host, coord._hostname = "10.0.0.5", "fixturehost"
     return coord
 
 
@@ -286,7 +389,7 @@ def test_d11_announces_once_across_a_restart(monkeypatch):
         "• Reported Uncorrectable Errors: 18 (expected 0; from device statistics)\n\n"
         "First reading from this drive's Device Statistics."
     )
-    assert notes[0]["title"] == "🔴 Drive Attention Required — WDC  WUH721414ALE604 (FIXTURE-m01-sdl)"
+    assert notes[0]["title"] == "🔴 10.0.0.5: WDC  WUH721414ALE604 (FIXTURE-m01-sdl) needs attention"
     stored, delay = coord._store.saves[-1]
     # An announcement record is written straight away, not on the 600 s
     # delayed save, so an unclean stop cannot lose it and re-announce.
@@ -639,7 +742,7 @@ def test_a_poll_stores_the_agents_identity_on_the_entry(monkeypatch):
     asyncio.run(coord._async_update_data())
     assert coord.config_entry.data == {
         "host": "10.0.0.5", "port": 9099,
-        "agent_hostname": "fake-nas",
+        "agent_hostname": "Fake-NAS",  # the case the agent reports
         "agent_drives": identity.drive_digest([{"serial": "FAKE-SER-1"}]),
         "agent_id": AGENT_ID,
     }
@@ -662,6 +765,79 @@ def test_an_older_agent_stores_nothing(monkeypatch):
     coord = _identity_coordinator(monkeypatch, {"status": "ok", "version": "0.8.2"})
     asyncio.run(coord._async_update_data())
     assert coord.hass.config_entries.updates == []
+
+
+def test_a_renamed_host_with_the_same_agent_id_stores_the_new_name(monkeypatch, caplog):
+    """Owner rule (v0.8.4): agent_id decides a rename when both sides have one.
+    The new name is stored with an info line, and no "now answers as" warning."""
+    stored = {"agent_hostname": "fake-nas", "agent_drives": "d" * 32, "agent_id": AGENT_ID}
+    health = {"status": "ok", "version": "0.8.3", "hostname": "fake-nas2", "agent_id": AGENT_ID}
+    coord = _identity_coordinator(monkeypatch, health, stored)
+    caplog.set_level("INFO", logger=coordinator_mod._LOGGER.name)
+    asyncio.run(coord._async_update_data())
+    assert coord.config_entry.data["agent_hostname"] == "fake-nas2"
+    assert coord.config_entry.data["agent_id"] == AGENT_ID
+    assert coord.display_host == "fake-nas2"
+    assert any("host renamed from fake-nas to fake-nas2" in r.getMessage() for r in caplog.records)
+    assert not [r for r in caplog.records if "now answers as host" in r.getMessage()]
+
+
+def test_a_poll_stores_whether_an_app_entry_is_the_replica(monkeypatch):
+    app = "0449a086-smart-sniffer-agent"
+    health = {"status": "ok", "version": "0.8.0-mock", "hostname": app, "mock": True}
+    coord = _identity_coordinator(monkeypatch, health, {"host": app})
+    coord.config_entry.title = f"SMART Sniffer ({app}:9100)"
+    coord._hostname = f"{app}:9100"  # as the coordinator derives it from that title
+    assert coord.display_host is None and coord.notice_host == f"{app}:9100"
+    asyncio.run(coord._async_update_data())
+    assert coord.config_entry.data["agent_mock"] is True
+    assert coord.display_host == "Replica"
+    # The real agent of an older App reports no host name: still an App entry.
+    coord = _identity_coordinator(monkeypatch, {"status": "ok", "version": "0.8.2"}, {"host": app})
+    asyncio.run(coord._async_update_data())
+    assert coord.config_entry.data["agent_mock"] is False
+    assert coord.display_host == "HAOS"
+
+
+def test_a_poll_never_touches_the_device_registry(monkeypatch):
+    """B1: no naming code runs in the coordinator update, so a name problem
+    can never fail the first refresh."""
+    naming = importlib.import_module("custom_components.smart_sniffer.device_naming")
+    calls = []
+    monkeypatch.setattr(naming, "async_sync_names", lambda *a: calls.append(a))
+    monkeypatch.setattr(coordinator_mod.dr, "async_get", lambda hass: calls.append("registry"))
+    health = {"status": "ok", "version": "0.8.3", "hostname": "Fake-NAS", "agent_id": AGENT_ID}
+    coord = _identity_coordinator(monkeypatch, health)
+    asyncio.run(coord._async_update_data())
+    assert calls == []
+    assert "device_naming" not in (Path(coordinator_mod.__file__).read_text())
+
+
+def test_drive_notification_titles_name_the_host():
+    build = coordinator_mod._build_notification
+    drive = {"model": "Samsung 870 EVO", "serial": "TEST-SER-1"}
+    assert build(drive, "YES", "critical", ["x"], "nas1")[0] == (
+        "🔴 nas1: Samsung 870 EVO (TEST-SER-1) needs attention"
+    )
+    assert build(drive, "MAYBE", "warning", ["x"], "192.168.1.20")[0] == (
+        "⚠️ 192.168.1.20: Samsung 870 EVO (TEST-SER-1) needs attention"
+    )
+    assert build(drive, "UNSUPPORTED", "", [], "nas1")[0] == (
+        "ℹ️ nas1: SMART monitoring unavailable for Samsung 870 EVO (TEST-SER-1)"
+    )
+    # The message is unchanged.
+    assert build(drive, "YES", "critical", ["x"], "nas1")[1].startswith("**CRITICAL")
+
+
+def test_notifications_use_the_stored_host_name(monkeypatch):
+    notes = []
+    monkeypatch.setattr(coordinator_mod, "pn_create", lambda hass, **kw: notes.append(kw))
+    coord = _coordinator()
+    coord.config_entry.data = {"host": "10.0.0.5", "agent_hostname": "nas1"}
+    _poll(coord, agent_drive("ata_devstat_wdc_unc"), notes)
+    assert notes[0]["title"].startswith("🔴 nas1: WDC ")
+    coord._handle_pool_notifications([], ["tank"])
+    assert notes[-1]["title"] == "ZFS pool tank on nas1 is missing"
 
 
 def _package_init():

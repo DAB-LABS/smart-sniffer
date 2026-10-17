@@ -119,7 +119,7 @@ def test_identity_first_poll_stores_name_drives_and_id():
     changes, other = identity_changes({}, health, DRIVES)
     assert not other
     assert changes == {
-        "agent_hostname": "testrouter",
+        "agent_hostname": "TestRouter",  # stored as reported; compared without case
         "agent_drives": drive_digest(DRIVES),
         "agent_id": AGENT_ID,
     }
@@ -128,7 +128,7 @@ def test_identity_first_poll_stores_name_drives_and_id():
 
 
 def test_identity_follows_its_own_agent():
-    stored = {"agent_hostname": "testrouter", "agent_drives": drive_digest(DRIVES)}
+    stored = {"agent_hostname": "TestRouter", "agent_drives": drive_digest(DRIVES)}
     # A drive added: the digest follows.
     more = [*DRIVES, {"id": "id-3", "serial": "SER-3"}]
     assert identity_changes(stored, HEALTH, more) == ({"agent_drives": drive_digest(more)}, False)
@@ -152,6 +152,51 @@ def test_identity_nothing_from_an_older_agent_or_a_failed_read():
 
 
 def test_identity_empty_values_never_replace_stored_ones():
-    stored = {"agent_hostname": "testrouter", "agent_drives": "d" * 32, "agent_id": AGENT_ID}
+    stored = {"agent_hostname": "TestRouter", "agent_drives": "d" * 32, "agent_id": AGENT_ID}
     assert identity_changes(stored, HEALTH, []) == ({}, False)
     assert identity_changes(stored, {**HEALTH, "agent_id": "bad id"}, None) == ({}, False)
+
+
+# --- a renamed host (v0.8.4): agent_id first, the drive digest without it -----------
+
+OTHER_DRIVES = [{"id": "id-8", "serial": "SER-8"}]
+
+
+def test_identity_rename_with_the_same_agent_id_follows_it():
+    """agent_id decides when both sides have one, even with other drives."""
+    stored = {"agent_hostname": "testrouter", "agent_drives": drive_digest(DRIVES), "agent_id": AGENT_ID}
+    health = {"status": "ok", "hostname": "NewName", "agent_id": AGENT_ID}
+    assert identity_changes(stored, health, OTHER_DRIVES) == (
+        {"agent_hostname": "NewName", "agent_drives": drive_digest(OTHER_DRIVES)},
+        False,
+    )
+
+
+def test_identity_rename_with_another_agent_id_is_another_agent():
+    """Same drives (a cloned VM) but another agent_id: not the same agent."""
+    stored = {"agent_hostname": "testrouter", "agent_drives": drive_digest(DRIVES), "agent_id": AGENT_ID}
+    health = {"status": "ok", "hostname": "newname", "agent_id": "f" * 32}
+    assert identity_changes(stored, health, DRIVES) == ({}, True)
+
+
+def test_identity_rename_without_agent_id_uses_the_drive_digest():
+    with_id = {"status": "ok", "hostname": "newname", "agent_id": AGENT_ID}
+    without_id = {"status": "ok", "hostname": "newname"}
+    for stored_id, health in (({}, with_id), ({"agent_id": AGENT_ID}, without_id), ({}, without_id)):
+        stored = {"agent_hostname": "testrouter", "agent_drives": drive_digest(DRIVES), **stored_id}
+        changes, other = identity_changes(stored, health, DRIVES)
+        assert not other and changes["agent_hostname"] == "newname", (stored_id, health)
+        # Other drives, or none readable: another agent.
+        assert identity_changes(stored, health, OTHER_DRIVES) == ({}, True)
+        assert identity_changes(stored, health, None) == ({}, True)
+    # No stored digest: never shown to be the same.
+    stored = {"agent_hostname": "testrouter"}
+    assert identity_changes(stored, without_id, DRIVES) == ({}, True)
+
+
+def test_identity_a_change_of_case_is_stored_not_another_agent():
+    """v0.8.3 stored names in lower case; the device names show the case the
+    agent reports, so the next poll stores it. Not a rename, not another agent."""
+    stored = {"agent_hostname": "laptop-2onh2tas", "agent_drives": "d" * 32, "agent_id": AGENT_ID}
+    health = {"status": "ok", "hostname": "LAPTOP-2ONH2TAS", "agent_id": AGENT_ID}
+    assert identity_changes(stored, health, None) == ({"agent_hostname": "LAPTOP-2ONH2TAS"}, False)

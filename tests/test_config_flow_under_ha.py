@@ -79,7 +79,8 @@ def _entry(entry_id, unique_id, host, port=9099, title=None, source="user", **da
 
 
 class _Net:
-    """Agents on the network: "host:port" -> (hostname, serials, token)."""
+    """Agents on the network: "host:port" -> (hostname, serials, token), and
+    optionally a dict of more /api/health fields (agent_id, mock)."""
 
     def __init__(self, agents):
         self.agents = agents
@@ -89,9 +90,10 @@ class _Net:
         agent = self.agents.get(f"{host}:{port}")
         if agent is None:
             raise aiohttp.ClientError("unreachable")
-        hostname, serials, needs = agent
+        hostname, serials, needs, *more = agent
         if needs and token != needs:
             raise aiohttp.ClientError("401")
+        self.more = more[0] if more else {}
         return hostname, serials
 
     async def get_json(self, host, port, token, path):
@@ -101,16 +103,18 @@ class _Net:
         except aiohttp.ClientError:
             return None
         if path == "/api/health":
-            body = {"status": "ok", "version": "0.8.3"}
+            body = {"status": "ok", "version": "0.8.3", **self.more}
             if hostname:
                 body["hostname"] = hostname
             return body
+        if serials is None:
+            return None  # /api/drives cannot be read
         return [{"id": f"id-{s}", "serial": s} for s in serials]
 
     async def test_connection(self, host, port, token):
         self.calls.append(f"{host}:{port}/api/health")
         hostname, _ = self._agent(host, port, token)
-        return {"status": "ok", **({"hostname": hostname} if hostname else {})}
+        return {"status": "ok", **self.more, **({"hostname": hostname} if hostname else {})}
 
 
 def _flow(entries, source, agents=None, dns=None):
@@ -563,3 +567,77 @@ def test_pick_best_ip_prefers_tailscale_over_link_local():
     assert config_flow.SmartSnifferConfigFlow._pick_best_ip(info) == "100.101.102.103"
     info = _discovery("nas", "169.254.10.20", "100.101.102.103", "192.168.40.5")
     assert config_flow.SmartSnifferConfigFlow._pick_best_ip(info) == "192.168.40.5"
+
+
+# --- identity stored when the entry is created (v0.8.4) ---------------------------
+
+AGENT_ID = "3f9c0e5a7b1d4c2e8a6f0b9d1e2c3a4b"
+APP = "0449a086-smart-sniffer-agent"
+
+
+def test_user_step_stores_the_agents_identity():
+    flow = _flow([], SOURCE_USER, {f"{LAN}:9099": (*ROUTER, {"agent_id": AGENT_ID})})
+    data = _user(flow, LAN)["data"]
+    assert data["agent_hostname"] == "testrouter"
+    assert data["agent_drives"] == _known(ROUTER[1])
+    assert data["agent_id"] == AGENT_ID
+    assert "agent_mock" not in data
+
+
+def test_user_step_without_drives_stores_no_digest():
+    flow = _flow([], SOURCE_USER, {f"{LAN}:9099": ("testrouter", None, "", {"agent_id": AGENT_ID})})
+    data = _user(flow, LAN)["data"]
+    assert data["agent_hostname"] == "testrouter" and "agent_drives" not in data
+
+
+def test_user_step_with_an_older_agent_stores_nothing():
+    flow = _flow([], SOURCE_USER, {f"{LAN}:9099": ("", ["SER-A1"], "")})
+    data = _user(flow, LAN)["data"]
+    assert not {"agent_hostname", "agent_drives", "agent_id", "agent_mock"} & set(data)
+
+
+def test_user_step_for_the_app_stores_its_kind():
+    agents = {f"{APP}:9099": (APP, ["SER-H1"], ""),
+              f"{APP}:9100": (APP, ["MOCK-R1"], "", {"mock": True})}
+    flow = _flow([], SOURCE_USER, agents)
+    assert _user(flow, APP)["data"]["agent_mock"] is False
+    flow = _flow([], SOURCE_USER, agents)
+    assert _user(flow, APP, port=9100)["data"]["agent_mock"] is True
+
+
+def test_confirm_stores_the_agents_identity():
+    flow = _card([], {f"{LAN}:9099": (*ROUTER, {"agent_id": AGENT_ID})})
+    data = _confirm(flow)["data"]
+    assert data["agent_hostname"] == "testrouter"
+    assert data["agent_drives"] == _known(ROUTER[1])
+    assert data["agent_id"] == AGENT_ID
+
+
+def test_confirm_with_an_older_agent_stores_nothing():
+    flow = _card([], {f"{LAN}:9099": ("", ["SER-A1"], "")})
+    data = _confirm(flow)["data"]
+    assert not {"agent_hostname", "agent_drives", "agent_id"} & set(data)
+
+
+def test_a_move_follows_a_rename_the_agent_id_confirmed():
+    """The coordinator stored the new name after an agent_id-confirmed rename:
+    a rediscovery under the new name moves the entry like any other."""
+    entry = _discovered(hostname="nas", agent_id=AGENT_ID)
+    health = {"status": "ok", "hostname": "nas-renamed", "agent_id": AGENT_ID}
+    changes, other = identity.identity_changes(entry.data, health, [{"serial": "SER-N1"}])
+    assert not other
+    entry.data = {**entry.data, **changes}
+    entry.unique_id = "smartha-nas-renamed"
+    renamed = ("nas-renamed", ["SER-N1"], "")
+    _rediscover(entry, {f"{NEW}:9099": renamed}, hostname="nas-renamed")
+    assert entry.data["host"] == NEW
+
+
+def test_another_agent_at_the_old_address_leaves_the_identity_alone():
+    """A different agent_id at the entry's address stores nothing, so the
+    entry's agent is still found, and moved to, at its new address."""
+    entry = _discovered(hostname="nas", agent_id=AGENT_ID)
+    other = {"status": "ok", "hostname": "intruder", "agent_id": "e" * 32}
+    assert identity.identity_changes(entry.data, other, [{"serial": "SER-X9"}]) == ({}, True)
+    flow = _rediscover(entry, {f"{NEW}:9099": ("intruder", ["SER-X9"], "")})
+    assert entry.data["host"] == OLD and flow.hass.config_entries.updates == []

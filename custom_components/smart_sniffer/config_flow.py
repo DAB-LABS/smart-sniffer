@@ -41,10 +41,12 @@ from .agent_identity import (
     UNIQUE_ID_PREFIX,
     confirms_same_agent,
     drive_digest,
+    identity_changes,
     ip_score,
     norm_host,
 )
 from .agent_version import agent_is_outdated, display_version
+from .host_name import app_kind_change
 from .attention import (
     current_readings,
     form_order,
@@ -124,7 +126,12 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
                     return self.async_abort(reason="already_configured")
 
                 title = f"SMART Sniffer ({host}:{port})"
-                return self.async_create_entry(title=title, data=user_input)
+                identity = await self._identity_at_creation(
+                    host, port, token, health, user_input, title
+                )
+                return self.async_create_entry(
+                    title=title, data={**user_input, **identity}
+                )
 
         return self.async_show_form(
             step_id="user",
@@ -169,6 +176,25 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
                 return await resp.json()
         except (aiohttp.ClientError, asyncio.TimeoutError, TimeoutError, ValueError):
             return None
+
+    async def _identity_at_creation(
+        self,
+        host: str,
+        port: int,
+        token: str,
+        health: Any,
+        data: dict[str, Any],
+        title: str,
+    ) -> dict[str, Any]:
+        """What a new entry stores about its agent from the start: the host
+        name, drive digest and agent_id the coordinator would store at its
+        first poll (agent_identity.identity_changes), and for the HA App
+        whether it is the replica. The device names use the host name from
+        the first entity on. Nothing from an agent before v0.8.3; no digest
+        when /api/drives cannot be read."""
+        drives = await self._get_json(host, port, token, "/api/drives")
+        identity, _ = identity_changes({}, health, drives)
+        return {**identity, **app_kind_change({**data, **identity}, title, health)}
 
     async def _configured_elsewhere(
         self,
@@ -411,7 +437,7 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             token = user_input.get(CONF_TOKEN, "")
             try:
-                await self._test_connection(
+                health = await self._test_connection(
                     self._discovery_host, self._discovery_port, token
                 )
             except (aiohttp.ClientError, asyncio.TimeoutError, TimeoutError):
@@ -426,15 +452,16 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
                 if await self._added_since_discovery(token):
                     return self.async_abort(reason="already_configured")
                 title = f"SMART Sniffer ({self._discovery_hostname})"
-                return self.async_create_entry(
-                    title=title,
-                    data={
-                        CONF_HOST: self._discovery_host,
-                        CONF_PORT: self._discovery_port,
-                        CONF_TOKEN: token,
-                        CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
-                    },
+                data = {
+                    CONF_HOST: self._discovery_host,
+                    CONF_PORT: self._discovery_port,
+                    CONF_TOKEN: token,
+                    CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
+                }
+                identity = await self._identity_at_creation(
+                    self._discovery_host, self._discovery_port, token, health, data, title
                 )
+                return self.async_create_entry(title=title, data={**data, **identity})
 
         # Auth enabled — show form with token field.
         # No auth — show confirmation with no input fields (just Submit).
@@ -518,8 +545,9 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
           a. the entry's own address fails a connection test;
           b. the advertised address passes one;
           c. the agent there reports the host name and the drive serials the
-             entry last knew (stored by the coordinator from the entry's own
-             polls; nothing stored, no move);
+             entry last knew (stored when the entry was created and by the
+             coordinator from the entry's own polls; nothing stored, no
+             move);
           d. no other entry already polls that address.
         """
         if entry.source != SOURCE_ZEROCONF or not (entry.unique_id or "").startswith(

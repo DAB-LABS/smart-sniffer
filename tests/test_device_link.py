@@ -133,9 +133,13 @@ def test_no_module_writes_a_via_device_link_of_its_own():
 
 def test_the_platforms_use_the_helper():
     """The counterpart to the test above: the link is still applied, six times,
-    rather than having been dropped."""
-    calls = sum(
-        len(re.findall(r"\*\*agent_link\(", (_COMPONENT / name).read_text()))
-        for name in ("sensor.py", "binary_sensor.py")
-    )
-    assert calls == 6
+    rather than having been dropped. Since v0.8.4 the five drive sites build
+    their device info with device_naming.drive_device_info, which applies it."""
+    def count(pattern, *names):
+        return sum(
+            len(re.findall(pattern, (_COMPONENT / name).read_text())) for name in names
+        )
+
+    assert count(r"\*\*agent_link\(", "sensor.py", "binary_sensor.py") == 1  # Disk Usage
+    assert count(r"\*\*agent_link\(", "device_naming.py") == 1
+    assert count(r"= drive_device_info\(", "sensor.py", "binary_sensor.py") == 5

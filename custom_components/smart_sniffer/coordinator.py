@@ -69,7 +69,7 @@ from homeassistant.helpers.issue_registry import (
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .agent_identity import ENTRY_AGENT_HOSTNAME, identity_changes
+from .agent_identity import ENTRY_AGENT_HOSTNAME, identity_changes, norm_host
 from .agent_version import agent_is_outdated, display_version
 from .attention import (
     SEVERITY_CRITICAL,
@@ -100,6 +100,7 @@ from .devstat import (
     merge_devstat,
     normalize_store,
 )
+from .host_name import app_kind_change, entry_host, legacy_host
 from .entity_plan import DriveClass, EntitySpec, forget_device as forget_created
 from .smart_presence import EVENT_BACK, EVENT_LOST, SmartPresence
 from .poll_timeout import AGENT_POLL_TIMEOUT, PollTimeouts
@@ -128,14 +129,20 @@ def _build_notification(
     state: str,
     severity: str,
     reasons: list[str],
+    host: str | None = None,
 ) -> tuple[str, str]:
-    """Return (title, message) for a persistent notification."""
+    """Return (title, message) for a persistent notification.
+
+    The title starts with the host (coordinator.notice_host), so a drive
+    model two machines share is told apart: "nas1: <drive> needs attention".
+    """
     model  = drive_data.get("model", "Unknown Drive")
     serial = drive_data.get("serial", "")
     label  = f"{model} ({serial})" if serial else model
+    prefix = f"{host}: " if host else ""
 
     if state == STATE_UNSUPPORTED:
-        title   = f"ℹ️ SMART Monitoring Unavailable — {label}"
+        title   = f"ℹ️ {prefix}SMART monitoring unavailable for {label}"
         message = (
             "SMART Sniffer cannot read health data from this drive. "
             "This commonly happens with USB enclosures that block SMART "
@@ -151,7 +158,7 @@ def _build_notification(
         urgency = "**WARNING — Monitor closely and plan for replacement.**"
 
     bullet_list = "\n".join(f"• {r}" for r in reasons)
-    title   = f"{icon} Drive Attention Required — {label}"
+    title   = f"{icon} {prefix}{label} needs attention"
     message = f"{urgency}\n\n{bullet_list}"
     return title, message
 
@@ -171,13 +178,12 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.token: str = entry.data.get(CONF_TOKEN, "")
         interval = entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
 
-        # Hostname for display in repair notifications — use the title if
-        # it looks like "SMART Sniffer (hostname)", otherwise fall back to IP.
-        title = entry.title or ""
-        if title.startswith("SMART Sniffer (") and title.endswith(")"):
-            self._hostname: str = title[len("SMART Sniffer ("):-1]
-        else:
-            self._hostname = self.host
+        # The host as the entry title shows it, for the agent update repair
+        # and the device removal refusal, where the user must find the entry:
+        # the title's text if it looks like "SMART Sniffer (hostname)",
+        # otherwise the address. Device names and notifications use
+        # display_host instead.
+        self._hostname: str = legacy_host(entry.title, self.host)
 
         super().__init__(
             hass,
@@ -216,6 +222,20 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Whether "this address now answers as another agent" was logged.
         self._other_agent_logged = False
+
+    @property
+    def display_host(self) -> str | None:
+        """The host label in device names (host_name.entry_host)."""
+        entry = self.config_entry
+        return entry_host(
+            entry.data, getattr(entry, "title", None), getattr(entry, "source", None)
+        )
+
+    @property
+    def notice_host(self) -> str:
+        """The host named in notifications. The title's host stands in only
+        while an HA App entry's kind is not known yet."""
+        return self.display_host or self._hostname
 
     @property
     def _base_url(self) -> str:
@@ -379,12 +399,18 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Keep the agent's host name, drive digest and agent_id on the entry.
 
         Read from this entry's own host in this poll (agent_identity.
-        identity_changes). A rediscovery moves the entry to a new address
-        only when the agent there matches what is kept here. The update
-        listener does not reload the entry for these keys.
+        identity_changes), and for an HA App entry whether it is the replica
+        (host_name.app_kind_change). A rediscovery moves the entry to a new
+        address only when the agent there matches what is kept here. The
+        update listener does not reload the entry for these keys; it renames
+        the devices when the host label changed.
         """
         entry = self.config_entry
         changes, other_agent = identity_changes(entry.data, health, drives)
+        if not other_agent:
+            changes.update(
+                app_kind_change({**entry.data, **changes}, entry.title, health)
+            )
         if other_agent and not self._other_agent_logged:
             self._other_agent_logged = True
             _LOGGER.warning(
@@ -394,6 +420,13 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 (health or {}).get("hostname"), entry.data.get(ENTRY_AGENT_HOSTNAME),
             )
         if changes:
+            old_name = norm_host(entry.data.get(ENTRY_AGENT_HOSTNAME))
+            new_name = changes.get(ENTRY_AGENT_HOSTNAME)
+            if old_name and new_name and old_name != norm_host(new_name):
+                _LOGGER.info(
+                    "SMART Sniffer: %s:%s host renamed from %s to %s",
+                    self.host, self.port, old_name, new_name,
+                )
             _LOGGER.debug("SMART Sniffer: %s:%s identity stored: %s",
                           self.host, self.port, sorted(changes))
             self.hass.config_entries.async_update_entry(
@@ -487,14 +520,14 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     "SMART Sniffer: ZFS pool %s is no longer reported by the agent",
                     action.name,
                 )
-                title, message = build_pool_missing_notification(action.name, self._hostname)
+                title, message = build_pool_missing_notification(action.name, self.notice_host)
             else:
                 _LOGGER.warning(
                     "SMART Sniffer: ZFS pool %s needs attention: %s",
                     action.name, "; ".join(action.reasons),
                 )
                 title, message = build_pool_notification(
-                    action.name, self._hostname, action.pool_lines, action.device_lines
+                    action.name, self.notice_host, action.pool_lines, action.device_lines
                 )
             pn_create(self.hass, message=message, title=title, notification_id=notif_id)
 
@@ -554,7 +587,7 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         drive_id, "; ".join(reasons),
                     )
                     title, message = _build_notification(
-                        drive_data, state, severity, reasons,
+                        drive_data, state, severity, reasons, self.notice_host,
                     )
                     pn_create(self.hass, message=f"{message}\n\n{ANNOUNCEMENT_LINE}",
                               title=title, notification_id=_notif_id(drive_id))
@@ -585,7 +618,7 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     "SMART Sniffer: %s has no usable SMART data", drive_id,
                 )
                 title, message = _build_notification(
-                    drive_data, state, severity, reasons,
+                    drive_data, state, severity, reasons, self.notice_host,
                 )
                 pn_create(self.hass, message=message, title=title,
                           notification_id=notif_id)
@@ -608,7 +641,7 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     drive_id, action, "; ".join(reasons),
                 )
                 title, message = _build_notification(
-                    drive_data, state, severity, reasons,
+                    drive_data, state, severity, reasons, self.notice_host,
                 )
                 pn_create(self.hass, message=message, title=title,
                           notification_id=notif_id)

@@ -39,23 +39,35 @@ from typing import Any
 
 UNIQUE_ID_PREFIX = "smartha-"
 
-# What a config entry keeps about the agent it monitors, written by the
-# coordinator from the entry's own polls (identity_changes below). Changing
-# them never reloads the entry. The rediscovery move (config_flow) needs the
-# host name and the drive digest; agent_id is stored for later releases and
-# read by nothing yet.
+# What a config entry keeps about the agent it monitors, written when the
+# entry is created (config_flow) and by the coordinator from the entry's own
+# polls (identity_changes below). Changing them never reloads the entry. The
+# rediscovery move (config_flow) needs the host name and the drive digest;
+# the device names use the host name (host_name.py); agent_id decides
+# whether a new host name is the same agent renamed. agent_mock is kept only
+# for the HA App's entries: True for its replica agent, False for its agent.
 ENTRY_AGENT_HOSTNAME = "agent_hostname"
 ENTRY_AGENT_DRIVES = "agent_drives"
 ENTRY_AGENT_ID = "agent_id"
-ENTRY_IDENTITY_KEYS = frozenset({ENTRY_AGENT_HOSTNAME, ENTRY_AGENT_DRIVES, ENTRY_AGENT_ID})
+ENTRY_AGENT_MOCK = "agent_mock"
+ENTRY_IDENTITY_KEYS = frozenset(
+    {ENTRY_AGENT_HOSTNAME, ENTRY_AGENT_DRIVES, ENTRY_AGENT_ID, ENTRY_AGENT_MOCK}
+)
 
 _AGENT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{7,63}$")
 
 
 def norm_host(name: Any) -> str:
     """A host name for comparison: lower case, no trailing dot or .local."""
-    text = (name if isinstance(name, str) else "").strip().lower().rstrip(".")
-    if text.endswith(".local"):
+    return display_hostname(name).lower()
+
+
+def display_hostname(name: Any) -> str:
+    """A host name as the agent reports it, case kept, without a trailing
+    dot or .local. Stored on the entry and shown in device names; compare
+    with norm_host."""
+    text = (name if isinstance(name, str) else "").strip().rstrip(".")
+    if text.lower().endswith(".local"):
         text = text[: -len(".local")]
     return text
 
@@ -146,6 +158,23 @@ def drive_digest(drives: Any) -> str:
     return hashlib.sha256("\n".join(serials).encode()).hexdigest()[:32]
 
 
+def same_agent(stored: Mapping[str, Any], health: Any, drives: Any) -> bool:
+    """Whether the agent answering now is the one the entry knew, by
+    agent_id when both sides have one, else by the drive digest.
+
+    agent_id decides alone when both have it: a disk swap does not make
+    another agent, and two machines with the same disks (a cloned VM) are
+    not one. Without it on either side, the stored digest must be non-empty
+    and equal the digest of the drives read in the same poll.
+    """
+    known_id = norm_agent_id(stored.get(ENTRY_AGENT_ID))
+    live_id = norm_agent_id(health.get("agent_id")) if isinstance(health, dict) else ""
+    if known_id and live_id:
+        return known_id == live_id
+    known_drives = stored.get(ENTRY_AGENT_DRIVES)
+    return bool(known_drives) and known_drives == drive_digest(drives)
+
+
 def identity_changes(
     stored: Mapping[str, Any], health: Any, drives: Any
 ) -> tuple[dict[str, str], bool]:
@@ -155,10 +184,14 @@ def identity_changes(
     and /api/drives bodies from the entry's own host, read in that poll.
     Returns (changes, other_agent). Nothing is stored without a host name
     (agents before v0.8.3). When the entry already holds a host name and its
-    address now answers with another one, the address belongs to another
-    agent (DHCP gave it away) or the host was renamed: nothing is replaced,
-    so what the entry knew about its own agent is kept, and other_agent is
-    True. An empty drive digest or agent_id never replaces a stored one.
+    address now answers with another one, either the host was renamed or the
+    address belongs to another agent (DHCP gave it away); same_agent tells
+    them apart. A renamed host stores its new name, drives and agent_id.
+    Another agent replaces nothing, so what the entry knew about its own
+    agent is kept, and other_agent is True. An empty drive digest or
+    agent_id never replaces a stored one. Names compare without case; the
+    name is stored in the case the agent reports, so a change of case alone
+    is stored too.
     """
     if not isinstance(health, dict):
         return {}, False
@@ -166,10 +199,11 @@ def identity_changes(
     if not live_name:
         return {}, False
     known_name = norm_host(stored.get(ENTRY_AGENT_HOSTNAME))
-    if known_name and known_name != live_name:
+    if known_name and known_name != live_name and not same_agent(stored, health, drives):
         return {}, True
     wanted = {
-        ENTRY_AGENT_HOSTNAME: live_name,
+        # As reported, case kept: the device names show it (host_name.py).
+        ENTRY_AGENT_HOSTNAME: display_hostname(health.get("hostname")),
         ENTRY_AGENT_DRIVES: drive_digest(drives),
         ENTRY_AGENT_ID: norm_agent_id(health.get("agent_id")),
     }

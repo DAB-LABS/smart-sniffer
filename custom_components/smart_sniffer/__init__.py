@@ -30,6 +30,7 @@ from .const import (
     STORE_KEY_PREFIX,
     STORE_VERSION,
 )
+from .device_naming import NAMED_HOST, agent_device_info, async_sync_names, display_host
 from .device_removal import (
     our_identifier,
     refusal_placeholders,
@@ -68,11 +69,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Platforms are set up concurrently, so creating it here is the only way
     # to guarantee the parent is present whichever platform registers first.
     agent_device = device_registry.async_get(hass).async_get_or_create(
-        config_entry_id=entry.entry_id,
-        identifiers={(DOMAIN, f"{entry.entry_id}_agent")},
-        name=entry.title or f"SMART Sniffer ({entry.data.get(CONF_HOST, 'unknown')})",
-        manufacturer="SMART Sniffer",
-        model="Agent",
+        config_entry_id=entry.entry_id, **agent_device_info(entry)
     )
     # Its registry id, which is what via_device_id takes. Stored rather than
     # looked up again per entity, and refreshed on every setup so a reload
@@ -80,6 +77,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id][AGENT_DEVICE_ID] = agent_device.id
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Device names start with the host (GH #50). The entities' device info
+    # names the devices they are added to; this also renames the ones whose
+    # entities are all disabled. Never raises.
+    async_sync_names(hass, entry)
 
     # Register the get_drive_data service once per domain.
     if not hass.services.has_service(DOMAIN, SERVICE_GET_DRIVE_DATA):
@@ -224,8 +226,9 @@ def _display_host(config_entry: ConfigEntry, coordinator: Any) -> str:
     """The host as the integration already shows it to users.
 
     The coordinator derives it from the entry title, falling back to the
-    address, and uses it in the agent-update repair notice and the Disk Usage
-    device name. Without a coordinator the address is the next best thing.
+    address, and uses it in the agent-update repair notice: the user must
+    find the entry by it, so it is not the device names' host label. Without
+    a coordinator the address is the next best thing.
     """
     hostname = getattr(coordinator, "_hostname", None)
     if hostname:
@@ -256,6 +259,9 @@ def _store_key(entry_id: str) -> str:
 # identity the coordinator keeps (agent_identity.ENTRY_IDENTITY_KEYS).
 _SETTINGS = "settings_at_setup"
 
+# No name sync has completed for the entry yet.
+_UNNAMED = object()
+
 
 def _settings(entry: ConfigEntry) -> tuple[Any, ...]:
     data = {k: v for k, v in entry.data.items() if k not in ENTRY_IDENTITY_KEYS}
@@ -265,11 +271,15 @@ def _settings(entry: ConfigEntry) -> tuple[Any, ...]:
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload integration when options change (token, port, interval).
 
-    An update that only stored the agent's host name, drive digest or
-    agent_id (coordinator._store_identity) changes nothing the entry was set
-    up with, so it does not reload.
+    An update that only stored what the coordinator learned about the agent
+    (coordinator._store_identity) changes nothing the entry was set up with,
+    so it does not reload. When it changed the host label (the agent reported
+    a new host name, or its first), the devices are renamed instead.
     """
-    at_setup = (hass.data.get(DOMAIN, {}).get(entry.entry_id) or {}).get(_SETTINGS)
+    entry_data = hass.data.get(DOMAIN, {}).get(entry.entry_id) or {}
+    at_setup = entry_data.get(_SETTINGS)
     if at_setup is not None and at_setup == _settings(entry):
+        if entry_data.get(NAMED_HOST, _UNNAMED) != display_host(entry):
+            async_sync_names(hass, entry)
         return
     await hass.config_entries.async_reload(entry.entry_id)

@@ -36,7 +36,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .attention import _has_usable_smart_data, coerce_smart_data
 from .const import CONF_FORCE_UPDATE, CONF_TOKEN, DEFAULT_FORCE_UPDATE, DOMAIN
-from .device_link import agent_link
+from .device_naming import agent_device_info, drive_device_info
 from .entity_plan import (
     BINARY_SENSOR,
     KIND_AGENT_STATUS,
@@ -207,20 +207,13 @@ class SmartSnifferHealthSensor(
         super().__init__(coordinator)
         self._drive_id = drive_id
         model  = drive_data.get("model", "Unknown Drive")
-        serial = drive_data.get("serial", drive_id)
         self._attr_unique_id = (
             f"{coordinator.config_entry.entry_id}_{drive_id}_health"
         )
-        self._attr_device_info = {
-            "identifiers":   {(DOMAIN, drive_id)},
-            "name":          f"{model} ({serial})",
-            "manufacturer":  model.split()[0] if model else "Unknown",
-            "model":         model,
-            "serial_number": serial,
-            # Nest this drive under its agent so HA can cascade an area
-            # assignment from the agent to every drive it reports (#24).
-            **agent_link(coordinator),
-        }
+        self._attr_device_info = drive_device_info(
+            coordinator, drive_id, drive_data,
+            model.split()[0] if model else "Unknown",
+        )
 
     @property
     def is_on(self) -> bool | None:
@@ -283,20 +276,13 @@ class DriveStandbySensor(
         super().__init__(coordinator)
         self._drive_id = drive_id
         model  = drive_data.get("model", "Unknown Drive")
-        serial = drive_data.get("serial", drive_id)
         self._attr_unique_id = (
             f"{coordinator.config_entry.entry_id}_{drive_id}_standby"
         )
-        self._attr_device_info = {
-            "identifiers":   {(DOMAIN, drive_id)},
-            "name":          f"{model} ({serial})",
-            "manufacturer":  model.split()[0] if model else "Unknown",
-            "model":         model,
-            "serial_number": serial,
-            # Nest this drive under its agent so HA can cascade an area
-            # assignment from the agent to every drive it reports (#24).
-            **agent_link(coordinator),
-        }
+        self._attr_device_info = drive_device_info(
+            coordinator, drive_id, drive_data,
+            model.split()[0] if model else "Unknown",
+        )
 
     @property
     def is_on(self) -> bool:
@@ -410,7 +396,7 @@ class AgentStatusBinarySensor(
         super().__init__(coordinator)
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_agent_status"
-        self._attr_device_info = _agent_device_info(entry)
+        self._attr_device_info = agent_device_info(entry)
 
     @property
     def is_on(self) -> bool:
@@ -445,7 +431,7 @@ class AuthActiveBinarySensor(
         super().__init__(coordinator)
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_auth_active"
-        self._attr_device_info = _agent_device_info(entry)
+        self._attr_device_info = agent_device_info(entry)
 
     @property
     def is_on(self) -> bool:
@@ -455,22 +441,3 @@ class AuthActiveBinarySensor(
     @property
     def icon(self) -> str:
         return "mdi:lock" if self.is_on else "mdi:lock-open-variant"
-
-
-def _agent_device_info(entry: ConfigEntry) -> dict[str, Any]:
-    """Build device_info for the per-agent device.
-
-    Groups all agent-level entities (status, version, diagnostics) under a
-    single device named after the agent's configured hostname or IP.
-    """
-    from .const import CONF_HOST
-
-    host = entry.data.get(CONF_HOST, "unknown")
-    title = entry.title or f"SMART Sniffer ({host})"
-
-    return {
-        "identifiers": {(DOMAIN, f"{entry.entry_id}_agent")},
-        "name": title,
-        "manufacturer": "SMART Sniffer",
-        "model": "Agent",
-    }

@@ -59,6 +59,8 @@ from .extract import (  # noqa: F401 - re-exported under the names they always h
     _extract_attribute,
 )
 from .device_link import agent_link
+from .device_naming import agent_device_info, drive_device_info
+from .host_name import disk_usage_name
 from .smart_presence import REASON_SMART_NOT_AVAILABLE
 from .devstat import data_volume, page_attributes, temperature_attrs_in_unit
 from .entity_plan import (
@@ -434,22 +436,13 @@ class SmartSnifferSensor(CoordinatorEntity[SmartSnifferCoordinator], SensorEntit
         self._drive_id = drive_id
         self._default_icon = description.icon
 
-        model = drive_data.get("model", "Unknown Drive")
-        serial = drive_data.get("serial", drive_id)
-
         self._attr_unique_id = (
             f"{coordinator.config_entry.entry_id}_{drive_id}_{description.key}"
         )
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, drive_id)},
-            "name": f"{model} ({serial})",
-            "manufacturer": _guess_manufacturer(model),
-            "model": model,
-            "serial_number": serial,
-            # Nest this drive under its agent so HA can cascade an area
-            # assignment from the agent to every drive it reports (#24).
-            **agent_link(coordinator),
-        }
+        self._attr_device_info = drive_device_info(
+            coordinator, drive_id, drive_data,
+            _guess_manufacturer(drive_data.get("model", "Unknown Drive")),
+        )
 
     @property
     def icon(self) -> str | None:
@@ -644,22 +637,13 @@ class SmartSnifferAttentionSensor(
         super().__init__(coordinator)
         self._drive_id = drive_id
 
-        model = drive_data.get("model", "Unknown Drive")
-        serial = drive_data.get("serial", drive_id)
-
         self._attr_unique_id = (
             f"{coordinator.config_entry.entry_id}_{drive_id}_attention"
         )
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, drive_id)},
-            "name": f"{model} ({serial})",
-            "manufacturer": _guess_manufacturer(model),
-            "model": model,
-            "serial_number": serial,
-            # Nest this drive under its agent so HA can cascade an area
-            # assignment from the agent to every drive it reports (#24).
-            **agent_link(coordinator),
-        }
+        self._attr_device_info = drive_device_info(
+            coordinator, drive_id, drive_data,
+            _guess_manufacturer(drive_data.get("model", "Unknown Drive")),
+        )
 
     def _thresholds(self) -> dict[str, int]:
         """Threshold overrides for this drive, from entry.data."""
@@ -745,22 +729,13 @@ class SmartSnifferAttentionReasonsSensor(
         super().__init__(coordinator)
         self._drive_id = drive_id
 
-        model = drive_data.get("model", "Unknown Drive")
-        serial = drive_data.get("serial", drive_id)
-
         self._attr_unique_id = (
             f"{coordinator.config_entry.entry_id}_{drive_id}_attention_reasons"
         )
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, drive_id)},
-            "name": f"{model} ({serial})",
-            "manufacturer": _guess_manufacturer(model),
-            "model": model,
-            "serial_number": serial,
-            # Nest this drive under its agent so HA can cascade an area
-            # assignment from the agent to every drive it reports (#24).
-            **agent_link(coordinator),
-        }
+        self._attr_device_info = drive_device_info(
+            coordinator, drive_id, drive_data,
+            _guess_manufacturer(drive_data.get("model", "Unknown Drive")),
+        )
 
     def _thresholds(self) -> dict[str, int]:
         """Threshold overrides for this drive, from entry.data."""
@@ -841,10 +816,9 @@ class SmartSnifferFilesystemSensor(
 
         # Group under a device named after the host, so filesystem sensors
         # sit alongside the drive devices on the integration page.
-        hostname = coordinator._hostname
         self._attr_device_info = {
             "identifiers": {(DOMAIN, f"{coordinator.config_entry.entry_id}_filesystems")},
-            "name": f"Disk Usage ({hostname})",
+            "name": disk_usage_name(coordinator.display_host, coordinator._hostname),
             "manufacturer": "SMART Sniffer",
             "model": "Filesystem Monitor",
             # Nest under the agent alongside the drive devices (#24).
@@ -974,19 +948,6 @@ class ZfsPoolLastScrubSensor(ZfsPoolEntity, SensorEntity):
 # Agent diagnostic sensors
 # ---------------------------------------------------------------------------
 
-def _agent_device_info(entry: ConfigEntry) -> dict[str, Any]:
-    """Build device_info for the per-agent device (shared with binary_sensor)."""
-    from .const import CONF_HOST
-    host = entry.data.get(CONF_HOST, "unknown")
-    title = entry.title or f"SMART Sniffer ({host})"
-    return {
-        "identifiers": {(DOMAIN, f"{entry.entry_id}_agent")},
-        "name": title,
-        "manufacturer": "SMART Sniffer",
-        "model": "Agent",
-    }
-
-
 class AgentVersionSensor(
     CoordinatorEntity[AgentHealthCoordinator], SensorEntity
 ):
@@ -1001,7 +962,7 @@ class AgentVersionSensor(
     def __init__(self, coordinator: AgentHealthCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_agent_version"
-        self._attr_device_info = _agent_device_info(entry)
+        self._attr_device_info = agent_device_info(entry)
 
     @property
     def native_value(self) -> str | None:
@@ -1023,7 +984,7 @@ class AgentLastSeenSensor(
     def __init__(self, coordinator: AgentHealthCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_agent_last_seen"
-        self._attr_device_info = _agent_device_info(entry)
+        self._attr_device_info = agent_device_info(entry)
 
     @property
     def native_value(self):
@@ -1056,7 +1017,7 @@ class AgentIPSensor(
         super().__init__(coordinator)
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_agent_ip"
-        self._attr_device_info = _agent_device_info(entry)
+        self._attr_device_info = agent_device_info(entry)
 
     @property
     def native_value(self) -> str:
@@ -1079,7 +1040,7 @@ class AgentPortSensor(
         super().__init__(coordinator)
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_agent_port"
-        self._attr_device_info = _agent_device_info(entry)
+        self._attr_device_info = agent_device_info(entry)
 
     @property
     def native_value(self) -> int:
@@ -1102,7 +1063,7 @@ class AgentOSSensor(
         super().__init__(coordinator)
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_agent_os"
-        self._attr_device_info = _agent_device_info(entry)
+        self._attr_device_info = agent_device_info(entry)
 
     @property
     def native_value(self) -> str | None:
@@ -1135,7 +1096,7 @@ class AgentPollIntervalSensor(
         super().__init__(coordinator)
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_agent_scan_interval"
-        self._attr_device_info = _agent_device_info(entry)
+        self._attr_device_info = agent_device_info(entry)
 
     @property
     def native_value(self) -> int:
