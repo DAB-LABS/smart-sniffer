@@ -869,12 +869,39 @@ def test_storing_the_identity_does_not_reload_the_entry():
     asyncio.run(init._async_update_listener(hass, entry))
     assert hass.config_entries.reloads == []
 
-    for change in ({"port": 9100}, {"token": "new"}, {"thresholds": {"x": {"a": 1}}}):
+    for change in ({"port": 9100}, {"token": "new"}, {"port": 9101, "thresholds": {"x": {"a": 1}}}):
         hass.config_entries.reloads.clear()
         entry.data = {**entry.data, **change}
         asyncio.run(init._async_update_listener(hass, entry))
         assert hass.config_entries.reloads == [entry.entry_id], change
         hass.data[DOMAIN][entry.entry_id][init._SETTINGS] = init._settings(entry)
+        hass.data[DOMAIN][entry.entry_id][init._THRESHOLDS] = init._thresholds(entry)
+
+
+def test_a_threshold_change_refreshes_instead_of_reloading():
+    init = _package_init()
+    hass, entry = _Hass(), _Entry()
+    entry.unique_id = "smartha-fixturehost"
+    hass.config_entries = _ConfigEntries()
+    refreshes = []
+
+    class _Refreshing:
+        async def async_request_refresh(self):
+            refreshes.append(dict(entry.data.get("thresholds") or {}))
+
+    hass.data[DOMAIN] = {entry.entry_id: {
+        init._SETTINGS: init._settings(entry),
+        init._THRESHOLDS: init._thresholds(entry),
+        "coordinator": _Refreshing(),
+    }}
+    for thresholds in ({"x": {"a": 1}}, {"x": {"a": 2}}, {}, None):
+        entry.data = {**entry.data, "thresholds": thresholds}
+        asyncio.run(init._async_update_listener(hass, entry))
+    assert refreshes == [{"x": {"a": 1}}, {"x": {"a": 2}}, {}]  # None is {} again
+    # An identity update after it neither refreshes nor reloads.
+    entry.data = {**entry.data, "agent_hostname": "fixturehost"}
+    asyncio.run(init._async_update_listener(hass, entry))
+    assert len(refreshes) == 3 and hass.config_entries.reloads == []
 
 
 def test_diagnostics_redact_the_drive_digest():

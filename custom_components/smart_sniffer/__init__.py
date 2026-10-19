@@ -8,6 +8,7 @@ proactive Attention Needed assessment.
 
 from __future__ import annotations
 
+import copy
 import logging
 from typing import Any
 
@@ -151,8 +152,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
     # Reload the integration when options are changed via the UI, but not
-    # when the coordinator only stored what it learned about the agent.
+    # when the coordinator only stored what it learned about the agent, and
+    # only refresh when the thresholds changed.
     hass.data[DOMAIN][entry.entry_id][_SETTINGS] = _settings(entry)
+    hass.data[DOMAIN][entry.entry_id][_THRESHOLDS] = _thresholds(entry)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     return True
@@ -256,16 +259,30 @@ def _store_key(entry_id: str) -> str:
 
 
 # Key under hass.data[DOMAIN][entry_id]: the entry as set up, less the agent
-# identity the coordinator keeps (agent_identity.ENTRY_IDENTITY_KEYS).
+# identity the coordinator keeps (agent_identity.ENTRY_IDENTITY_KEYS) and the
+# thresholds.
 _SETTINGS = "settings_at_setup"
+
+# Key under hass.data[DOMAIN][entry_id]: the per-drive thresholds in force.
+# Everything that uses them reads them from the entry when it runs
+# (attention.get_thresholds), so a change needs a refresh, not a reload.
+_THRESHOLDS = "thresholds_applied"
 
 # No name sync has completed for the entry yet.
 _UNNAMED = object()
 
 
 def _settings(entry: ConfigEntry) -> tuple[Any, ...]:
-    data = {k: v for k, v in entry.data.items() if k not in ENTRY_IDENTITY_KEYS}
+    data = {
+        k: v
+        for k, v in entry.data.items()
+        if k not in ENTRY_IDENTITY_KEYS and k != "thresholds"
+    }
     return (entry.title, entry.unique_id, data, dict(entry.options))
+
+
+def _thresholds(entry: ConfigEntry) -> dict[str, Any]:
+    return copy.deepcopy(entry.data.get("thresholds") or {})
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -275,11 +292,20 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
     (coordinator._store_identity) changes nothing the entry was set up with,
     so it does not reload. When it changed the host label (the agent reported
     a new host name, or its first), the devices are renamed instead.
+
+    A threshold save (the options flow's threshold form) does not reload
+    either: the drives are polled again and judged by the new thresholds,
+    and nothing is unloaded. Thresholds saved together with any other
+    change reload, which applies both.
     """
     entry_data = hass.data.get(DOMAIN, {}).get(entry.entry_id) or {}
     at_setup = entry_data.get(_SETTINGS)
     if at_setup is not None and at_setup == _settings(entry):
         if entry_data.get(NAMED_HOST, _UNNAMED) != display_host(entry):
             async_sync_names(hass, entry)
+        thresholds = _thresholds(entry)
+        if entry_data.get(_THRESHOLDS, {}) != thresholds:
+            entry_data[_THRESHOLDS] = thresholds
+            await entry_data["coordinator"].async_request_refresh()
         return
     await hass.config_entries.async_reload(entry.entry_id)
