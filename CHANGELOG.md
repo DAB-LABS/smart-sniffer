@@ -2,6 +2,21 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.8.5 -- 2026-10-18
+
+**Integration only: install the update from HACS and restart; no agent update.**
+Saving an alert threshold no longer restarts the integration. The drive is
+checked again at once against the new limit, and its notification follows.
+
+### Fixed
+- **Saving a threshold made every sensor of that agent unavailable for a
+  moment** while the integration restarted. It now stays loaded.
+- **Lowering a threshold turned Attention Needed on without a notification.**
+  The notification now appears on the save.
+- **Raising a threshold cleared Attention Needed but left its notification.**
+  The notification is now dismissed.
+- **An attention reason called your own limit "accepted"** -- it now reads "your limit".
+
 ## v0.8.4 -- 2026-10-17
 
 **Integration only: install the update from HACS and restart; no agent update.**
