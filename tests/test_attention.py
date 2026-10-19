@@ -433,7 +433,7 @@ def test_reading_above_threshold_still_alerts(att, drive, set_ata_raw):
     )
     assert state == "YES"
     assert severity == "critical"
-    assert "Reallocated Sector Count: 152 (accepted 147)" in reasons
+    assert "Reallocated Sector Count: 152 (your limit 147)" in reasons
 
 
 def test_reading_below_threshold_is_accepted(att, drive, set_ata_raw):
@@ -561,8 +561,27 @@ def test_nvme_spare_warn_direction_is_not_inverted(att, drive, set_nvme):
     assert quiet == "NO"
     assert loud == "MAYBE"
     assert reasons == [
-        "NVMe available spare low: 30% remaining (accepted down to 50%)"
+        "NVMe available spare low: 30% remaining (your limit 50%)"
     ]
+
+
+def test_a_reading_past_your_own_limit_names_it_your_limit(att, drive):
+    """A reason raised by a limit the user set calls it "your limit". It used
+    to say "accepted", the word for a reading kept under that limit, so a drive
+    needing attention read as if the user had accepted it."""
+    wear = att.LABEL_SSD_WEAR
+    cases = [
+        ("ata_skhynix", {wear: 1},
+         "SSD wear at 1% of rated life (your limit 1%)"),
+        ("nvme_healthy", {wear: 1},
+         "NVMe drive wear at 2% of rated life (your limit 1%)"),
+        ("nvme_media_errors", {"NVMe Media Errors": 2},
+         "NVMe media errors: 3 (your limit 2)"),
+    ]
+    for fixture, thresholds, reason in cases:
+        _, _, reasons, accepted = att.evaluate_attention(drive(fixture), thresholds)
+        assert reasons == [reason]
+        assert accepted == []
 
 
 # --- 11. A threshold naming an attribute the drive does not report --------

@@ -110,7 +110,7 @@ def test_accepted_and_threshold_variants_carry_the_suffix():
         ["Reported Uncorrectable Errors: 18 (accepted 18; from device statistics)"],
     )
     assert att.evaluate_attention(drive, {label: 10})[2] == [
-        "Reported Uncorrectable Errors: 18 (accepted 10; from device statistics)"
+        "Reported Uncorrectable Errors: 18 (your limit 10; from device statistics)"
     ]
 
 

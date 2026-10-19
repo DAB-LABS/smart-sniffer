@@ -211,7 +211,7 @@
     "YES",
     "critical",
     [
-     "Reported Uncorrectable Errors: 9 (accepted 5)"
+     "Reported Uncorrectable Errors: 9 (your limit 5)"
     ],
     []
    ],
@@ -459,7 +459,7 @@
     "YES",
     "critical",
     [
-     "Reallocated Sector Count: 147 (accepted 3)",
+     "Reallocated Sector Count: 147 (your limit 3)",
      "Reallocated Event Count: 47 (expected 0)"
     ],
     []

@@ -554,7 +554,7 @@ def _breach_text(label: str, value: int, limit: int) -> str:
     """
     default = default_threshold(label)
     if limit != default:
-        return f"{label}: {value} (accepted {limit})"
+        return f"{label}: {value} (your limit {limit})"
     if default:
         return f"{label}: {value} (threshold {default})"
     return f"{label}: {value} (expected 0)"
@@ -781,7 +781,7 @@ def evaluate_attention(
         )
         if breached:
             critical_reasons.append(
-                f"NVMe media errors: {media_errors} (accepted {limit})"
+                f"NVMe media errors: {media_errors} (your limit {limit})"
                 if limit != default_threshold(LABEL_NVME_MEDIA_ERRORS)
                 else f"NVMe media errors: {media_errors} (expected 0)"
             )
@@ -813,7 +813,7 @@ def evaluate_attention(
                         f"NVMe available spare low: {spare}% remaining"
                         if limit == default_threshold(LABEL_NVME_SPARE_WARN)
                         else f"NVMe available spare low: {spare}% remaining "
-                             f"(accepted down to {limit}%)"
+                             f"(your limit {limit}%)"
                     )
                 elif was_accepted:
                     accepted.append(
@@ -835,7 +835,7 @@ def evaluate_attention(
                 "consider scheduling replacement"
                 if limit == default_threshold(LABEL_SSD_WEAR)
                 else f"NVMe drive wear at {pct_used}% of rated life "
-                     f"(accepted {limit}%)"
+                     f"(your limit {limit}%)"
             )
         elif was_accepted:
             accepted.append(
@@ -912,7 +912,7 @@ def evaluate_attention(
                             "consider scheduling replacement"
                             if limit == default_threshold(LABEL_SSD_WEAR)
                             else f"SSD wear at {pct_used}% of rated life "
-                                 f"(accepted {limit}%)"
+                                 f"(your limit {limit}%)"
                         )
                         seen_labels.add("SSD wear")
                     elif was_accepted:
@@ -939,7 +939,7 @@ def evaluate_attention(
                     f"SSD wear at {value}% of rated life -- "
                     "consider scheduling replacement"
                     if limit == default_threshold(label)
-                    else f"SSD wear at {value}% of rated life (accepted {limit}%)"
+                    else f"SSD wear at {value}% of rated life (your limit {limit}%)"
                 ))
                 seen_labels.add("SSD wear")
             elif was_accepted:
