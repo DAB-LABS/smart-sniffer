@@ -193,10 +193,7 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 		handler = authMiddleware(cfg.Token, mux)
 	}
 
-	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", cfg.Port),
-		Handler: handler,
-	}
+	srv := newHTTPServer(fmt.Sprintf(":%d", cfg.Port), handler)
 
 	// --- Bind the listener explicitly so we can signal ready at the exact
 	// moment the kernel has accepted our bind. srv.Serve(ln) then blocks
@@ -472,6 +469,28 @@ func parseScanOutput(output string) []string {
 // ---------------------------------------------------------------------------
 // Auth middleware
 // ---------------------------------------------------------------------------
+
+// HTTP server limits. A client that opens a connection and never finishes
+// its request headers, or leaves an idle keep-alive connection open, is
+// dropped instead of holding a connection and a goroutine forever. There is
+// deliberately no ReadTimeout or WriteTimeout: requests carry no body, and a
+// response is written from the cache, but a timeout on the write could cut
+// off a large /api/drives/{id} payload to a slow client.
+const (
+	httpReadHeaderTimeout = 5 * time.Second
+	httpIdleTimeout       = 60 * time.Second
+	httpMaxHeaderBytes    = 64 << 10 // 64 KiB
+)
+
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: httpReadHeaderTimeout,
+		IdleTimeout:       httpIdleTimeout,
+		MaxHeaderBytes:    httpMaxHeaderBytes,
+	}
+}
 
 func authMiddleware(token string, next http.Handler) http.Handler {
 	expected := []byte("Bearer " + token)
