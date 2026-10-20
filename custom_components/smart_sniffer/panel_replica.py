@@ -181,6 +181,12 @@ async def ws_replica_delete(hass: HomeAssistant, msg: dict[str, Any]) -> dict[st
 REPLICA_COMMANDS = (ws_replica_library, ws_replica_add, ws_replica_remove, ws_replica_save,
                     ws_replica_file, ws_replica_delete, ws_replica_edit)
 
+# Join the panel's command list (see the import at the end of panel_ws.py).
+from . import panel_ws as _panel_ws  # noqa: E402
+
+if not set(REPLICA_COMMANDS) & set(_panel_ws.COMMANDS):
+    _panel_ws.COMMANDS = _panel_ws.COMMANDS + REPLICA_COMMANDS
+
 
 # ── Upload ─────────────────────────────────────────────────────────────────
 

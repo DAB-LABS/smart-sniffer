@@ -746,10 +746,10 @@ COMMANDS = (
     ws_agent_add, ws_note_dismiss, ws_subscribe,
 )
 
-# The Replica's commands (panel_replica.py), which use the helpers above.
-from .panel_replica import REPLICA_COMMANDS  # noqa: E402
-
-COMMANDS = COMMANDS + REPLICA_COMMANDS
+# The Replica's commands (panel_replica.py) use the helpers above and add
+# themselves to COMMANDS when that module loads. It is imported as a module,
+# not by name, so importing panel_replica first is not a circular import.
+from . import panel_replica  # noqa: E402,F401
 
 
 # ── Agentic access over HTTP, for scripts and AI tools ─────────────────────

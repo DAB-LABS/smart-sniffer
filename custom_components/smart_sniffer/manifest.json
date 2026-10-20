@@ -1,6 +1,7 @@
 {
   "domain": "smart_sniffer",
   "name": "SMART Sniffer",
+  "after_dependencies": ["hassio", "network"],
   "codeowners": ["@DAB-LABS"],
   "config_flow": true,
   "dependencies": ["zeroconf", "http", "frontend", "panel_custom", "websocket_api"],
