@@ -275,6 +275,21 @@ def nvme_counter(nvme_log: dict[str, Any], key: str) -> int | None:
     return value
 
 
+def drive_log_name(drive_data: Any) -> str:
+    """How a log line names a drive: its device path, else its model.
+
+    Never its id or serial (the id is a slug of the serial), so a log pasted
+    into a bug report does not carry them. Device names and notifications
+    still show the serial.
+    """
+    if isinstance(drive_data, dict):
+        for key in ("device_path", "model"):
+            value = drive_data.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return "a drive"
+
+
 def _note_unreadable(drive_data: dict[str, Any], key: str) -> None:
     drive_id = str(drive_data.get("id", "unknown"))
     if drive_id in _UNREADABLE_LOGGED:
@@ -283,7 +298,7 @@ def _note_unreadable(drive_data: dict[str, Any], key: str) -> None:
     nvme_log = coerce_smart_data(drive_data).get("nvme_smart_health_information_log") or {}
     _LOGGER.debug(
         "Drive %s: NVMe %s is not readable (%s), shown as unknown and not counted",
-        drive_id,
+        drive_log_name(drive_data),
         key,
         nvme_log.get(f"{key}_s", nvme_log.get(key)),
     )
@@ -704,7 +719,7 @@ def coerce_smart_data(drive_data: dict[str, Any]) -> dict[str, Any]:
     # anything else means something unexpected upstream.
     _LOGGER.debug(
         "Drive %s: unusable smart_data (%s), treating as no data",
-        drive_data.get("id", "unknown"),
+        drive_log_name(drive_data),
         type(raw).__name__,
     )
     return {}

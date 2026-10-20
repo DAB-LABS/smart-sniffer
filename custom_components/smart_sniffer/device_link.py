@@ -77,3 +77,23 @@ def agent_link(coordinator: Any) -> dict[str, Any]:
         entry_id,
         entry_data.get(AGENT_DEVICE_ID),
     )
+
+
+def device_entry_ids(device: Any) -> set[str]:
+    """The config entries a device registry entry belongs to.
+
+    Up to 2026.8 a device can belong to several entries and lists them in
+    ``config_entries``. From 2026.8 it belongs to one, ``config_entry_id``,
+    and from 2026.10 reading ``config_entries`` logs a deprecation; core
+    removes it in 2027.10.0. As with via_device_id above, the attribute is the
+    capability: a core whose devices carry ``config_entry_id`` is asked for
+    that, an older one for ``config_entries``. A restored composite device
+    (a pre-split device id looked up after the 2026.8 migration) still
+    answers ``config_entries`` with every entry, without the deprecation.
+    """
+    if not hasattr(device, "config_entry_id") or getattr(
+        device, "is_composite_device", False
+    ):
+        return set(getattr(device, "config_entries", None) or ())
+    entry_id = device.config_entry_id
+    return {entry_id} if entry_id else set()

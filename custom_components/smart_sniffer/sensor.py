@@ -62,6 +62,7 @@ from .device_link import agent_link
 from .device_naming import agent_device_info, drive_device_info
 from .host_name import disk_usage_name
 from .smart_presence import REASON_SMART_NOT_AVAILABLE
+from .source import agent_address, agent_port, is_replica_data
 from .devstat import data_volume, page_attributes, temperature_attrs_in_unit
 from .entity_plan import (
     KIND_AGENT_IP,
@@ -316,13 +317,15 @@ async def async_setup_entry(
     plan = sensor_specs(
         coordinator.data, entry.entry_id,
         coordinator.registered_pool_names(), coordinator.drive_classes,
+        replica=is_replica_data(entry.data),
     )
     async_add_entities(build(take_new(plan, created)), update_before_add=False)
 
     def _add_new() -> None:
         # Pools registered but not reported were planned at setup; after it,
         # only what the agent reports can be new.
-        later = sensor_specs(coordinator.data, entry.entry_id, (), coordinator.drive_classes)
+        later = sensor_specs(coordinator.data, entry.entry_id, (), coordinator.drive_classes,
+                             replica=is_replica_data(entry.data))
         new = take_new(later, created)
         if new:
             async_add_entities(build(new), update_before_add=False)
@@ -1021,8 +1024,7 @@ class AgentIPSensor(
 
     @property
     def native_value(self) -> str:
-        from .const import CONF_HOST
-        return self._entry.data.get(CONF_HOST, "unknown")
+        return agent_address(self._entry.data) or "unknown"
 
 
 class AgentPortSensor(
@@ -1044,8 +1046,7 @@ class AgentPortSensor(
 
     @property
     def native_value(self) -> int:
-        from .const import CONF_PORT
-        return self._entry.data.get(CONF_PORT, 9099)
+        return agent_port(self._entry.data)
 
 
 class AgentOSSensor(

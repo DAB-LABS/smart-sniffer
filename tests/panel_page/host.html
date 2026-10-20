@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SMART Sniffer panel test shell</title>
+<!-- Plays Home Assistant's shell for the page tests: a hass object whose
+     websocket is the test backend over HTTP, and the panel element created
+     the way Home Assistant creates a custom panel. -->
+<style>
+  html, body { margin: 0; height: 100%; background: #111; }
+  #shell { height: 100vh; }
+</style>
+</head>
+<body>
+<div id="shell"></div>
+<script>
+  async function callWS(msg) {
+    const r = await fetch('/fake/ws', { method: 'POST', body: JSON.stringify(msg) });
+    const j = await r.json();
+    if (j.error) throw j.error;
+    return j.result;
+  }
+  async function subscribeMessage(callback, msg) {
+    const r = await fetch('/fake/subscribe', { method: 'POST', body: JSON.stringify(msg) });
+    const { sub } = await r.json();
+    let after = 0;
+    let live = true;
+    (async function loop() {
+      while (live) {
+        try {
+          const e = await (await fetch(`/fake/events?sub=${sub}&after=${after}`)).json();
+          if (e.gone) return;
+          e.events.forEach((ev) => { if (live) callback(ev); });
+          after = e.next;
+        } catch (err) {
+          await new Promise((res) => setTimeout(res, 300));
+        }
+      }
+    }());
+    return async () => {
+      live = false;
+      await fetch('/fake/unsubscribe', { method: 'POST', body: JSON.stringify({ sub }) });
+    };
+  }
+  window.hass = {
+    user: { name: 'Admin', is_admin: true },
+    callWS,
+    connection: { subscribeMessage },
+    fetchWithAuth: (path, opts) => fetch(path, opts),
+  };
+  window.navigated = [];
+  window.menuToggles = 0;
+  window.addEventListener('location-changed', () => window.navigated.push(location.pathname + location.search));
+  document.addEventListener('hass-toggle-menu', () => { window.menuToggles += 1; });
+</script>
+<script type="module">
+  const version = new URLSearchParams(location.search).get('v') || '0.9.0-dev';
+  await import(`/smart_sniffer_static/panel.js?v=${version}`);
+  const el = document.createElement('smart-sniffer-panel');
+  el.hass = window.hass;
+  el.narrow = window.matchMedia('(max-width: 870px)').matches;
+  el.panel = { config: { version, static: '/smart_sniffer_static' } };
+  // ?shell=ha plays Home Assistant 2026.10's layout: the panel element sits
+  // in containers that give it no height (partial-panel-resolver,
+  // ha-panel-custom), so only the panel's own CSS can make it fill the
+  // window. The default shell gives it the full height, as 2024.4 does.
+  let parent = document.getElementById('shell');
+  if (new URLSearchParams(location.search).get('shell') === 'ha') {
+    document.documentElement.style.height = 'auto';
+    document.body.style.height = 'auto';
+    parent.style.height = 'auto';
+    for (const name of ['partial-panel-resolver', 'ha-panel-custom']) {
+      const box = document.createElement('div');
+      box.className = name;
+      parent.appendChild(box);
+      parent = box;
+    }
+  }
+  parent.appendChild(el);
+  window.panelEl = el;
+</script>
+</body>
+</html>

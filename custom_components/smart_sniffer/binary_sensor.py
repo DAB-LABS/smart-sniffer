@@ -53,6 +53,7 @@ from .entity_plan import (
 )
 from .coordinator import AgentHealthCoordinator, SmartSnifferCoordinator
 from .pool_entity import ZfsPoolEntity, ZfsPoolMissingAwareEntity
+from .source import is_replica_data
 from .pool_health import (
     MISSING_REASON,
     data_errors,
@@ -142,12 +143,14 @@ async def async_setup_entry(
         return entities
 
     plan = binary_sensor_specs(
-        coordinator.data, entry.entry_id, coordinator.registered_pool_names()
+        coordinator.data, entry.entry_id, coordinator.registered_pool_names(),
+        replica=is_replica_data(entry.data),
     )
     async_add_entities(build(take_new(plan, created)), update_before_add=False)
 
     def _add_new() -> None:
-        later = binary_sensor_specs(coordinator.data, entry.entry_id, ())
+        later = binary_sensor_specs(coordinator.data, entry.entry_id, (),
+                                    replica=is_replica_data(entry.data))
         new = take_new(later, created)
         if new:
             async_add_entities(build(new), update_before_add=False)

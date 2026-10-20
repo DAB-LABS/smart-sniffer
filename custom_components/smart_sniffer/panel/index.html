@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SMART Sniffer Control Center</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5' fill='none' stroke='%238f8f8f' stroke-width='1.8'/%3E%3Cpath d='M10 10l4.5 4.5' stroke='%238f8f8f' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+<!-- The SMART Sniffer panel's page, framed by panel.js. Every file it loads
+     carries the page's own ?v= (the integration version), so an update is
+     never served from an old cache. The page is the HA App 0.3.1 Control
+     Center; Tailwind is gone (the page used none of its classes). -->
+<script>
+(function () {
+  var v = new URLSearchParams(window.location.search).get('v') || '';
+  var q = v ? '?v=' + encodeURIComponent(v) : '';
+  window.SS_PAGE_VERSION = v;
+  var css = document.createElement('link');
+  css.rel = 'stylesheet';
+  css.href = 'cc.css' + q;
+  document.head.appendChild(css);
+  ['cc.js', 'alpine.min.js'].forEach(function (name) {
+    var s = document.createElement('script');
+    s.src = name + q;
+    s.async = false;
+    document.head.appendChild(s);
+  });
+}());
+</script>
+</head>
+<body x-data="cc()">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="lock" viewBox="0 0 12 14"><rect x="1.5" y="6.2" width="9" height="6.8" rx="1"/><path d="M3.7 6.2V4.3a2.3 2.3 0 0 1 4.6 0v1.9"/></symbol>
+  <symbol id="exit" viewBox="0 0 14 14"><path d="M6.2 2.2H2.2v9.6h9.6V7.8"/><path d="M8.6 1.6h3.8v3.8M12.4 1.6 6.6 7.4"/></symbol>
+  <symbol id="eye" viewBox="0 0 16 16"><path d="M1.2 8C3 4.9 5.3 3.4 8 3.4s5 1.5 6.8 4.6C13 11.1 10.7 12.6 8 12.6S3 11.1 1.2 8Z"/><circle cx="8" cy="8" r="2.1"/></symbol>
+  <symbol id="eye-shut" viewBox="0 0 16 16"><path d="M1.2 8C3 4.9 5.3 3.4 8 3.4s5 1.5 6.8 4.6C13 11.1 10.7 12.6 8 12.6S3 11.1 1.2 8Z"/><path d="M2.6 13.4 13.4 2.6"/></symbol>
+  <symbol id="trash" viewBox="0 0 16 16"><path d="M2.5 4.2h11M6.2 4.2V2.6h3.6v1.6M3.9 4.2l.7 9.2h6.8l.7-9.2M6.6 6.8v4.4M9.4 6.8v4.4"/></symbol>
+  <symbol id="download" viewBox="0 0 16 16"><path d="M8 2.2v8M4.6 7.2 8 10.6l3.4-3.4M2.6 11.6v2h10.8v-2"/></symbol>
+  <symbol id="replica-save" viewBox="0 0 16 16"><path d="M2.6 4.6v8.8h10.8V4.6"/><path d="M1.8 2.6h12.4v2H1.8z"/><path d="M8 6.6v4.8M5.6 9 8 11.4 10.4 9"/></symbol>
+  <symbol id="grip" viewBox="0 0 10 16"><circle cx="3" cy="3" r="1.2"/><circle cx="7" cy="3" r="1.2"/><circle cx="3" cy="8" r="1.2"/><circle cx="7" cy="8" r="1.2"/><circle cx="3" cy="13" r="1.2"/><circle cx="7" cy="13" r="1.2"/></symbol>
+  <symbol id="chevron" viewBox="0 0 20 12"><path d="M2 2l8 8 8-8"/></symbol>
+  <symbol id="glass" viewBox="0 0 16 16"><circle cx="6.5" cy="6.5" r="4.5"/><path d="M10 10l4.5 4.5"/></symbol>
+  <symbol id="adjust" viewBox="0 0 512 512" fill="currentColor"><path d="M461.913,72.348H283.78c-15.245-20.262-39.485-33.391-66.737-33.391c-27.252,0-51.492,13.129-66.737,33.391H50.087 C22.469,72.348,0,94.817,0,122.435c0,27.618,22.469,50.087,50.087,50.087h100.22c15.245,20.262,39.485,33.391,66.737,33.391 c27.252,0,51.492-13.129,66.737-33.391h178.133c27.618,0,50.087-22.469,50.087-50.087C512,94.817,489.531,72.348,461.913,72.348z M135.245,139.13H50.087c-9.206,0-16.696-7.49-16.696-16.696c0-9.206,7.49-16.696,16.696-16.696h85.158 c-1.1,5.396-1.68,10.979-1.68,16.696C133.565,128.151,134.145,133.734,135.245,139.13z M217.043,172.522 c-27.618,0-50.087-22.469-50.087-50.087c0-27.618,22.469-50.087,50.087-50.087c27.618,0,50.087,22.469,50.087,50.087 C267.13,150.053,244.661,172.522,217.043,172.522z M461.913,139.13H298.842c1.1-5.396,1.68-10.979,1.68-16.696 c0-5.717-0.58-11.3-1.68-16.696h163.071c9.206,0,16.696,7.49,16.696,16.696C478.609,131.641,471.119,139.13,461.913,139.13z"/><path d="M461.913,339.478h-77.959c-15.245-20.262-39.485-33.391-66.737-33.391c-27.252,0-51.492,13.129-66.737,33.391H50.087 C22.469,339.478,0,361.947,0,389.565c0,27.618,22.469,50.087,50.087,50.087H250.48c15.245,20.262,39.485,33.391,66.737,33.391 s51.492-13.129,66.737-33.391h77.959c27.618,0,50.087-22.469,50.087-50.087C512,361.947,489.531,339.478,461.913,339.478z M235.419,406.261H50.087c-9.206,0-16.696-7.49-16.696-16.696c0-9.206,7.49-16.696,16.696-16.696h185.332 c-1.1,5.396-1.68,10.979-1.68,16.696C233.739,395.282,234.319,400.865,235.419,406.261z M317.217,439.652 c-27.618,0-50.087-22.469-50.087-50.087c0-27.618,22.469-50.087,50.087-50.087s50.087,22.469,50.087,50.087 C367.304,417.183,344.835,439.652,317.217,439.652z M461.913,406.261h-62.897c1.1-5.396,1.68-10.979,1.68-16.696 c0-5.717-0.58-11.3-1.68-16.696h62.897c9.206,0,16.696,7.49,16.696,16.696C478.609,398.771,471.119,406.261,461.913,406.261z"/></symbol>
+  <symbol id="copy" viewBox="0 0 16 16"><rect x="5.2" y="5.2" width="8.3" height="8.3" rx="1"/><path d="M10.8 5.2V3.5a1 1 0 0 0-1-1H3.5a1 1 0 0 0-1 1v6.3a1 1 0 0 0 1 1h1.7"/></symbol>
+</svg>
+
+<main class="page" x-show="view === 'cards'">
+  <header class="app-head">
+    <div class="brand">
+      <img class="mark" src="img/mark.png" alt="" width="42" height="42" onerror="this.hidden=true;this.nextElementSibling.hidden=false">
+      <svg class="mark glass" hidden aria-hidden="true"><use href="#glass"/></svg>
+      <img class="wordmark" src="img/wordmark.png" alt="SMART Sniffer" width="252" height="27">
+      <span class="page-name">Control Center</span>
+    </div>
+    <div class="head-side">
+      <div class="versions"><span x-show="info && info.version">integration <b x-text="info && info.version"></b></span></div>
+      <div class="head-tools">
+        <button class="btn btn-sm eye-btn" type="button" :aria-pressed="showHidden ? 'true' : 'false'" :disabled="!hiddenCount && !showHidden" :aria-label="showHidden ? 'Hidden cards shown, ' + hiddenCount : hiddenCount + ' hidden, press to see them'" title="Hidden cards" @click="toggleShowHidden()"><svg class="eye-g" aria-hidden="true" x-show="!showHidden"><use href="#eye-shut"/></svg><svg class="eye-g" aria-hidden="true" x-show="showHidden" style="display:none"><use href="#eye"/></svg><span x-text="hiddenCount">0</span></button>
+        <button class="btn btn-sm" type="button" @click="refresh()">Refresh</button>
+      </div>
+    </div>
+  </header>
+  <!-- The SMART Sniffer App's agent on this Home Assistant box, on one line:
+       shown only when the App is here and its agent is a machine -->
+  <template x-if="topAgent">
+    <section class="agent-line" aria-label="The SMART Sniffer App's agent">
+      <span class="sec-label al-name">HAOS SMART AGENT:</span>
+      <span class="cp"><span class="cp-v mono" x-text="topAgent.addr"></span><button class="copy" type="button" aria-label="Copy the agent address" title="Copy" @click="copy($event, topAgent.addr, 'top:addr')"><svg aria-hidden="true"><use href="#copy"/></svg></button><small class="copied" role="status" x-show="ui.copied === 'top:addr'" x-text="ui.copiedText"></small></span>
+      <template x-if="topAgent.mdns"><span class="cp al-mdns"><span class="cp-k">mDNS</span><span class="cp-v mono" x-text="topAgent.mdns"></span><button class="copy" type="button" aria-label="Copy the mDNS name" title="Copy" @click="copy($event, topAgent.mdns, 'top:mdns')"><svg aria-hidden="true"><use href="#copy"/></svg></button><small class="copied" role="status" x-show="ui.copied === 'top:mdns'" x-text="ui.copiedText"></small></span></template>
+    </section>
+  </template>
+  <p class="sec-label sec-drives">DRIVES:</p>
+  <p class="page-err" x-show="pageErr || hostsErr" x-text="pageErr || hostsErr" role="alert"></p>
+  <template x-if="ui.pop"><div class="numpop" role="dialog" aria-label="Exact value" :style="'left:' + ui.pop.x + 'px;top:' + ui.pop.y + 'px'"><span class="cp-v mono" x-text="ui.pop.text"></span><button class="copy" type="button" aria-label="Copy" title="Copy" @click="copy($event, ui.pop.copy, 'pop')"><svg aria-hidden="true"><use href="#copy"/></svg></button><small class="copied" role="status" x-show="ui.copied === 'pop'" x-text="ui.copiedText"></small></div></template>
+  <p class="toast" x-show="ui.toast" role="status"><span x-text="ui.toast"></span><template x-if="ui.toastSub"><span class="toast-sub" x-text="' ' + ui.toastSub"></span></template><template x-if="ui.toastAct"><button class="btn btn-sm toast-act" type="button" @click="toastGo()" x-text="ui.toastAct.label"></button></template></p>
+  <template x-if="movedNote">
+    <p class="ha-notice moved-note" role="note"><span>Replicas moved into the integration. Create them again from + &gt; Replica.</span><button class="notice-x" type="button" aria-label="Dismiss" title="Dismiss" @click="dismissMovedNote()">&times;</button></p>
+  </template>
+  <template x-if="importNote">
+    <div class="ha-notice import-note" role="note">
+      <div class="imp-body">
+        <span x-text="importText(importNote)"></span>
+        <template x-if="(importNote.skipped || []).length"><button class="btn btn-sm imp-show" type="button" :aria-expanded="importShow ? 'true' : 'false'" @click="importShow = !importShow" x-text="importShow ? 'Hide' : 'Show'"></button></template>
+        <template x-if="importShow && (importNote.skipped || []).length">
+          <ul class="imp-skipped">
+            <template x-for="s in importNote.skipped" :key="s.item_id">
+              <li><span class="mono dim" x-text="importReason(s)"></span><button class="btn btn-sm" type="button" :aria-label="'Discard ' + s.address + ':' + s.port" @click="discardImport(s)">Discard</button></li>
+            </template>
+          </ul>
+        </template>
+      </div>
+      <button class="notice-x" type="button" aria-label="Dismiss" title="Dismiss" @click="dismissImportNote()">&times;</button>
+    </div>
+  </template>
+  <template x-if="noMachines">
+    <p class="empty-line">No machines yet. Add one with the + card.</p>
+  </template>
+  <template x-if="noMachines && appNote">
+    <p class="ha-notice app-note" role="note"><span>Monitoring the drives in this Home Assistant box? <a :href="appNoteHref" target="_blank" rel="noopener" @click="openAppStore($event)">Install the SMART Sniffer App.</a></span><button class="notice-x" type="button" aria-label="Dismiss" title="Dismiss" @click="dismissAppNote()">&times;</button></p>
+  </template>
+
+  <!-- ═══ One grid: a card per drive, pool or filesystem, then + ═══ -->
+  <div class="grid" :class="{ dragging: !!drag }">
+    <template x-for="c in shownCards" :key="c.id">
+      <article class="card" :class="cardClass(c)" :data-card="c.id" :aria-label="pill(c) + ', ' + title(c)">
+        <div class="c-head">
+          <button class="grip" type="button" :aria-label="'Move ' + title(c) + '. Arrow keys move it one place.'" title="Drag to move" @pointerdown="gripDown($event, c)" @keydown="gripKey($event, c)" @contextmenu.prevent><svg aria-hidden="true"><use href="#grip"/></svg></button>
+          <div class="c-name">
+            <template x-if="!renaming(c, 'title')"><h3 class="c-title"><template x-if="canRename(c)"><span class="t-name" tabindex="0" role="button" :aria-label="title(c) + '. Rename: Enter or F2'" x-text="title(c)" @click="startRename(c, 'title', $event)" @keydown="nameKey($event, c, 'title')"></span></template><template x-if="!canRename(c)"><span x-text="title(c)"></span></template></h3></template>
+            <template x-if="renaming(c, 'title')"><span class="name-box" :style="'min-height:' + ui.rename.h + 'px'"><input class="name-in c-title" type="text" maxlength="100" spellcheck="false" autocomplete="off" :aria-label="'Name of ' + baseTitle(c) + '. Enter saves, Esc cancels, empty restores the original.'" :placeholder="baseTitle(c)" x-model="ui.rename.value" @mousedown="renameDown($event)" @keydown="renameKey($event)" @blur="finishRename(true)"></span></template>
+          </div>
+          <div class="c-tags">
+            <span class="exit-slot">
+              <template x-if="glyph(c).kind === 'blue'"><a class="exit" :href="glyph(c).href" target="_top" aria-label="Open in Home Assistant" title="Open in Home Assistant"><svg aria-hidden="true"><use href="#exit"/></svg></a></template>
+              <template x-if="glyph(c).kind === 'grey'"><button class="exit add" type="button" :aria-expanded="asking(c) ? 'true' : 'false'" aria-label="Create sensors and alerts" title="Create sensors and alerts" @click="askAdd(c)"><svg aria-hidden="true"><use href="#exit"/></svg></button></template>
+            </span>
+            <template x-if="!renaming(c, 'pill')"><span class="pill" :class="{ 'pill-ed': canRenameHost(c), 'pill-ghost': isReplica(c) }" :tabindex="canRenameHost(c) ? 0 : null" :role="canRenameHost(c) ? 'button' : null" :aria-label="canRenameHost(c) ? 'Machine ' + machine(c) + '. Rename: Enter or F2' : null" x-text="pill(c)" @click="startRename(c, 'pill', $event)" @keydown="nameKey($event, c, 'pill')"></span></template>
+            <template x-if="renaming(c, 'pill')"><span class="pill pill-ed pill-edit" :style="'width:' + ui.rename.w + 'px'"><input class="name-in" type="text" maxlength="100" spellcheck="false" autocomplete="off" :aria-label="'Name of this machine. Enter saves, Esc cancels, empty restores the original.'" x-model="ui.rename.value" @mousedown="renameDown($event)" @keydown="renameKey($event)" @blur="finishRename(true)"></span></template>
+          </div>
+        </div>
+        <template x-if="asking(c)">
+          <div class="ask" role="group" :aria-label="ui.confirm.guide ? 'Install the integration' : 'Confirm'">
+            <template x-if="!ui.confirm.guide">
+              <div class="ask-body"><b class="ask-title" x-text="ui.confirm.text"></b><span class="ask-line" x-text="ui.confirm.line"></span><span class="ask-btns"><button class="btn btn-sm btn-primary" type="button" :disabled="ui.confirm.busy" @click="confirmAdd()">Create</button><button class="btn btn-sm btn-quiet" type="button" @click="closeConfirm()">Cancel</button></span><span class="ask-err" x-show="ui.confirm.err" x-text="ui.confirm.err"></span></div>
+            </template>
+            <template x-if="ui.confirm.guide">
+              <div class="ask-body"><b class="ask-title">Sensors and alerts need the SMART Sniffer integration</b><ol class="ask-steps"><li><span x-text="guideSteps().first"></span> <a :href="guideSteps().href" target="_blank" rel="noopener" x-text="guideSteps().link"></a></li><li>Restart Home Assistant.</li><li>Come back here and click again.</li></ol><span class="ask-btns"><button class="btn btn-sm btn-quiet" type="button" @click="closeConfirm()">Close</button></span></div>
+            </template>
+          </div>
+        </template>
+        <div class="c-where"><template x-for="(w, i) in where(c)" :key="i"><span x-text="w"></span></template></div>
+        <template x-if="vitals(c).length">
+          <div class="c-vitals"><template x-for="(v, i) in vitals(c)" :key="i"><span x-text="v"></span></template></div>
+        </template>
+        <!-- A drive's stat row: a tiny label over each value, hairlines
+             between; a value the drive does not report is left out. -->
+        <template x-if="stats(c).length">
+          <div class="c-stats"><dl class="st-row"><template x-for="v in stats(c)" :key="v.k"><div class="st-t"><dt class="st-k" x-text="v.k"></dt><dd class="st-v"><template x-if="!v.x"><span><span x-text="v.n"></span><i x-text="v.u"></i></span></template><template x-if="v.x"><span class="bign" role="button" tabindex="0" :title="v.x" :aria-label="v.k + ' ' + v.n + v.u + ', ' + v.x" @click="showExact($event, v.x)" @keydown.enter.prevent="showExact($event, v.x)" @keydown.space.prevent="showExact($event, v.x)"><span x-text="v.n"></span><i x-text="v.u"></i></span></template></dd></div></template></dl></div>
+        </template>
+
+        <!-- Disk space: one bar per filesystem, up to three -->
+        <template x-if="spaces(c).length">
+          <div class="space">
+            <template x-for="f in spaceShown(c)" :key="f.id || f.mountpoint">
+              <div class="sp-row" :class="spaceStep(f)" :data-pct="pct(f)">
+                <span class="sp-mount" x-text="f.mountpoint" :title="f.mountpoint"></span>
+                <span class="sp-bar" role="img" :aria-label="f.mountpoint + ', ' + (f.status === 'unavailable' ? 'not mounted' : pct(f) + '% used')"><i :style="'width:' + spaceFill(f) + '%'"><b x-text="spaceInside(f)"></b></i></span>
+                <span class="sp-text" x-text="spaceText(f)"></span>
+              </div>
+            </template>
+            <template x-if="spaceMore(c)"><div class="sp-more" x-text="'and ' + spaceMore(c) + ' more'"></div></template>
+          </div>
+        </template>
+
+        <!-- The health box: one frame in the state colour around the health
+             line and its chevron, the first three problem rows closed, and
+             all of Details open. Nothing in it scrolls. It sits at the
+             bottom of the card, on the footer rule; spare height goes above. -->
+        <template x-if="health(c) && c.kind !== 'down'">
+          <div class="hwrap"><div class="hbox" :class="health(c)">
+            <div class="c-health">
+              <template x-if="health(c) === 'attention'"><span class="h-att">Attention</span></template>
+              <template x-if="health(c) === 'attention' && failed(c)"><span class="h-fail">Health <b>FAILED</b></span></template>
+              <template x-if="health(c) === 'maybe'"><span class="h-maybe">Maybe</span></template>
+              <template x-if="health(c) === 'ok'"><span class="h-ok">Health OK</span></template>
+              <template x-if="health(c) === 'unknown' && !replicaMissing(c)"><span class="h-unk"><span class="ghost-dot" aria-hidden="true"></span>Health not known</span></template>
+              <template x-if="replicaMissing(c)"><span class="h-unk h-missing" x-text="missingText"></span></template>
+              <template x-if="isOpen(c) && canTune(c)">
+                <button class="tune" type="button" :aria-pressed="thrEditing(c) ? 'true' : 'false'" :aria-busy="thrWaiting(c) ? 'true' : null" :style="thrWaiting(c) ? 'opacity: 0.5' : null" :aria-label="thrEditing(c) ? 'Stop editing thresholds' : 'Edit thresholds'" title="Thresholds" @mousedown.prevent="$el.blur()" @click="toggleThr(c)"><svg aria-hidden="true"><use href="#adjust"/></svg></button>
+              </template>
+              <template x-if="hasDetails(c)">
+                <button class="chev" :class="health(c)" type="button" :aria-expanded="isOpen(c) ? 'true' : 'false'" :aria-label="isOpen(c) ? 'Hide details' : 'Details'" title="Details" @mousedown.prevent="$el.blur()" @click="toggleOpen(c)"><svg aria-hidden="true"><use href="#chevron"/></svg></button>
+              </template>
+            </div>
+            <template x-if="unsupportedNote(c) && !isOpen(c)"><p class="c-note">The agent can see this drive, but it gives no SMART health data to watch.</p></template>
+            <template x-if="c.kind === 'pool' && vanished(c.it)"><p class="c-note">Not served to Home Assistant, which reports this pool as missing.</p></template>
+            <template x-if="!isOpen(c) && problems(c).length">
+              <div class="pw">
+                <template x-for="p in problems(c).slice(0, 3)" :key="p.key">
+                  <div class="pw-row" :class="p.mark"><span class="pw-label"><span class="lb" x-text="p.label"></span><template x-if="p.note"><small x-text="' (' + p.note + ')'"></small></template></span><span class="pw-val" x-text="p.value"></span></div>
+                </template>
+                <template x-if="problems(c).length > 3"><button class="pw-more" type="button" :aria-label="'and ' + (problems(c).length - 3) + ' more. Details'" @click="toggleOpen(c)" x-text="'and ' + (problems(c).length - 3) + ' more'"></button></template>
+              </div>
+            </template>
+            <template x-if="isOpen(c) && c.kind === 'drive'">
+              <div class="details">
+                <template x-if="unsupportedNote(c)"><p class="c-note">The agent can see this drive, but it gives no SMART health data to watch.</p></template>
+                <!-- What the drive is: model, serial, firmware, capacity,
+                     interface; a field it does not report is left out. Model,
+                     serial and firmware, like Host and Port below, open the
+                     big numbers' popover with the full value and Copy. -->
+                <template x-if="ident(c).length">
+                  <dl class="kv ident">
+                    <template x-for="f in ident(c)" :key="f.k">
+                      <div><dt><span class="lb" x-text="f.k"></span></dt><dd>
+                        <template x-if="f.t"><span class="v"><span class="bign txt" role="button" tabindex="0" :aria-label="f.k + ' ' + f.v" x-text="f.v" @click="showExact($event, f.v, f.v)" @keydown.enter.prevent="showExact($event, f.v, f.v)" @keydown.space.prevent="showExact($event, f.v, f.v)"></span></span></template>
+                        <template x-if="!f.t && !f.x"><span class="v" x-text="f.v"></span></template>
+                        <template x-if="!f.t && f.x"><span class="v"><span class="bign" role="button" tabindex="0" :title="f.x" :aria-label="f.v + ', ' + f.x" x-text="f.v" @click="showExact($event, f.x)" @keydown.enter.prevent="showExact($event, f.x)" @keydown.space.prevent="showExact($event, f.x)"></span></span></template>
+                      </dd></div>
+                    </template>
+                  </dl>
+                </template>
+                <template x-if="connect(c)">
+                  <div class="conn" role="group" aria-label="Connect by hand">
+                    <span class="conn-h">Connect by hand</span>
+                    <template x-for="f in connect(c).fields" :key="f.k">
+                      <span class="cp"><span class="cp-k" x-text="f.k"></span><span class="cp-v mono bign txt" role="button" tabindex="0" :aria-label="f.k + ' ' + f.v" x-text="f.v" @click="showExact($event, f.v, f.v)" @keydown.enter.prevent="showExact($event, f.v, f.v)" @keydown.space.prevent="showExact($event, f.v, f.v)"></span></span>
+                    </template>
+                    <template x-if="connect(c).password"><p class="conn-note">This agent wants its password (the token: line in its config)</p></template>
+                  </div>
+                </template>
+                <template x-if="spaces(c).length">
+                  <div class="fs-list">
+                    <template x-for="f in spaces(c)" :key="f.id || f.mountpoint">
+                      <div class="fs-line"><span><span class="mono" x-text="f.mountpoint"></span> <small x-text="f.fstype"></small></span><span class="fs-used" x-text="spaceUsed(f)"></span></div>
+                    </template>
+                  </div>
+                </template>
+                <!-- One table: the attributes (or the NVMe health log, or the
+                     watched rows), flagged rows in the state colour, notes muted
+                     after the name. -->
+                <template x-if="thrShown(c)">
+                  <div class="thr" role="group" aria-label="Thresholds">
+                    <template x-if="thrRows(c).length">
+                      <div class="table-wrap">
+                        <table class="attrs thr-t">
+                          <thead><tr><th class="nm">Watched</th><th class="num">Now</th><th class="num">Alert above</th><th class="num">Default</th></tr></thead>
+                          <tbody>
+                            <template x-for="l in thrRows(c)" :key="l.label">
+                              <tr :class="thrMark(c, l)">
+                                <td class="nm"><span class="lb" x-text="l.name"></span><template x-if="l.compare !== 'gt'"><small x-text="' (' + thrWord(l) + ')'"></small></template></td>
+                                <td class="num" x-text="thrReading(l)"></td>
+                                <td class="num"><input class="input thr-in" :class="thrPending(l) && 'pending'" inputmode="numeric" autocomplete="off" :value="thrS.values[l.label]" :aria-label="'Threshold of ' + l.name + ', ' + thrWord(l)" @input="thrSet(l.label, $event.target.value)" @keydown.enter="thrSave(c)"></td>
+                                <td class="num def" x-text="l.default + (l.unit || '')"></td>
+                              </tr>
+                            </template>
+                          </tbody>
+                        </table>
+                      </div>
+                    </template>
+                    <template x-if="repRawRows(c).length">
+                      <div class="table-wrap rep-raw">
+                        <table class="attrs thr-t">
+                          <thead><tr><th class="nm">Replica reading</th><th class="num">Raw value</th></tr></thead>
+                          <tbody>
+                            <template x-for="r in repRawRows(c)" :key="r.key">
+                              <tr>
+                                <td class="nm"><span class="lb"><template x-for="(w, wi) in nameParts(r.name)" :key="wi"><span><span x-text="w"></span><wbr></span></template></span></td>
+                                <td class="num"><input class="input thr-in rep-in" :class="repRawPending(r) && 'pending'" inputmode="numeric" autocomplete="off" :value="repRawText(r)" :aria-label="'Raw value of ' + r.name" @input="repRawSet(r, $event.target.value)" @keydown.enter="thrSave(c)"></td>
+                              </tr>
+                            </template>
+                          </tbody>
+                        </table>
+                        <p class="thr-where">Readings are saved into your own copy of this replica file.</p>
+                      </div>
+                    </template>
+                    <template x-if="thrS.data"><div class="thr-foot"><p class="thr-where" x-text="thrWhere()"></p><span class="thr-pending" x-text="thrAnyPending(c) ? 'Not saved yet' : ''"></span></div></template>
+                    <p class="thr-err" role="alert" x-show="thrS.err" x-text="thrS.err"></p>
+                    <div class="thr-btns">
+                      <span class="thr-l">
+                        <button class="btn btn-sm" type="button" :disabled="!thrS.data || thrS.busy || !thrFlagged(c).length" @click="thrAccept(c)">Accept current readings</button>
+                        <button class="btn btn-sm" type="button" :disabled="!thrS.data || thrS.busy" @click="thrReset()">Reset to defaults</button>
+                      </span>
+                      <span class="thr-r">
+                        <button class="btn btn-sm btn-quiet" type="button" @click="ui.thr = null">Cancel</button>
+                        <button class="btn btn-sm btn-primary" type="button" :disabled="!thrS.data || thrS.busy" @click="thrSave(c)">Save</button>
+                      </span>
+                    </div>
+                  </div>
+                </template>
+                <template x-if="!thrShown(c) && detailTable(c.it).rows.length">
+                  <div class="table-wrap">
+                    <table class="attrs" :class="detailTable(c.it).kind">
+                      <thead>
+                        <template x-if="detailTable(c.it).kind === 'ata'"><tr><th class="num c-id">ID</th><th class="nm">Name</th><th class="num c-val" title="The maker&#39;s health score for this attribute, counting down from new">Value</th><th class="num c-worst" title="The lowest that score has been">Worst</th><th class="num c-thresh" title="The maker&#39;s failure point for that score">Thresh</th><th class="num c-raw" title="The real count or reading. Alerts use this">Raw</th></tr></template>
+                        <template x-if="detailTable(c.it).kind !== 'ata'"><tr><th class="nm">Name</th><th class="num c-raw" title="The real count or reading. Alerts use this">Value</th></tr></template>
+                      </thead>
+                      <tbody>
+                        <template x-for="a in detailTable(c.it).rows" :key="a.key">
+                          <tr :class="a.mark">
+                            <template x-if="detailTable(c.it).kind === 'ata'"><td class="num c-id" x-text="a.id"></td></template>
+                            <td class="nm" :title="a.name"><span class="lb"><template x-for="(w, wi) in nameParts(a.name)" :key="wi"><span><span x-text="w"></span><wbr></span></template></span><template x-if="a.note"><small x-text="' (' + a.note + ')'"></small></template></td>
+                            <template x-if="detailTable(c.it).kind === 'ata'"><td class="num c-val" x-text="a.value"></td></template>
+                            <template x-if="detailTable(c.it).kind === 'ata'"><td class="num c-worst" x-text="a.worst"></td></template>
+                            <template x-if="detailTable(c.it).kind === 'ata'"><td class="num c-thresh" x-text="a.thresh"></td></template>
+                            <td class="num c-raw"><template x-if="a.missing"><span class="na" x-text="a.gap"></span></template><template x-if="!a.missing && !a.exact"><span :class="{ long: String(a.disp).length > 20 }" x-text="a.disp"></span></template><template x-if="!a.missing && a.exact"><span class="bign" role="button" tabindex="0" :title="a.exact" :aria-label="a.disp + ', ' + a.exact" x-text="a.disp" @click="showExact($event, a.exact)" @keydown.enter.prevent="showExact($event, a.exact)" @keydown.space.prevent="showExact($event, a.exact)"></span></template></td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </template>
+                <!-- Device Statistics: the drive's own statistics log (ATA),
+                     when the agent read it, in the attribute table's style. -->
+                <template x-if="!thrShown(c) && devstatTable(c.it).length">
+                  <div class="devstat">
+                    <h4 class="sub-h">Device Statistics</h4>
+                    <div class="table-wrap">
+                      <table class="attrs devstat-t" aria-label="Device Statistics">
+                        <thead><tr><th class="nm">Name</th><th class="num c-raw">Value</th></tr></thead>
+                        <tbody>
+                          <template x-for="a in devstatTable(c.it)" :key="a.key">
+                            <tr :class="a.mark">
+                              <td class="nm" :title="a.title"><span class="lb" x-text="a.name"></span><template x-if="a.note"><small x-text="' (' + a.note + ')'"></small></template></td>
+                              <td class="num c-raw"><template x-if="!a.exact"><span x-text="a.disp"></span></template><template x-if="a.exact"><span class="bign" role="button" tabindex="0" :title="a.exact" :aria-label="a.disp + ', ' + a.exact" x-text="a.disp" @click="showExact($event, a.exact)" @keydown.enter.prevent="showExact($event, a.exact)" @keydown.space.prevent="showExact($event, a.exact)"></span></template></td>
+                            </tr>
+                          </template>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <template x-if="isOpen(c) && c.kind === 'pool'">
+              <div class="details">
+                <template x-if="renamed(c)"><p class="c-model" x-text="modelLine(c)"></p></template>
+                <template x-if="connect(c)">
+                  <div class="conn" role="group" aria-label="Connect by hand">
+                    <span class="conn-h">Connect by hand</span>
+                    <template x-for="f in connect(c).fields" :key="f.k">
+                      <span class="cp"><span class="cp-k" x-text="f.k"></span><span class="cp-v mono bign txt" role="button" tabindex="0" :aria-label="f.k + ' ' + f.v" x-text="f.v" @click="showExact($event, f.v, f.v)" @keydown.enter.prevent="showExact($event, f.v, f.v)" @keydown.space.prevent="showExact($event, f.v, f.v)"></span></span>
+                    </template>
+                    <template x-if="connect(c).password"><p class="conn-note">This agent wants its password (the token: line in its config)</p></template>
+                  </div>
+                </template>
+                <template x-if="poolDisks(c.it).length">
+                  <div class="table-wrap">
+                    <table class="attrs" :aria-label="'Disks in pool ' + c.it.pool.name">
+                      <thead><tr><th>Disk</th><th>State</th><th class="num">Read</th><th class="num">Write</th><th class="num">Cksum</th></tr></thead>
+                      <tbody>
+                        <template x-for="d in poolDisks(c.it)" :key="d.name">
+                          <tr :class="d.bad ? 'crit' : ''"><td x-text="d.name"></td><td x-text="d.state"></td><td class="num" x-text="d.read"></td><td class="num" x-text="d.write"></td><td class="num" x-text="d.cksum"></td></tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </template>
+                <p class="c-note" x-show="poolFoot(c.it)" x-text="poolFoot(c.it)"></p>
+                <template x-if="spaces(c).length">
+                  <div class="fs-list">
+                    <template x-for="f in spaces(c)" :key="f.id || f.mountpoint">
+                      <div class="fs-line"><span><span class="mono" x-text="f.mountpoint"></span> <small x-text="f.fstype"></small></span><span class="fs-used" x-text="spaceUsed(f)"></span></div>
+                    </template>
+                  </div>
+                </template>
+              </div>
+            </template>
+          </div></div>
+        </template>
+        <!-- This app's agent not answering: the health line alone, unframed -->
+        <template x-if="c.kind === 'down'">
+          <div class="c-health"><span class="h-unk"><span class="ghost-dot" aria-hidden="true"></span>Health not known</span></div>
+        </template>
+
+        <!-- A field agent with nothing to show yet, and this app's agent down -->
+        <template x-if="c.kind === 'machine'">
+          <div class="m-body">
+            <template x-if="machineText(c)"><p class="m-msg" x-text="machineText(c)"></p></template>
+            <template x-if="pending(c.h)">
+              <div>
+                <p class="m-msg" x-show="!pwRefused(c.h)"><b>This agent wants a password.</b></p>
+                <p class="m-msg" x-show="pwRefused(c.h)"><b>That password was refused.</b> Check it and try again.</p>
+                <p class="m-msg" x-show="pwMessage(c.h)" x-text="pwMessage(c.h)"></p>
+                <div class="pass">
+                  <input class="input" :class="{ bad: pwRefused(c.h) }" type="password" placeholder="password" aria-label="Agent password" autocomplete="off" x-model="ui.pw[c.h.id]" @keydown.enter="authenticate(c.h)">
+                  <button class="btn btn-sm btn-primary" type="button" :disabled="!!ui.busy['pw:' + c.h.id]" @click="authenticate(c.h)">Authenticate</button>
+                </div>
+                <p class="pass-help">It is the <span class="mono">token:</span> line in the agent's config file on that machine.</p>
+              </div>
+            </template>
+          </div>
+        </template>
+        <template x-if="c.kind === 'loading'">
+          <div class="m-body"><p class="m-msg">Reading this machine's drives.</p></div>
+        </template>
+
+        <div class="c-spacer"></div>
+        <div class="c-foot">
+          <span class="seen" x-text="lastSeen(c)"></span>
+          <span class="act-note" x-show="footNote(c)" x-text="footNote(c)"></span>
+          <span class="icons">
+            <template x-if="canSave(c)"><button class="icon" type="button" aria-label="Save as replica" title="Save as replica" :disabled="!!ui.busy['sv:' + c.id]" @click="saveReplica(c)"><svg aria-hidden="true"><use href="#replica-save"/></svg></button></template>
+            <template x-if="canDownload(c)"><button class="icon" type="button" aria-label="Download as a file" title="Download as a file" @click="download(c)"><svg aria-hidden="true"><use href="#download"/></svg></button></template>
+            <template x-if="canHide(c) && !isHidden(c)"><button class="icon" type="button" aria-label="Hide this card" title="Hide this card" @click="setHidden(c, true)"><svg aria-hidden="true"><use href="#eye"/></svg></button></template>
+            <template x-if="canHide(c) && isHidden(c)"><button class="icon" type="button" aria-label="Hidden. Show this card again" title="Hidden, click to show it again" @click="setHidden(c, false)"><svg aria-hidden="true"><use href="#eye-shut"/></svg></button></template>
+            <template x-if="canRemove(c)"><span class="rm-set" :class="{ pair: armedHa(c) }" :role="armedHa(c) ? 'group' : null" :aria-label="armedHa(c) ? removeText(c) : null" @pointerleave="$event.pointerType === 'mouse' && disarm(c)" @focusout="rmFocusOut(c, $event)" @keydown.escape="disarm(c)"><span class="rm-pair"><template x-if="armedHa(c)"><button class="icon armed rm-ha" type="button" :disabled="ui.arm.busy" @click="confirmRemove(c, ui.arm.ha)" x-text="haRemoveText()"></button></template><button class="icon trash" :class="{ armed: armed(c) }" type="button" :aria-label="armedHa(c) ? 'Remove here, from this page only' : armed(c) ? armedLabel(c) : 'Remove this card'" :title="armed(c) ? '' : 'Remove'" :disabled="armed(c) && ui.arm.busy" @click="trashClick(c)"><svg aria-hidden="true"><use href="#trash"/></svg><span class="rm-word" x-text="armedHa(c) ? 'Remove here' : 'Remove?'">Remove?</span></button></span></span></template>
+          </span>
+        </div>
+      </article>
+    </template>
+
+    <!-- The + card: one for the page, always last, never dragged. -->
+    <template x-if="!add.open">
+      <button class="card ghost" type="button" aria-expanded="false" @click="openAdd()">
+        <span class="plus" aria-hidden="true">+</span>
+        <span class="ghost-sub" x-text="info && info.replica ? 'Add a machine, or a replica for testing' : 'Add a machine'">Add a machine</span>
+      </button>
+    </template>
+    <template x-if="add.open">
+      <div class="card ghost-open" :class="{ wide: ui.cols >= 3 }" role="region" aria-label="Add">
+        <div class="add-head"><button class="plus-close" type="button" aria-label="Close" title="Close" aria-expanded="true" @click="closeAdd()">+</button><h3>Add</h3></div>
+
+        <div class="add-body">
+        <div class="add-main">
+        <section class="area area-net" aria-label="Network">
+          <h4>Network</h4>
+          <div class="add-line">
+            <span class="pair"><span class="lbl net">Network:</span><input class="input" x-model="add.block" @input="fieldsChanged()" @keydown.enter="scan()" aria-label="Network block" spellcheck="false" autocomplete="off"></span>
+            <span class="pair"><span class="lbl">Port</span><input class="input port" x-model="add.port" @input="fieldsChanged()" @keydown.enter="scan()" aria-label="Port" inputmode="numeric" autocomplete="off"></span>
+            <button class="btn btn-sm" type="button" @click="scan()" x-text="scanLabel"></button>
+            <template x-if="add.scan">
+              <span class="scan-prog" role="status"><span class="bar" aria-hidden="true"><i :style="'width:' + scanPct + '%'"></i></span><span class="scan-of" x-show="add.scan.state === 'running'" x-text="num(add.scan.probed) + ' of ' + num(add.scan.total)"></span><span class="found"><b x-text="foundCount"></b><small>new<span class="found-old" x-show="addedCount" x-text="', ' + num(addedCount) + ' already added'"></span></small></span></span>
+            </template>
+            <template x-if="add.wide">
+              <span class="scan-wide" role="alert"><span x-text="'That is ' + num(add.wide.addresses) + ' addresses.'"></span><button class="btn btn-sm" type="button" @click="useSuggest()" x-text="'Use ' + add.wide.suggest"></button></span>
+            </template>
+          </div>
+          <template x-if="add.error"><p class="scan-none" role="alert" x-text="add.error"></p></template>
+          <template x-if="pickRows.length">
+            <div class="pick" role="group" aria-label="Agents that answered">
+              <div class="pick-head"><span></span><span>Host</span><span>Address</span><span>Agent</span><span>Drives</span><span></span></div>
+              <template x-for="r in pickRows" :key="r.id">
+                <label class="pick-row" :data-id="r.id" :class="{ on: !r.added && add.ticks[r.id], done: r.added }"><input class="tick" type="checkbox" :checked="!r.added && !!add.ticks[r.id]" :disabled="r.added" @change="add.ticks[r.id] = $event.target.checked"><span class="h" x-text="r.added ? r.hostname + ', already added' : r.hostname"></span><span class="a" x-text="r.address + ':' + r.port"></span><span class="v" x-text="r.version ? 'agent ' + r.version : ''"></span><span class="d" x-text="driveCount(r.drives)"></span><span class="k"><template x-if="r.auth === 'password'"><svg class="lock" role="img" aria-label="wants a password"><use href="#lock"/></svg></template></span></label>
+              </template>
+            </div>
+          </template>
+          <template x-if="netNone">
+            <p class="scan-none">Home Assistant has found no other agent on the network.</p>
+          </template>
+          <template x-if="scanNone && !pickRows.length">
+            <p class="scan-none">None answered on <span class="mono" x-text="add.scan.block"></span>, port <span class="mono" x-text="add.scan.port"></span>.</p>
+          </template>
+        </section>
+
+        <section class="area" aria-label="Add by hand">
+          <h4>Add by hand</h4>
+          <div class="add-line">
+            <span class="pair"><span class="lbl">Host or IP</span><input class="input host" placeholder="nas.lan or 10.0.20.14" aria-label="Host or IP" x-model="add.manualHost" @keydown.enter="check()" spellcheck="false" autocomplete="off"></span>
+            <span class="pair"><span class="lbl">Port</span><input class="input port" x-model="add.manualPort" aria-label="Port" inputmode="numeric" autocomplete="off"></span>
+            <button class="btn btn-sm" type="button" :disabled="add.checking" @click="check()">Check</button>
+          </div>
+          <p class="check-msg" :class="{ muted: add.checkMsg && add.checkMsg.muted }" role="status" x-show="add.checkMsg" x-text="add.checkMsg ? add.checkMsg.text : ''"></p>
+          <p class="area-help" x-show="!add.checkMsg">A machine found here joins the Network list, ticked.</p>
+        </section>
+        </div>
+
+        <template x-if="info && info.replica"><section class="area area-replica" aria-label="Replica">
+          <h4>Replica</h4>
+          <p class="area-help rep-lead">Test drives for trying alerts and automations. They appear under one Replica machine.</p>
+          <template x-for="g in repGroups" :key="g.key">
+            <div class="rep-group">
+              <p class="rep-gh" x-text="g.title"></p>
+              <div class="replica-pick" role="group" :aria-label="g.title">
+                <template x-for="f in g.files" :key="f.id">
+                  <div class="rep-row" :data-file="f.id">
+                    <label :class="{ on: add.repTicks[f.id], off: !repTickable(f) }" :title="f.valid ? f.description : f.error"><input class="tick" type="checkbox" :checked="!!add.repTicks[f.id]" :disabled="!repTickable(f)" @change="add.repTicks[f.id] = $event.target.checked"><span class="rep-name" x-text="f.name"></span><span class="rep-kind" x-text="repKind(f)"></span></label>
+                    <template x-if="canDeleteFile(f)"><button class="icon trash rep-del" :class="{ armed: repArmed(f) }" type="button" :aria-label="repArmed(f) ? 'Delete ' + f.name + '? Click again to delete it' : 'Delete ' + f.name" :title="repArmed(f) ? '' : 'Delete this file'" :disabled="repArmed(f) && add.repDel.busy" @click="repTrash(f)" @pointerleave="$event.pointerType === 'mouse' && repDisarm(f)" @blur="repDisarm(f)" @keydown.escape="repDisarm(f)"><svg aria-hidden="true"><use href="#trash"/></svg><span class="rm-word">Delete?</span></button></template>
+                  </div>
+                </template>
+                <template x-if="add.repDel && add.repDel.err && g.files.some((f) => f.id === add.repDel.id)">
+                  <p class="rep-ask-err" role="alert" x-text="add.repDel.err"></p>
+                </template>
+              </div>
+            </div>
+          </template>
+          <template x-if="repAtCap"><p class="area-help rep-cap">The Replica holds up to 12 drives and 4 pools.</p></template>
+          <div class="replica-up"><span x-text="folderText"></span><button class="btn btn-sm" type="button" :disabled="!folderOk || add.uploading" @click="$refs.upfile.click()">Choose file</button><span class="ext">.json</span><input type="file" accept=".json,application/json" hidden aria-label="Upload a replica" x-ref="upfile" @change="upload($event)"><span class="up-msg" x-show="add.upMsg" x-text="add.upMsg" role="alert"></span></div>
+        </section></template>
+        </div>
+
+        <template x-if="appNote">
+          <p class="ha-notice app-note add-note" role="note"><span>Monitoring the drives in this Home Assistant box? <a :href="appNoteHref" target="_blank" rel="noopener" @click="openAppStore($event)">Install the SMART Sniffer App.</a></span><button class="notice-x" type="button" aria-label="Dismiss" title="Dismiss" @click="dismissAppNote()">&times;</button></p>
+        </template>
+        <div class="add-foot"><template x-if="tickedLock"><span><svg class="lock" aria-hidden="true"><use href="#lock"/></svg> wants a password, asked for on its card after you add it</span></template><template x-if="add.err"><span class="add-err" role="alert" x-text="add.err"></span></template><button class="btn btn-primary" type="button" :disabled="!tickCount || add.busy" @click="addTicked()" x-text="tickCount ? 'Add ' + tickCount : 'Add'"></button></div>
+      </div>
+    </template>
+  </div>
+  <div id="drag-layer" x-ignore aria-hidden="true"></div>
+
+  <footer class="app-foot">
+    <a href="#agentic-access" title="All drive data as JSON, for an AI assistant or a script" @click.prevent="openAgentic()">Agentic access</a>
+    <a :href="integrationUrl" target="_top">Integration settings</a>
+    <template x-if="info && info.app_url"><a :href="info.app_url" target="_top">SMART Sniffer App</a></template>
+    <a href="https://github.com/DAB-LABS/smart-sniffer" target="_blank" rel="noopener">GitHub</a>
+    <span class="foot-sep" aria-hidden="true"></span>
+    <span class="also">Also from DAB-LABS: <a href="https://github.com/DAB-LABS/HAIR" target="_blank" rel="noopener">HAIR, infrared remotes in Home Assistant</a></span>
+    <span class="spacer"></span>
+    <span class="mono" style="font-size:0.72rem">DAB-LABS</span>
+  </footer>
+</main>
+
+<!-- Agentic access: everything the Control Center knows, as JSON, built by
+     the integration (smart_sniffer/panel/agentic). -->
+<main class="page ax-page" x-show="view === 'agentic'" style="display:none">
+  <header class="app-head">
+    <div class="brand">
+      <a class="ax-back" href="#" @click.prevent="closeAgentic()">Control Center</a>
+      <h1 class="ax-title">Agentic access</h1>
+    </div>
+  </header>
+  <p class="ax-lead">Everything the Control Center knows, as JSON for an AI assistant or a script. The guide at the end explains the fields.</p>
+  <p class="ax-lead dim">Contains serial numbers, host names and addresses. Share it only with people and tools you trust.</p>
+  <div class="ax-tools">
+    <button class="btn btn-sm" type="button" :disabled="!ax.text" @click="axCopy()">Copy</button>
+    <button class="btn btn-sm" type="button" :disabled="!ax.text" @click="axDownload()">Download</button>
+    <template x-if="ax.raw"><a class="btn btn-sm ax-raw" :href="ax.raw" target="_blank" rel="noopener" title="The same JSON as scripts read it" @click="axRaw($event)">Raw JSON</a></template>
+    <small class="ax-status" role="status" x-text="ax.status"></small>
+  </div>
+  <p class="ax-lead dim ax-token">Scripts and AI tools read the same JSON with a long-lived access token of an admin (your Home Assistant profile, Security): <code class="mono">curl -H "Authorization: Bearer &lt;token&gt;" http://&lt;ha&gt;/api/smart_sniffer/agentic.json</code>. Add <code class="mono">?fresh=1</code> to ask every agent first, <code class="mono">?download=1</code> to save it as a file.</p>
+  <p class="ax-meta mono dim" x-text="ax.meta"></p>
+  <pre class="ax-json" tabindex="0" aria-label="The data as JSON" x-ref="axjson" x-text="ax.text"></pre>
+</main>
+</body>
+</html>

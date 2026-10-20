@@ -489,6 +489,9 @@ def test_lost_smart_raises_no_notification_and_recovers(monkeypatch, caplog):
     back_lines = [r for r in caplog.records if "giving SMART data again" in r.getMessage()]
     assert len(lost_lines) == 1 and len(back_lines) == 1
     assert "agent says: no reason given" not in lost_lines[0].getMessage()
+    # Named by device path: the drive id is a slug of the serial.
+    assert "/dev/fixture" in lost_lines[0].getMessage() and drive_id not in caplog.text
+    assert healthy["serial"] not in caplog.text
 
 
 def test_lost_smart_keeps_an_open_attention_notification_quiet(monkeypatch):
@@ -592,7 +595,7 @@ class _TimeoutSession:
                 return None
 
             async def json(self):
-                return [{"id": "fake-serial-01"}]
+                return [{"id": "fake-serial-01", "device_path": "/dev/sdb"}]
 
         return _Resp()
 
@@ -612,11 +615,12 @@ def test_a_poll_timeout_names_the_host_and_request(monkeypatch, caplog):
             asyncio.run(coord._async_update_data())
         assert str(err.value) == (
             "SMART Sniffer agent at 10.0.0.5:9099 did not answer "
-            "/api/drives/fake-serial-01 within 30 seconds"
+            "/api/drives/{id} for /dev/sdb within 30 seconds"
         )
     warnings = [r for r in caplog.records if r.levelname == "WARNING" and "did not answer" in r.getMessage()]
     assert len(warnings) == 1
     assert "secret-token" not in caplog.text
+    assert "fake-serial-01" not in caplog.text  # the id is a slug of the serial
 
 
 class _HealthSession:
@@ -908,6 +912,54 @@ def test_diagnostics_redact_the_drive_digest():
     diagnostics = importlib.import_module("custom_components.smart_sniffer.diagnostics")
     assert "agent_drives" in diagnostics.CONFIG_REDACT_KEYS
     assert "agent_hostname" not in diagnostics.CONFIG_REDACT_KEYS
+
+
+def test_diagnostics_carry_no_drive_serial_wwn_or_id():
+    from types import SimpleNamespace
+
+    from tests.golden_payloads import FIXTURES, drive_payload
+
+    diagnostics = importlib.import_module("custom_components.smart_sniffer.diagnostics")
+    with (FIXTURES / "v083" / "ata_wd_red_sa500.json").open(encoding="utf-8") as handle:
+        ata = drive_payload("wd_red", json.load(handle))
+    ata["id"] = "wd0000test63"  # the agent's slug of the serial
+    ata["device_path"] = "/dev/sdb"
+    ata["smart_data"]["device"]["info_name"] = "/dev/disk/by-id/wwn-0x5001b440499602d2"
+    ata["smart_data"]["smartctl"] = {"argv": ["-a", "/dev/disk/by-id/ata-WDC_WD0000TEST63"]}
+    with (FIXTURES / "nvme_healthy.json").open(encoding="utf-8") as handle:
+        nvme = drive_payload("nvme", json.load(handle))
+    nvme["id"] = "s5gxnf0r000001"
+    smart = nvme["smart_data"]
+    smart["nvme_ieee_oui_identifier"] = 0x002538
+    smart["nvme_namespaces"] = [{"id": 1, "eui64": {"oui": 0x002538, "ext_id": 0x51A1B2C3D4},
+                                 "nguid": "00253851a1b2c3d4002538a1b2c3d4e5"}]
+    entry = SimpleNamespace(entry_id="E1", data={
+        "host": "10.0.0.5", "port": 9099, "token": "secret-token",
+        "thresholds": {nvme["id"]: {"Available Spare": 20}, "gone-serial-9": {"SSD Wear": 70}},
+    })
+    coord = SimpleNamespace(
+        data={ata["id"]: ata, nvme["id"]: nvme, "_filesystems": []},
+        update_interval=None, last_update_success=True,
+    )
+    hass = SimpleNamespace(data={DOMAIN: {"E1": {"coordinator": coord}}})
+    out = asyncio.run(diagnostics.async_get_config_entry_diagnostics(hass, entry))
+
+    assert list(out["drives"]) == ["drive_1", "drive_2"]
+    assert out["drives"]["drive_1"]["summary"]["device_path"] == "/dev/sdb"
+    assert out["config_entry"]["thresholds"] == {
+        "drive_2": {"Available Spare": 20}, "other_1": {"SSD Wear": 70},
+    }
+    assert out["drives"]["drive_2"]["attention"]["thresholds"] == {"Available Spare": 20}
+    ata_smart = out["drives"]["drive_1"]["smart_data"]
+    assert ata_smart["wwn"] == "**REDACTED**"
+    assert ata_smart["model_name"] == ata["model"]  # model and counters stay
+    nvme_smart = out["drives"]["drive_2"]["smart_data"]
+    assert nvme_smart["nvme_ieee_oui_identifier"] == "**REDACTED**"
+    assert nvme_smart["nvme_namespaces"] == [{"id": 1, "eui64": "**REDACTED**", "nguid": "**REDACTED**"}]
+    text = json.dumps(out).lower()
+    for secret in ("wd0000test63", "s5gxnf0r000001", "gone-serial-9", "5001b440499602d2",
+                   "secret-token", "002538a1b2c3d4e5"):
+        assert secret not in text, secret
 
 
 def _wd_red_sa500(wear_value):

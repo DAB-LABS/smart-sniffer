@@ -26,14 +26,40 @@
         "data_description": {
           "token": "Enter the bearer token if auth is enabled on this agent. Leave blank otherwise."
         }
+      },
+      "hassio_confirm": {
+        "title": "SMART Sniffer on this box",
+        "description": "Create sensors and alerts for **{label}**? The {app} reads this box's drives with its agent at {host}:{port}.",
+        "data": {
+          "token": "Bearer Token"
+        },
+        "data_description": {
+          "token": "The agent's password, if the App sets one. Leave blank otherwise."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Password for the SMART Sniffer agent",
+        "description": "The agent at {host} ({name}) refused its password, or wants one. Enter the token from the agent's config file on that machine.",
+        "data": {
+          "token": "Bearer Token"
+        },
+        "data_description": {
+          "token": "The token: line in the agent's config file."
+        }
       }
     },
     "error": {
       "cannot_connect": "Unable to connect to the SMART Sniffer agent. Check the host, port, and token.",
-      "unknown": "An unexpected error occurred."
+      "unknown": "An unexpected error occurred.",
+      "invalid_auth": "The agent refused the password. Enter the token from the agent's config file on that machine."
     },
     "abort": {
-      "already_configured": "This SMART Sniffer agent is already configured."
+      "already_configured": "This SMART Sniffer agent is already configured.",
+      "reauth_successful": "The password was saved and the agent answers with it.",
+      "reauth_entry_gone": "This agent was removed from Home Assistant.",
+      "cannot_connect": "Unable to connect to the SMART Sniffer agent.",
+      "replicas_moved": "Replicas moved into the integration. Create them again from + > Replica in SMART Sniffer.",
+      "replica_exists": "SMART Sniffer already has its Replica machine."
     },
     "flow_title": "SMART Sniffer ({hostname})"
   },

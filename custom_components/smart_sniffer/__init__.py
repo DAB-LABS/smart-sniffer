@@ -15,11 +15,14 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, Platform
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.storage import Store
+from homeassistant.helpers.typing import ConfigType
 
 from .agent_identity import ENTRY_IDENTITY_KEYS
 from .attention import evaluate_attention, get_thresholds
@@ -41,10 +44,61 @@ from .device_removal import (
     reported_pool_names,
 )
 from .coordinator import AgentHealthCoordinator, SmartSnifferCoordinator
+from .panel_data import SIGNAL_PANEL_UPDATE, panel_data, utc_text
+from .source import agent_address, is_replica_data
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
+
+# Set up only from config entries; no YAML.
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Once per Home Assistant run: the SMART Sniffer panel (v0.9). Guarded:
+    whatever happens there, the entries are set up and monitored."""
+    try:
+        from .panel_setup import async_setup_panel  # noqa: PLC0415
+
+        await async_setup_panel(hass)
+    except Exception:  # noqa: BLE001 - the panel never stops monitoring
+        _LOGGER.exception("SMART Sniffer panel could not be set up; monitoring continues")
+    # The SMART Sniffer App's old Replica machines go once Home Assistant
+    # runs (replica.py); Replicas now live in the integration.
+    try:
+        from .replica import async_schedule_legacy_removal  # noqa: PLC0415
+
+        async_schedule_legacy_removal(hass)
+    except Exception:  # noqa: BLE001
+        _LOGGER.exception("SMART Sniffer: old Replica machines not checked")
+    return True
+
+
+def _panel_hooks(hass: HomeAssistant, entry: ConfigEntry,
+                 coordinator: SmartSnifferCoordinator,
+                 health_coordinator: AgentHealthCoordinator) -> None:
+    """Tell the panel about every poll of this entry (v0.9): the time of the
+    last one that answered, and a signal its open pages listen to. Never
+    raises; the panel only reads what entries publish."""
+    try:
+        pd = panel_data(hass)
+        if coordinator.last_update_success:
+            pd.read_at[entry.entry_id] = utc_text()
+
+        def on_update() -> None:
+            if coordinator.last_update_success:
+                pd.read_at[entry.entry_id] = utc_text()
+            async_dispatcher_send(hass, SIGNAL_PANEL_UPDATE, entry.entry_id)
+
+        def on_health() -> None:
+            async_dispatcher_send(hass, SIGNAL_PANEL_UPDATE, entry.entry_id)
+
+        entry.async_on_unload(coordinator.async_add_listener(on_update))
+        entry.async_on_unload(health_coordinator.async_add_listener(on_health))
+        async_dispatcher_send(hass, SIGNAL_PANEL_UPDATE, entry.entry_id)
+    except Exception:  # noqa: BLE001
+        _LOGGER.exception("SMART Sniffer panel: entry %s not linked", entry.entry_id)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -52,17 +106,33 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # The Device Statistics hold and announcement records (devstat.py), loaded
     # before the first refresh so that refresh already merges against them and
     # a drive announced before a restart is not announced again.
+    from . import replica as replica_mod  # noqa: PLC0415
+
+    if replica_mod.is_legacy_app_replica(entry):
+        # The SMART Sniffer App's old Replica machine: never polled again,
+        # removed (with a one-time note) instead.
+        replica_mod.async_schedule_legacy_removal(hass)
+        raise ConfigEntryNotReady("Replicas moved into the integration")
+    # The Replica machine (v0.9) reads the replica engine in process.
+    source = await replica_mod.async_source(hass, entry) if is_replica_data(entry.data) else None
+
+    replica_kw = {"replica": source} if source is not None else {}
+
     store = Store(hass, STORE_VERSION, _store_key(entry.entry_id))
-    coordinator = SmartSnifferCoordinator(hass, entry, store, await store.async_load())
+    coordinator = SmartSnifferCoordinator(hass, entry, store, await store.async_load(),
+                                          **replica_kw)
     await coordinator.async_config_entry_first_refresh()
 
-    health_coordinator = AgentHealthCoordinator(hass, entry)
+    health_coordinator = AgentHealthCoordinator(hass, entry, **replica_kw)
     await health_coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "coordinator": coordinator,
         "health_coordinator": health_coordinator,
+        "replica": source,
     }
+
+    _panel_hooks(hass, entry, coordinator, health_coordinator)
 
     # Register the agent device up front, before any platform loads (#24).
     # Drive and filesystem devices point at it with via_device, and HA only
@@ -196,7 +266,10 @@ async def async_remove_config_entry_device(
         agent_reporting,
         reported_pool_names(data),
     )
-    name = device_entry.name or device_entry.id
+    # The log names a drive by its model: its device name carries the serial.
+    name = (device_entry.model if device_entry.serial_number else None) or (
+        device_entry.name or device_entry.id
+    )
 
     if decision.allowed:
         _LOGGER.info("Removing device %s: %s", name, decision.reason)
@@ -236,7 +309,7 @@ def _display_host(config_entry: ConfigEntry, coordinator: Any) -> str:
     hostname = getattr(coordinator, "_hostname", None)
     if hostname:
         return str(hostname)
-    return str(config_entry.data.get(CONF_HOST) or config_entry.title)
+    return str(agent_address(config_entry.data) or config_entry.title)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -250,8 +323,31 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """The entry is deleted: delete its Device Statistics Store with it."""
+    """The entry is deleted: delete its Device Statistics Store with it, and
+    what the panel kept of it (its last view, label, names and order)."""
     await Store(hass, STORE_VERSION, _store_key(entry.entry_id)).async_remove()
+    if is_replica_data(entry.data):
+        try:
+            from .replica import async_forget_entry  # noqa: PLC0415
+
+            await async_forget_entry(hass, entry.entry_id)
+        except Exception:  # noqa: BLE001 - never stops the removal
+            _LOGGER.exception("SMART Sniffer: the Replica's picks were not removed")
+    try:
+        pd = panel_data(hass)
+        pd.forget(entry.entry_id)
+        await pd.views.async_remove(entry.entry_id)
+        await pd.state.async_forget_entry(entry.entry_id)
+    except Exception:  # noqa: BLE001 - never stops the removal
+        _LOGGER.exception("SMART Sniffer panel: %s not forgotten", entry.entry_id)
+    try:
+        # A machine the SMART Sniffer App handed over is never made again.
+        from .panel_import import async_forget_entry as forget_import  # noqa: PLC0415
+
+        await forget_import(hass, entry.entry_id)
+    except Exception:  # noqa: BLE001 - never stops the removal
+        _LOGGER.exception("SMART Sniffer: the App handover record of %s not updated",
+                          entry.entry_id)
 
 
 def _store_key(entry_id: str) -> str:

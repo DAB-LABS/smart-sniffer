@@ -85,6 +85,12 @@ class _Net:
     def __init__(self, agents):
         self.agents = agents
         self.calls: list[str] = []
+        # (host, token) of every request, to check where a token went.
+        self.sent: list[tuple[str, str]] = []
+
+    def tokens_to(self, host):
+        """Every token a request to ``host`` carried ("" for none)."""
+        return {token for h, token in self.sent if h == host}
 
     def _agent(self, host, port, token):
         agent = self.agents.get(f"{host}:{port}")
@@ -98,6 +104,7 @@ class _Net:
 
     async def get_json(self, host, port, token, path):
         self.calls.append(f"{host}:{port}{path}")
+        self.sent.append((host, token))
         try:
             hostname, serials = self._agent(host, port, token)
         except aiohttp.ClientError:
@@ -111,8 +118,20 @@ class _Net:
             return None  # /api/drives cannot be read
         return [{"id": f"id-{s}", "serial": s} for s in serials]
 
+    async def drives_status(self, host, port, token):
+        """The password check (v0.9): an agent that wants a token refuses
+        any other with 401."""
+        self.calls.append(f"{host}:{port}/api/drives")
+        self.sent.append((host, token))
+        agent = self.agents.get(f"{host}:{port}")
+        if agent is None:
+            return "cannot_connect"
+        needs = agent[2]
+        return "invalid_auth" if needs and token != needs else "ok"
+
     async def test_connection(self, host, port, token):
         self.calls.append(f"{host}:{port}/api/health")
+        self.sent.append((host, token))
         hostname, _ = self._agent(host, port, token)
         return {"status": "ok", **self.more, **({"hostname": hostname} if hostname else {})}
 
@@ -129,6 +148,7 @@ def _flow(entries, source, agents=None, dns=None):
     flow.net = _Net(agents or {})
     flow._get_json = flow.net.get_json
     flow._test_connection = flow.net.test_connection
+    flow._drives_status = flow.net.drives_status
     names = dns or {}
 
     async def resolve(host):
@@ -244,11 +264,33 @@ def test_same_agent_on_another_port_is_offered():
 
 
 def test_entry_with_a_token_is_read_with_it():
+    """The entry's own address takes its token; the advertised address
+    never gets it, and its drive count stands in (hacs/default#11245)."""
     entry = _entry("e1", f"{LAN}:9099", LAN, token="sekrit")
     secured = ("testrouter", ["SER-A1", "SER-A2"], "sekrit")
     flow = _flow([entry], SOURCE_ZEROCONF, {f"{LAN}:9099": secured, f"{WAN}:9099": secured})
     result = _run(flow.async_step_zeroconf(_discovery("testrouter", WAN, preferred=WAN)))
     assert result["reason"] == "already_configured"
+    assert flow.net.tokens_to(LAN) == {"sekrit"}
+    assert flow.net.tokens_to(WAN) <= {""}
+
+
+def test_a_discovered_address_never_gets_a_stored_token():
+    """Any LAN device can advertise the service: discovery sends it no
+    configured entry's token, whatever it answers."""
+    entries = [_entry("e1", f"{LAN}:9099", LAN, token="sekrit"),
+               _entry("e2", "192.168.40.2:9099", "192.168.40.2", token="other")]
+    impostor = "192.168.40.66"
+    flow = _flow(entries, SOURCE_ZEROCONF, {
+        f"{LAN}:9099": ("testrouter", ["SER-A1"], "sekrit"),
+        "192.168.40.2:9099": ("testrouter", ["SER-B1"], "other"),
+        f"{impostor}:9099": ("testrouter", ["SER-Z9"], ""),
+    })
+    result = _run(flow.async_step_zeroconf(_discovery("testrouter", impostor, drives="5")))
+    assert result["type"] == "form"
+    assert flow.net.tokens_to(impostor) <= {""}
+    assert flow.net.tokens_to(LAN) == {"sekrit"}
+    assert flow.net.tokens_to("192.168.40.2") == {"other"}
 
 
 def test_a_hand_added_entry_entered_by_name_keeps_its_host():
@@ -375,6 +417,22 @@ def test_another_entry_on_another_port_does_not_block_a_move():
     assert entry.data["host"] == NEW
 
 
+def test_an_entry_with_a_token_is_not_moved_and_its_token_stays_home():
+    """The advertised address is probed without a token, so an entry that
+    has one is left where it is (hacs/default#11245)."""
+    entry = _discovered(token="sekrit")
+    flow = _rediscover(entry, {f"{NEW}:9099": ("nas", ["SER-N1"], "sekrit")})
+    assert entry.data["host"] == OLD and flow.hass.config_entries.updates == []
+    assert "sekrit" not in flow.net.tokens_to(NEW)
+
+
+def test_a_move_probes_the_new_address_without_a_token():
+    entry = _discovered()
+    flow = _rediscover(entry, {f"{NEW}:9099": NAS})
+    assert entry.data["host"] == NEW
+    assert flow.net.tokens_to(NEW) == {""}
+
+
 def test_a_hand_added_entry_is_never_moved():
     """B3.3: an entry added by hand and re-keyed to "smartha-" by an older
     release still has its address in its title; it stays where it is."""
@@ -499,6 +557,16 @@ def test_user_step_aborts_on_a_name_that_resolves_to_an_entry():
     assert _user(flow, "nas-box")["reason"] == "already_configured"
 
 
+def test_user_step_without_a_token_sends_no_stored_token():
+    """A blank password field reads the typed address with no token, never
+    with an existing entry's."""
+    entry = _discovered(token="sekrit")
+    flow = _flow([entry], SOURCE_USER, {f"{OLD}:9099": ("nas", ["SER-N1"], "sekrit"),
+                                        "nas-box:9099": ("nas", ["SER-N1"], "")})
+    _user(flow, "nas-box")
+    assert flow.net.tokens_to("nas-box") == {""}
+
+
 def test_user_step_other_port_same_address_is_created():
     entry = _discovered()
     flow = _flow([entry], SOURCE_USER, {f"{OLD}:9100": NAS})
@@ -562,6 +630,40 @@ def test_confirm_after_another_agent_with_the_name_was_added_creates():
     assert _confirm(flow)["type"] == "create_entry"
 
 
+def test_confirm_with_a_blank_token_sends_no_stored_token():
+    """The entry added while the card waited has a token; a blank field at
+    confirm sends the discovered address none (hacs/default#11245)."""
+    flow = _card([], {f"{LAN}:9099": ROUTER,
+                      f"{WAN}:9099": ("testrouter", ROUTER[1], "sekrit")})
+    flow.hass.config_entries.entries.append(_entry("e1", f"{WAN}:9099", WAN, token="sekrit"))
+    # The drive count from the TXT record (2) stands in for the drives.
+    assert _confirm(flow)["reason"] == "already_configured"
+    assert flow.net.tokens_to(LAN) == {""}
+    assert flow.net.tokens_to(WAN) == {"sekrit"}
+
+
+def test_confirm_sends_only_the_typed_token():
+    flow = _card([], {f"{LAN}:9099": ("testrouter", ROUTER[1], "typed"),
+                      f"{WAN}:9099": ("testrouter", ROUTER[1], "sekrit")})
+    flow.hass.config_entries.entries.append(_entry("e1", f"{WAN}:9099", WAN, token="sekrit"))
+    assert _run(flow.async_step_zeroconf_confirm({"token": "typed"}))["reason"] == (
+        "already_configured")
+    assert "sekrit" not in flow.net.tokens_to(LAN)
+
+
+def test_panel_add_of_a_discovered_agent_sends_no_stored_token():
+    """The panel's Add of a discovered agent that wants a password (the
+    import step, "hostname" given) reads its address with no token."""
+    entry = _entry("e1", f"{LAN}:9099", LAN, token="sekrit")
+    flow = _flow([entry], "import", {
+        f"{LAN}:9099": ("testrouter", ROUTER[1], "sekrit"),
+        f"{WAN}:9099": ("testrouter", ROUTER[1], ""),
+    })
+    _run(flow.async_step_import({"host": WAN, "port": 9099, "token": "",
+                                 "hostname": "testrouter"}))
+    assert "sekrit" not in flow.net.tokens_to(WAN)
+
+
 def test_pick_best_ip_prefers_tailscale_over_link_local():
     info = _discovery("nas", "169.254.10.20", "100.101.102.103", "9.9.9.9")
     assert config_flow.SmartSnifferConfigFlow._pick_best_ip(info) == "100.101.102.103"
@@ -601,8 +703,11 @@ def test_user_step_for_the_app_stores_its_kind():
               f"{APP}:9100": (APP, ["MOCK-R1"], "", {"mock": True})}
     flow = _flow([], SOURCE_USER, agents)
     assert _user(flow, APP)["data"]["agent_mock"] is False
+    # The App's replica agent is refused (v0.9): Replicas live in the
+    # integration now.
     flow = _flow([], SOURCE_USER, agents)
-    assert _user(flow, APP, port=9100)["data"]["agent_mock"] is True
+    result = _user(flow, APP, port=9100)
+    assert result["type"] == "abort" and result["reason"] == "replicas_moved"
 
 
 def test_confirm_stores_the_agents_identity():
@@ -641,3 +746,120 @@ def test_another_agent_at_the_old_address_leaves_the_identity_alone():
     assert identity.identity_changes(entry.data, other, [{"serial": "SER-X9"}]) == ({}, True)
     flow = _rediscover(entry, {f"{NEW}:9099": ("intruder", ["SER-X9"], "")})
     assert entry.data["host"] == OLD and flow.hass.config_entries.updates == []
+
+
+# --- no stored token reaches an address the entry does not own (hacs/default#11245)
+# Through the flow's own HTTP helpers, with the Authorization header of every
+# outgoing request recorded per host.
+
+ROGUE = "192.168.40.66"
+
+
+class _Response:
+    def __init__(self, status, body):
+        self.status, self._body = status, body
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    def raise_for_status(self):
+        if self.status >= 400:
+            raise aiohttp.ClientResponseError(None, (), status=self.status)
+
+    async def json(self, **kwargs):
+        return self._body
+
+
+class _Session:
+    """Agents by "host:port" -> (hostname, serials, password). Health needs
+    no password; drives answer 401 to any other."""
+
+    def __init__(self, agents):
+        self.agents = agents
+        self.auth: dict[str, set[str]] = {}
+
+    def get(self, url, headers=None, timeout=None):
+        hostport, _, path = url.removeprefix("http://").partition("/")
+        host = hostport.rsplit(":", 1)[0]
+        header = (headers or {}).get("Authorization", "")
+        self.auth.setdefault(host, set()).add(header)
+        agent = self.agents.get(hostport)
+        if agent is None:
+            raise aiohttp.ClientConnectionError("unreachable")
+        hostname, serials, needs = agent
+        if path == "api/health":
+            return _Response(200, {"status": "ok", "version": "0.8.3", "hostname": hostname})
+        if needs and header != f"Bearer {needs}":
+            return _Response(401, None)
+        return _Response(200, [{"id": f"id-{s}", "serial": s} for s in serials])
+
+
+@pytest.fixture
+def wire(monkeypatch):
+    """A flow whose requests go through _Session."""
+
+    def make(entries, source, agents):
+        session = _Session(agents)
+        monkeypatch.setattr(config_flow, "async_get_clientsession", lambda hass: session)
+        flow = _flow(entries, source)
+        for name in ("_get_json", "_test_connection", "_drives_status"):
+            del flow.__dict__[name]
+        return flow, session
+
+    return make
+
+
+def _stored(**data):
+    return _entry("e1", f"{LAN}:9099", LAN, token="sekrit", **data)
+
+
+SECURED = ("testrouter", ["SER-A1", "SER-A2"], "sekrit")
+
+
+@pytest.mark.parametrize("typed", ["", "typed"])
+def test_user_step_sends_a_new_address_only_the_typed_token(wire, typed):
+    flow, session = wire([_stored()], SOURCE_USER, {
+        f"{LAN}:9099": SECURED, f"{ROGUE}:9099": ("testrouter", ["SER-A1", "SER-A2"], typed),
+    })
+    result = _user(flow, ROGUE, token=typed)
+    assert session.auth[LAN] == {"Bearer sekrit"}  # the entry's own address
+    assert session.auth[ROGUE] == {f"Bearer {typed}" if typed else ""}
+    # Read with the typed token (or none), the drives still show the same agent.
+    assert result["reason"] == "already_configured"
+
+
+def test_import_step_sends_a_new_address_no_stored_token(wire):
+    """The panel's Add (scanned, typed or discovered row) passes no password."""
+    for hostname in (None, "testrouter"):
+        flow, session = wire([_stored()], "import", {
+            f"{LAN}:9099": SECURED, f"{ROGUE}:9099": ("testrouter", ["SER-Z9"], ""),
+        })
+        data = {"host": ROGUE, "port": 9099, "token": ""}
+        if hostname:
+            data["hostname"] = hostname
+        _run(flow.async_step_import(data))
+        assert session.auth[ROGUE] == {""}, hostname
+        assert session.auth[LAN] == {"Bearer sekrit"}
+
+
+def test_zeroconf_and_confirm_send_a_discovered_address_no_stored_token(wire):
+    flow, session = wire([_stored()], SOURCE_ZEROCONF, {
+        f"{LAN}:9099": SECURED, f"{ROGUE}:9099": ("testrouter", ["SER-Z9"], ""),
+    })
+    result = _run(flow.async_step_zeroconf(_discovery("testrouter", ROGUE, preferred=ROGUE)))
+    assert result["type"] == "form"
+    assert _confirm(flow)["type"] == "create_entry"
+    assert session.auth[ROGUE] == {""}
+    assert session.auth[LAN] == {"Bearer sekrit"}
+
+
+def test_a_rediscovery_sends_the_advertised_address_no_stored_token(wire):
+    entry = _discovered(token="sekrit")
+    flow, session = wire([entry], SOURCE_ZEROCONF, {f"{NEW}:9099": ("nas", ["SER-N1"], "")})
+    result = _run(flow.async_step_zeroconf(_discovery("nas", NEW)))
+    assert result["reason"] == "already_configured"
+    assert entry.data["host"] == OLD
+    assert "Bearer sekrit" not in session.auth.get(NEW, set())

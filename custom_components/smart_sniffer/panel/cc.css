@@ -1,0 +1,659 @@
+/* Control Center styles: one grid of cards (design Rev 4).
+   Black, white and grey. Four colour exceptions, muted, defined once below:
+   --att   Attention: the word, FAILED, its chevron, the agent dot, the health box's
+           stroke and the labels and values of rows that caused it, and the
+           trash's Remove? (and Remove here, with its Home Assistant twin) while
+           it waits for its second click;
+   --maybe Maybe: the same places, for warnings;
+   --ok    Health OK, its chevron and its health box, and the agent dot;
+   --ha    the exit icon of something in Home Assistant, nowhere else.
+   Space is not health: disk space bars are grey only. */
+:root {
+  --ink: #000;          /* page */
+  --panel: #070707;     /* card */
+  --panel-2: #0f0f0f;   /* inset, table head, input */
+  --rule: #2b2b2b;      /* hairline */
+  --rule-2: #474747;    /* stronger hairline, control border */
+  --paper: #f1f1f1;     /* main type */
+  --grey: #bdbdbd;      /* secondary type */
+  --dim: #8f8f8f;       /* muted type, lowest grey used for text */
+  --edit-line: #9a9a9a; /* dashed hint under a name that can be renamed */
+  --ha: #03a9f4;
+  --att: #cc6b63;
+  --maybe: #cc9f52;
+  --ok: #5da372;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { font-size: 15px; -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--ink); color: var(--paper); font-family: var(--sans); line-height: 1.45; }
+a { color: var(--paper); text-decoration: underline; text-decoration-color: var(--rule-2); text-underline-offset: 3px; }
+a:hover { text-decoration-color: var(--paper); }
+:focus-visible { outline: 2px solid var(--paper); outline-offset: 2px; }
+img { display: block; }
+.mono { font-family: var(--mono); }
+.dim { color: var(--dim); }
+.lock { width: 11px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.5; display: inline-block; vertical-align: -1px; flex: none; }
+[x-cloak] { display: none !important; }
+[hidden] { display: none !important; }
+
+/* ------------------------------------------------------------------
+   Page, header and footer
+   ------------------------------------------------------------------ */
+.page { max-width: 1280px; margin: 0 auto; padding: 28px 24px 60px; }
+.app-head { display: flex; align-items: center; justify-content: space-between; gap: 12px 16px; flex-wrap: wrap;
+            padding-bottom: 14px; border-bottom: 1px solid var(--rule); }
+.brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.brand .mark { width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--rule-2); }
+.brand .mark.glass { fill: none; stroke: var(--paper); stroke-width: 1.4; padding: 8px; background: var(--ink); }
+.brand .wordmark { width: 252px; height: auto; }
+.brand .page-name { font-size: 0.95rem; color: var(--grey); padding-left: 14px; border-left: 1px solid var(--rule-2); line-height: 1.1; }
+.head-side { display: flex; align-items: center; gap: 10px 18px; flex-wrap: wrap; }
+.versions { font-family: var(--mono); font-size: 0.76rem; color: var(--dim); display: flex; gap: 16px; }
+.versions b { color: var(--grey); font-weight: 500; }
+.head-tools { display: flex; gap: 8px; }
+/* This app's agent: one quiet line under the header, its address and mDNS
+   name each with a copy button. It wraps by whole items on a phone. */
+.agent-line { margin: 12px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; font-size: 0.76rem; color: var(--dim); }
+.agent-line > * { white-space: nowrap; }
+.agent-line .cp-v { font-size: 0.74rem; overflow-wrap: normal; }
+/* The two section headers, HAOS SMART AGENT: and DRIVES:, read the same. */
+.sec-label { font-family: var(--sans); font-size: 0.74rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--grey); }
+p.sec-label { margin: 22px 0 10px; }
+/* This app's agent status, a dot before its version: grey until known,
+   then Health OK green or Attention red. */
+.versions .v-agent { display: inline-flex; align-items: center; gap: 6px; }
+.agent-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--dim); flex: none; }
+.agent-dot.up { background: var(--ok); }
+.agent-dot.down { background: var(--att); }
+.page-err { margin: 0 0 12px; font-size: 0.82rem; color: var(--paper); }
+.empty-line { margin: 0 0 14px; font-size: 0.86rem; color: var(--dim); max-width: 82ch; }
+.empty-line a { color: var(--grey); }
+.app-foot { margin-top: 34px; border-top: 1px solid var(--rule); padding-top: 14px; display: flex; gap: 8px 20px; flex-wrap: wrap; font-size: 0.82rem; color: var(--dim); }
+.app-foot a { color: var(--grey); }
+.app-foot .spacer { flex: 1; }
+.app-foot .foot-sep { width: 1px; height: 12px; background: var(--rule-2); align-self: center; }
+.app-foot .also { color: var(--dim); }
+
+/* Buttons and inputs */
+.btn { cursor: pointer; border-radius: 3px; padding: 6px 14px; font: 600 0.8rem/1.3 var(--sans); border: 1px solid var(--rule-2);
+       background: transparent; color: var(--paper); text-decoration: none; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.btn:hover { border-color: var(--grey); }
+.btn:disabled { color: var(--dim); cursor: default; border-color: var(--rule); }
+.btn[aria-pressed="true"] { background: var(--paper); color: #000; border-color: var(--paper); }
+.btn-primary { background: var(--paper); color: #000; border-color: var(--paper); }
+.btn-primary:hover { background: #fff; }
+.btn-primary:disabled { background: transparent; }
+.btn-sm { padding: 3px 10px; font-size: 0.74rem; }
+.btn-quiet { border-color: transparent; color: var(--dim); }
+.btn-quiet:hover { color: var(--paper); border-color: var(--rule-2); }
+.btn.eye-btn { gap: 6px; font-family: var(--mono); padding-left: 9px; padding-right: 10px; }
+.eye-g { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.input { background: #000; color: var(--paper); border: 1px solid var(--rule-2); border-radius: 3px; padding: 4px 8px;
+         font-family: var(--mono); font-size: 0.78rem; min-width: 0; }
+.input:focus { outline: none; border-color: var(--paper); }
+
+/* ------------------------------------------------------------------
+   The grid. Rows stretch to their tallest card, so cards side by side
+   line up and every problem row shows; at phone width one column.
+   ------------------------------------------------------------------ */
+.grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); }
+/* A card with Details open stays one column and grows down. The other
+   cards in its grid row keep the height the row had while closed (cc.js
+   pinRows sets it on them); rows with no card open stretch as above. */
+.card { background: var(--panel); border: 1px solid var(--rule-2); border-radius: 6px; padding: 12px 14px 10px;
+        position: relative; min-width: 0; display: flex; flex-direction: column; }
+
+/* Head: grip, title (two lines at most), exit icon and type pill */
+.c-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px 8px; align-items: start; }
+.grip { background: none; border: 0; padding: 4px 3px; margin: -1px 0 0 -6px; color: var(--dim); cursor: grab; line-height: 0;
+        touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; border-radius: 3px; }
+.grip:hover { color: var(--paper); }
+/* The card's controls (grip, download, eye, trash) rest dimmed and come up
+   while the pointer is anywhere on the card, or on keyboard focus. On a
+   touch screen they stay dimmed and come up while pressed. */
+.card .grip, .card .c-foot .icon { opacity: 0.3; transition: opacity 0.15s ease; }
+.card:hover .grip, .card:hover .c-foot .icon,
+.card .grip:focus-visible, .card .c-foot .icon:focus-visible, .card .c-foot .icon[aria-expanded="true"] { opacity: 1; }
+@media (hover: none) {
+  .card:hover .grip, .card:hover .c-foot .icon { opacity: 0.3; }
+  .card .grip:active, .card .c-foot .icon:active,
+  .card .grip:focus-visible, .card .c-foot .icon:focus-visible, .card .c-foot .icon[aria-expanded="true"] { opacity: 1; }
+  .card .c-foot .icon.armed { opacity: 1; }
+}
+.grip svg { width: 10px; height: 16px; fill: currentColor; }
+.c-title { margin: 0; font-size: 0.98rem; font-weight: 650; line-height: 1.3; overflow-wrap: anywhere;
+           display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.c-tags { display: flex; align-items: center; gap: 6px; padding-top: 1px; }
+/* Rename in place, no pencils. The pointer on the name itself (not the
+   card) gives a dashed underline and a text cursor; a click opens a field
+   with the title's own font and line, and a solid line across the title's
+   width. A machine pill a field agent owns turns its border dashed under
+   the pointer and is typed in inside its own box. Fixed pills never
+   change. On a touch screen a tap starts editing; there are no hover
+   states. Keyboard: Tab to the name or pill, Enter or F2. */
+.c-name { display: flex; align-items: flex-start; min-width: 0; }
+.c-name .c-title { flex: 0 1 auto; min-width: 0; }
+.t-name { border-radius: 2px; text-decoration: none; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.t-name:focus { outline: none; }
+.t-name:focus-visible { outline: 2px solid var(--paper); outline-offset: 2px; }
+@media (hover: hover) {
+  .t-name:hover { cursor: text; text-decoration: underline dashed var(--edit-line); text-decoration-thickness: 1px; }
+  .pill-ed:hover { cursor: text; border-style: dashed; border-color: var(--edit-line); color: #d9d9d9; }
+}
+.name-box { display: block; flex: 1 1 auto; min-width: 0; }
+.name-in { display: block; width: 100%; min-width: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent;
+           color: var(--paper); font: inherit; outline: none; box-shadow: none; caret-color: #fff; }
+.name-in.c-title { font-size: 0.98rem; font-weight: 650; line-height: 1.3; height: 1.3em; font-family: var(--sans);
+                   box-shadow: inset 0 -1px 0 var(--paper); }
+.name-in::selection { background: #3d3d3d; color: #fff; }
+.pill-ed:focus { outline: none; }
+.pill-ed:focus-visible { outline: 2px solid var(--paper); outline-offset: 2px; }
+.pill.pill-edit { border-color: #fff; border-style: solid; background: var(--panel-2); padding: 0 2px; max-width: none; }
+.pill-edit .name-in { height: 100%; text-align: center; font: inherit; letter-spacing: inherit; line-height: inherit;
+                      text-transform: uppercase; color: var(--paper); }
+.c-model { margin: 0 0 6px; font-size: 0.74rem; color: var(--dim); overflow-wrap: anywhere; }
+.exit-slot { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+/* Every pill, editable or fixed, has the same box: height, min-width,
+   centred text, flush right in the head, so pills line up across the grid. */
+.pill { display: block; box-sizing: border-box; height: 18px; min-width: 76px; max-width: 140px; padding: 0 6px;
+        font-family: var(--mono); font-size: 0.66rem; line-height: 16px; letter-spacing: 0.04em; text-align: center;
+        color: var(--grey); border: 1px solid var(--rule-2); border-radius: 0;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A replica's pill is a ghost: dotted frame, dimmer type, so test data
+   reads as not part of the system. It is fixed, so never the dashed hover
+   hint of a renamable pill. The rest of the card is as any other. */
+.pill.pill-ghost { border-style: dotted; color: var(--dim); }
+
+/* Exit icon: blue when the device is in Home Assistant (opens it there);
+   grey outline when the integration is installed and the device is not in
+   it yet (click opens the confirm under the title); absent otherwise. */
+.exit { display: inline-flex; color: var(--ha); text-decoration: none; line-height: 0; }
+.exit svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.exit:focus-visible { outline-color: var(--ha); }
+button.exit { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; }
+.exit.add { color: var(--dim); }
+.exit.add:hover, .exit.add[aria-expanded="true"] { color: var(--grey); }
+.exit.add:focus-visible { outline-color: var(--paper); }
+
+/* Confirms inside the card: Create or the install guide (under the title), Remove (over the footer) */
+.ask { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 8px 0 0; padding: 5px 6px 5px 10px;
+       border: 1px solid var(--rule-2); background: var(--panel-2); font-size: 0.82rem; color: var(--paper); }
+.ask .ask-btns { display: inline-flex; gap: 6px; }
+.ask .ask-err { flex-basis: 100%; font-size: 0.78rem; color: var(--grey); }
+.ask .ask-body { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; width: 100%; }
+.ask .ask-title { flex-basis: 100%; font-weight: 600; color: var(--paper); }
+.ask .ask-line { flex: 1 1 14em; color: var(--grey); }
+.ask .ask-steps { flex-basis: 100%; margin: 2px 0 2px; padding-left: 1.3em; color: var(--grey); }
+.ask .ask-steps li + li { margin-top: 2px; }
+/* The integration notice: one quiet line above the grid, with its x */
+.ha-notice { margin: 14px 0 0; display: flex; align-items: center; gap: 10px; font-size: 0.8rem; color: var(--dim); }
+.ha-notice a { color: var(--grey); }
+.notice-x { cursor: pointer; background: transparent; border: 0; color: var(--dim); font-size: 1rem; line-height: 1; padding: 2px 4px; }
+.notice-x:hover { color: var(--paper); }
+.ask.remove { margin: 10px 0 0; }
+
+.c-where { font-family: var(--mono); font-size: 0.72rem; color: var(--dim); margin: 3px 0 0 18px; display: flex; flex-wrap: wrap; gap: 2px 12px; min-width: 0; }
+.c-where span { overflow-wrap: anywhere; }
+.c-vitals { font-family: var(--mono); font-size: 0.78rem; color: var(--grey); margin: 8px 0 0 18px; display: flex; flex-wrap: wrap; gap: 2px 16px; }
+/* A drive's stat row: a tiny uppercase label over each value, a hairline
+   between tiles. A missing value takes its tile away and the row closes up.
+   Tiles wrap whole; the hairline at the start of a line is clipped, so
+   there is never a separator with nothing before it. */
+.c-stats { margin: 8px 0 0 18px; overflow: hidden; }
+.st-row { display: flex; flex-wrap: wrap; row-gap: 6px; margin: 0 0 0 -9px; }
+.st-t { display: grid; padding: 0 8px; border-left: 1px solid var(--rule-2); min-width: 0; }
+.st-k { font: 600 0.58rem/1.25 var(--sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); white-space: nowrap; }
+.st-v { margin: 0; font: 400 0.8rem/1.3 var(--mono); color: var(--paper); white-space: nowrap; }
+.st-v i { font-style: normal; color: var(--grey); }
+
+/* Disk space. No colour: a near-black track and a grey fill. Below 80% the
+   figure sits outside; from 80% the percent sits inside a lighter fill in
+   dark type (knocked out), heavier at 90% and 95%, and at 95% the bar's
+   outline turns dashed. Outside it then says what is left. */
+.space { margin: 12px 0 0 18px; font-size: 0.72rem; display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; }
+.sp-row { display: grid; grid-template-columns: 68px minmax(0, 1fr) auto; gap: 8px; align-items: center; min-width: 0; }
+.sp-mount { font-family: var(--mono); color: var(--grey); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-bar { position: relative; height: 13px; background: #141414; border: 1px solid #262626; display: block; overflow: hidden; }
+.sp-bar i { position: absolute; inset: 0 auto 0 0; background: #555; display: flex; align-items: center; justify-content: flex-end; }
+.sp-bar b { font-family: var(--mono); font-size: 0.64rem; line-height: 1; padding-right: 4px; color: #101010; font-weight: 400; white-space: nowrap; }
+.sp-text { font-family: var(--mono); color: var(--dim); white-space: nowrap; }
+.sp-row.s80 .sp-bar i { background: #a9a9a9; }
+.sp-row.s90 .sp-bar i { background: #c6c6c6; }
+.sp-row.s90 .sp-bar b { font-weight: 600; }
+.sp-row.s95 .sp-bar { border: 1px dashed #bdbdbd; }
+.sp-row.s95 .sp-bar i { background: #e4e4e4; }
+.sp-row.s95 .sp-bar b { font-weight: 800; color: #000; }
+.sp-row.s80 .sp-text, .sp-row.s90 .sp-text, .sp-row.s95 .sp-text { color: var(--grey); }
+.sp-row.na .sp-bar { border: 1px dashed var(--rule-2); background: transparent; }
+.sp-more { font-size: 0.7rem; color: var(--dim); padding-left: 76px; }
+
+/* The health box: one frame, sharp corners, around the health line and
+   its chevron, in the state colour at 25% and no fill. Closed it holds the
+   first three problem rows and an "and N more" line; open it holds all of
+   Details and grows with them. Health not known is a grey dashed frame.
+   The words inside keep their full colour. Nothing in the box scrolls. */
+/* Its wrapper takes the spare height above it, so every box in a grid row
+   ends on its footer rule and a taller box grows upward. */
+.hwrap { margin-top: auto; padding-top: 10px; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
+.hbox { border: 1px solid var(--rule-2); border-radius: 0; padding: 6px 10px 7px; min-width: 0;
+        display: grid; grid-template-columns: minmax(0, 1fr); background: transparent; }
+.hbox.attention { border-color: rgb(204 107 99 / 0.25); }
+.hbox.maybe { border-color: rgb(204 159 82 / 0.25); }
+.hbox.ok { border-color: rgb(93 163 114 / 0.25); }
+.hbox.unknown { border: 1px dashed rgb(143 143 143 / 0.25); }
+
+/* Health line: the word, and the Details chevron in the same colour */
+.c-health { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; font-size: 0.96rem; font-weight: 700; line-height: 1.3; }
+.card > .c-health { margin-top: 10px; }
+.h-att { color: var(--att); white-space: nowrap; }
+.h-fail { color: var(--paper); white-space: nowrap; }
+.h-fail b { color: var(--att); }
+.h-maybe { color: var(--maybe); white-space: nowrap; }
+.h-ok { color: var(--ok); white-space: nowrap; }
+.h-unk { display: inline-flex; align-items: center; gap: 8px; color: var(--grey); font-weight: 600; font-size: 0.86rem; white-space: nowrap; }
+.ghost-dot { width: 10px; height: 10px; border-radius: 50%; border: 1.5px dashed var(--dim); flex: none; }
+.chev { margin-left: auto; background: none; border: 0; padding: 4px 2px; cursor: pointer; line-height: 0; color: var(--grey); }
+/* The outline for keyboard focus only, never after a click */
+.chev:focus:not(:focus-visible) { outline: none; }
+/* 64% of its first size (22 by 13): 80% of the 17.6 by 10.4 before. The
+   20 by 12 viewBox scales by the height, 8.32 / 12, so 4.88 units draw a
+   3.38 px line, one pixel heavier than the 2.38 px before. */
+.chev svg { width: 14.08px; height: 8.32px; fill: none; stroke: currentColor; stroke-width: 4.88; stroke-linecap: round; stroke-linejoin: round;
+            transition: transform 0.18s ease; }
+.chev[aria-expanded="true"] svg { transform: rotate(180deg); }
+.chev.attention { color: var(--att); }
+.chev.maybe { color: var(--maybe); }
+.chev.ok { color: var(--ok); }
+.chev.unknown { color: var(--grey); }
+.c-note { font-size: 0.76rem; color: var(--dim); margin: 6px 0 0; }
+
+/* Problem rows, closed: at most three, then "and N more". The rows carry
+   no marks; each row's label and value carry the state. The note in
+   brackets sits after the label, muted; the value stands alone. */
+.pw { margin-top: 6px; border-top: 1px solid #1c1c1c; padding-top: 2px; display: grid; grid-template-columns: minmax(0, 1fr); }
+.pw-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 3px 0; font-size: 0.8rem; color: var(--paper); }
+.pw-row + .pw-row { border-top: 1px solid #161616; }
+.pw-label { min-width: 0; overflow-wrap: anywhere; }
+.pw-label small, .kv small, .fs-line small { font-size: 0.7rem; color: var(--dim); font-weight: 400; }
+.pw-val { font-family: var(--mono); font-size: 0.78rem; font-weight: 600; white-space: nowrap; text-align: right; }
+.pw-row.crit .lb, .pw-row.crit .pw-val { color: var(--att); }
+.pw-row.warn .lb, .pw-row.warn .pw-val { color: var(--maybe); }
+.pw-more { justify-self: start; background: none; border: 0; padding: 3px 0 1px; margin: 0; font: 400 0.76rem/1.3 var(--sans); color: var(--dim); cursor: pointer;
+           text-align: left; border-top: 1px solid #161616; width: 100%; }
+.pw-more:hover { color: var(--grey); }
+.pw-more:focus:not(:focus-visible) { outline: none; }
+
+/* Details, open inside the health box in place of the problem rows */
+.details { margin-top: 8px; padding-top: 8px; border-top: 1px solid #1c1c1c; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
+.kv { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
+.kv > div { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 2px 0; border-bottom: 1px solid #141414; font-size: 0.78rem; }
+.kv dt { color: var(--dim); min-width: 0; }
+.kv dd { margin: 0; text-align: right; min-width: 0; overflow-wrap: anywhere; }
+.kv dd .v { font-family: var(--mono); color: var(--grey); }
+.kv > div.crit .lb, .kv > div.crit .v { color: var(--att); font-weight: 600; }
+.kv > div.warn .lb, .kv > div.warn .v { color: var(--maybe); font-weight: 600; }
+.kv > div.unk .v, .kv dd .v.na { font-family: var(--sans); color: var(--dim); }
+.fs-list { display: grid; grid-template-columns: minmax(0, 1fr); border-top: 1px solid var(--rule); padding-top: 4px; }
+.fs-line { display: flex; justify-content: space-between; gap: 10px; font-size: 0.76rem; color: var(--grey); padding: 2px 0; }
+.fs-used { font-family: var(--mono); font-size: 0.72rem; color: var(--grey); white-space: nowrap; }
+/* One attribute table. It fits the box: Name takes the spare width and
+   wraps, the numbers sit together at the right, nothing scrolls. */
+.table-wrap { border: 1px solid var(--rule); container-type: inline-size; min-width: 0; }
+.table-wrap + .table-wrap { margin-top: 8px; }
+table.attrs { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 0.7rem; }
+table.attrs th { text-align: left; color: var(--dim); font-weight: 500; padding: 4px 6px; border-bottom: 1px solid var(--rule); background: var(--panel-2); font-family: var(--sans); }
+table.attrs td { padding: 2px 6px; color: var(--grey); border-bottom: 1px solid #151515; white-space: nowrap; vertical-align: top; }
+table.attrs td.nm, table.attrs th.nm { width: 100%; }
+/* A name breaks only after an underscore (the page puts a <wbr> there) or
+   at a space, never inside a word: the name column takes the width its
+   longest piece needs and the value column gives way. */
+table.attrs td.nm { white-space: normal; overflow-wrap: break-word; }
+/* A very long raw value (an NVMe 128-bit counter, a list of numbers) wraps
+   in a box of its own width instead of widening the value column. */
+table.attrs td.c-raw .long { display: inline-block; width: 14ch; white-space: normal; overflow-wrap: anywhere; text-align: right; }
+table.attrs td.num, table.attrs th.num { text-align: right; }
+table.attrs tr.crit td { color: var(--att); font-weight: 600; }
+table.attrs tr.warn td { color: var(--maybe); font-weight: 600; }
+/* Value, Worst and Thresh are the maker's normalized score: muted, so Raw
+   (the real count, which the alerts use) is read first. On a flagged row
+   the Value keeps the state colour at a lighter weight. */
+table.attrs td.c-val, table.attrs td.c-worst, table.attrs td.c-thresh,
+table.attrs tr.crit td.c-worst, table.attrs tr.crit td.c-thresh,
+table.attrs tr.warn td.c-worst, table.attrs tr.warn td.c-thresh { color: var(--dim); font-weight: 400; }
+table.attrs tr.crit td.c-val { color: var(--att); font-weight: 400; }
+table.attrs tr.warn td.c-val { color: var(--maybe); font-weight: 400; }
+table.attrs th[title] { cursor: help; }
+/* The note after a name, and a watched reading the drive does not report */
+table.attrs td small, table.attrs tr td .na { font-family: var(--sans); font-size: 0.66rem; color: var(--dim); font-weight: 400; }
+table.attrs td .na { white-space: nowrap; }
+table.attrs .input { padding: 1px 6px; font-size: 0.7rem; }
+/* A replica's Raw reading reads as plain text until it is used: an
+   underline on hover, the full field only while focused. */
+table.attrs .raw-in { width: 96px; max-width: 96px; text-align: right; padding: 0; border: 0; border-radius: 0;
+                      background: transparent; color: inherit; font: inherit; line-height: inherit; cursor: text; }
+table.attrs .raw-in:hover { box-shadow: inset 0 -1px 0 var(--dim); }
+table.attrs .raw-in:focus { background: #000; color: var(--paper); border-radius: 3px; box-shadow: 0 0 0 1px var(--paper); }
+/* A one-column card or a phone: ID, Name, Value and Raw. A raw value of
+   20 characters or fewer stays on one line; a longer one wraps in its own
+   box (.long). The Download keeps every column. */
+@container (max-width: 459px) {
+  table.attrs .c-worst, table.attrs .c-thresh { display: none; }
+}
+/* The narrowest cards (three columns in a narrow window): tighter cells, so
+   a 20-character raw value still fits on its line. */
+@container (max-width: 299px) {
+  table.attrs th, table.attrs td { padding-left: 4px; padding-right: 4px; }
+}
+
+/* A field agent with nothing to show, and this app's agent not answering */
+.card.machine { background: #040404; border-color: var(--rule); }
+.card.machine .c-title, .card.machine .pill, .card.machine .c-where { opacity: 0.55; }
+.m-body { margin: 8px 0 0 18px; }
+.m-msg { margin: 0 0 6px; font-size: 0.84rem; color: var(--grey); }
+.m-msg b { color: var(--paper); }
+.pass { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.pass .input { width: 210px; max-width: 100%; }
+.pass .input.bad { border-color: var(--paper); border-width: 1.5px; }
+.pass-help { margin: 6px 0 0; font-size: 0.74rem; color: var(--dim); }
+
+/* Footer: Last seen, then the corner icons */
+.c-spacer { flex: 1 0 12px; }
+.c-foot { padding-top: 7px; display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--rule); margin-top: 10px; }
+.c-spacer + .c-foot { margin-top: 0; }
+.hwrap ~ .c-spacer { flex: 0 0 6px; }
+.hwrap ~ .c-foot { margin-top: 0; }
+.seen { font-family: var(--mono); font-size: 0.7rem; color: var(--dim); min-width: 0; }
+.act-note { font-size: 0.72rem; color: var(--grey); }
+.icons { margin-left: auto; display: inline-flex; gap: 4px; }
+.icon { background: none; border: 0; padding: 3px; color: var(--grey); cursor: pointer; line-height: 0; border-radius: 3px; }
+.icon:hover { color: var(--paper); }
+.icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.icon[aria-expanded="true"] { color: var(--paper); }
+/* The trash armed: Remove? in the same place, growing to the left */
+.icon.armed { color: var(--att); border: 1px solid var(--att); padding: 2px 6px; font-family: var(--sans); font-size: 0.72rem;
+              line-height: 16px; height: 22px; white-space: nowrap; position: relative; }
+.icon.armed:hover { color: var(--att); background: rgba(204, 107, 99, 0.12); }
+.icon.trash .rm-word, .icon.trash.armed svg { display: none; }
+.icon.trash.armed .rm-word { display: inline; }
+/* In Home Assistant: Remove here where the trash was, and to its left the
+   button that also acts there; the pair grows to the left */
+.rm-set, .rm-pair { display: inline-flex; gap: 4px; }
+/* The pair is laid over the foot, not in it, so nothing moves under the
+   pointer: Remove here stays where the trash was, and on a narrow card the
+   Home Assistant button goes on the line above. */
+.rm-set.pair { position: relative; width: 22px; height: 22px; }
+.rm-set.pair .rm-pair { position: absolute; right: 0; bottom: 0; z-index: 3; width: max-content;
+  max-width: min(420px, calc(100vw - 64px)); flex-wrap: wrap-reverse; justify-content: flex-end;
+  row-gap: 6px; padding-left: 8px; background: var(--panel); }
+/* A removal's Home Assistant message, muted, for a few seconds */
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 40; margin: 0;
+         max-width: min(560px, calc(100vw - 32px)); padding: 8px 14px; border: 1px solid var(--rule-2); border-radius: 4px;
+         background: var(--panel-2); color: var(--grey); font-size: 0.82rem; }
+.card .c-foot .icon.armed { opacity: 1; }
+
+/* A Replica card (simulated drives for testing): a fine dashed border all
+   round, as "Health not known", with the REPLICA pill. Its health colours
+   are the usual ones. */
+.card.is-replica { border-style: dashed; border-color: var(--rule-2); }  /* the solid card border's colour */
+
+/* Hidden, shown again from the header: faded in place, its closed eye
+   readable, the dotted border of the App 0.3.1 (dashed is the Replica's) */
+.card.is-hidden, .card.is-replica.is-hidden { border-style: dotted; border-color: var(--rule-2); }
+.card.is-hidden > :not(.c-foot) { opacity: 0.38; }
+.card.is-hidden .c-foot .seen { opacity: 0.38; }
+
+/* Drag: the card in hand floats; its place in the grid is the drop gap */
+.card.drop-gap { border: 1.5px dashed var(--grey); background: transparent; }
+.card.drop-gap > * { visibility: hidden; }
+#drag-layer .lifted { position: fixed; z-index: 50; margin: 0; pointer-events: none; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.8);
+                      border-color: var(--grey); background: var(--panel); transform: rotate(1.2deg); opacity: 1; }
+.grid.dragging, .grid.dragging * { cursor: grabbing; }
+
+/* ------------------------------------------------------------------
+   The + card: a dashed ghost, always last. Opened, it grows across the
+   row with three areas, each its own panel, and one Add button.
+   ------------------------------------------------------------------ */
+.card.ghost { background: transparent; border: 1.5px dashed var(--rule-2); display: grid; place-items: center; align-content: center;
+              gap: 6px; min-height: 180px; cursor: pointer; color: var(--grey); text-align: center; font: inherit; width: 100%; padding: 18px;
+              opacity: 0.3; transition: opacity 0.15s ease, border-color 0.15s ease; }
+.card.ghost:hover { border-color: var(--grey); }
+.card.ghost:hover, .card.ghost:focus-visible { opacity: 1; }
+@media (hover: none) { .card.ghost, .card.ghost:hover { opacity: 0.45; } .card.ghost:focus-visible { opacity: 1; } }
+.ghost .plus { font-size: 4.4rem; font-weight: 200; line-height: 0.9; color: var(--paper); }
+.ghost .ghost-sub { font-size: 0.82rem; color: var(--grey); }
+/* Opened: two of three columns, or the full row when the grid has fewer
+   than three. Network with Add by hand under it on the left, Replicas on
+   the right; one column when it is narrow. */
+.card.ghost-open { grid-column: 1 / -1; border: 1.5px dashed var(--grey); padding: 8px 14px 12px; display: grid; gap: 10px;
+                   container: addcard / inline-size; }
+.card.ghost-open.wide { grid-column: auto / span 2; }
+.add-body, .add-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-content: start; min-width: 0; }
+@container addcard (min-width: 620px) {
+  .add-body { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); align-items: start; }
+}
+.add-head { display: flex; align-items: center; gap: 8px; }
+.add-head h3 { margin: 0; font-size: 1rem; font-weight: 650; }
+.plus-close { background: none; border: 0; padding: 0 2px; margin-left: -3px; color: var(--paper); font: 200 1.9rem/1 var(--sans); cursor: pointer; transform: rotate(45deg); }
+.plus-close:hover { color: #fff; }
+.area { border: 1px solid var(--rule-2); background: var(--panel); padding: 8px 10px 10px; display: grid; gap: 8px; min-width: 0; container-type: inline-size; }
+.area h4 { margin: 0; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--grey); }
+.area-help { margin: 0; font-size: 0.74rem; color: var(--dim); }
+/* Check's answer, under the Add by hand fields */
+.check-msg { margin: 0; font-size: 0.78rem; color: var(--grey); overflow-wrap: anywhere; }
+.check-msg.muted { color: var(--dim); }
+/* A row Check found already in the list: one outline pulse */
+.pick-row.flash { animation: pick-flash 0.9s ease-out 1; }
+@keyframes pick-flash { 0%, 30% { outline: 2px solid var(--paper); outline-offset: -2px; } 100% { outline: 2px solid rgb(241 241 241 / 0); outline-offset: -2px; } }
+.add-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.add-line .pair { display: inline-flex; align-items: center; gap: 8px; }
+.add-line .lbl { font-size: 0.78rem; color: var(--dim); white-space: nowrap; }
+.add-line .lbl.net { color: var(--grey); font-weight: 600; }
+.add-line .input { width: 132px; }
+.add-line .input.port { width: 60px; }
+.add-line .input.host { width: 176px; }
+.scan-prog { display: inline-flex; align-items: center; gap: 10px; margin-left: 4px; }
+.bar { width: 120px; height: 4px; background: #262626; position: relative; flex: none; }
+.bar i { position: absolute; inset: 0 auto 0 0; background: var(--paper); }
+.scan-of { font-family: var(--mono); font-size: 0.74rem; color: var(--dim); white-space: nowrap; }
+.found { display: inline-grid; justify-items: center; line-height: 1; min-width: 28px; }
+.found b { font-family: var(--mono); font-size: 1.3rem; font-weight: 700; color: var(--paper); }
+.found small { font-size: 0.64rem; color: var(--grey); margin-top: 2px; white-space: nowrap; }
+.found small .found-old { color: var(--dim); }
+.scan-none { margin: 0; font-size: 0.8rem; color: var(--dim); }
+.scan-none .mono { color: var(--grey); font-size: 0.76rem; }
+.scan-wide { display: inline-flex; align-items: center; gap: 10px; margin-left: 4px; font-size: 0.8rem; color: var(--paper); flex-wrap: wrap; }
+.replica-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 0 10px; }
+.replica-pick label { display: flex; gap: 10px; align-items: center; padding: 4px 0; font-size: 0.8rem; color: var(--grey); cursor: pointer; min-width: 0; }
+.replica-pick label.on { color: var(--paper); }
+.replica-pick label .tick { flex: none; }
+.replica-up { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-top: 4px; padding-top: 8px;
+              border-top: 1px solid var(--rule); font-size: 0.8rem; color: var(--grey); }
+.replica-up .ext { font-family: var(--mono); font-size: 0.74rem; color: var(--dim); }
+.add-foot { display: flex; justify-content: flex-end; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.78rem; color: var(--dim); }
+.add-foot > span { margin-right: auto; }
+.add-err, .up-msg { color: var(--paper); font-size: 0.78rem; }
+.pick { border: 1px solid var(--rule); }
+.pick-head, .pick-row { display: grid; grid-template-columns: 18px minmax(0, 1.1fr) minmax(0, 1fr) 112px 64px 16px; gap: 10px; align-items: center; padding: 6px 10px; }
+.pick-head { font-size: 0.7rem; color: var(--dim); border-bottom: 1px solid var(--rule); }
+.pick-row { border-bottom: 1px solid #1a1a1a; font-size: 0.8rem; color: var(--grey); cursor: pointer; margin: 0; }
+.pick-row:last-child { border-bottom: 0; }
+.pick-row.on { background: var(--panel-2); }
+.pick-row .h { color: var(--paper); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-row .a { font-family: var(--mono); font-size: 0.76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-row .v, .pick-row .d { font-family: var(--mono); font-size: 0.74rem; white-space: nowrap; }
+.pick-row .v { overflow: hidden; text-overflow: ellipsis; }
+.pick-row .k { color: var(--paper); }
+.pick-row.done { cursor: default; color: var(--dim); }
+.pick-row.done .h { color: var(--dim); font-weight: 400; }
+.tick { appearance: none; -webkit-appearance: none; width: 14px; height: 14px; border: 1.5px solid var(--paper); border-radius: 0; margin: 0;
+        background: transparent; cursor: pointer; }
+.tick:checked { background: var(--paper); box-shadow: inset 0 0 0 2px #000; }
+.tick:disabled { border-color: var(--rule-2); border-style: dashed; cursor: default; }
+@container (max-width: 560px) {
+  .pick-head { display: none; }
+  .pick-row { grid-template-columns: 18px minmax(0, 1fr) auto; grid-template-areas: "t h k" ". a a" ". v d"; row-gap: 1px; }
+  .pick-row .tick { grid-area: t; }
+  .pick-row .h { grid-area: h; }
+  .pick-row .k { grid-area: k; }
+  .pick-row .a { grid-area: a; }
+  .pick-row .v { grid-area: v; }
+  .pick-row .d { grid-area: d; text-align: right; }
+}
+
+@media (max-width: 760px) {
+  .page { padding: 16px 16px 40px; }
+  .brand .wordmark { width: 180px; }
+  .head-side { width: 100%; justify-content: space-between; }
+  .card.ghost { min-height: 140px; }
+  /* The page name stays on a phone, smaller, on its own line under the
+     wordmark (no rule before it), so the Control Center and the App still
+     tell themselves apart there. */
+  .page:not(.ax-page) > .app-head .brand { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center;
+                                           column-gap: 14px; row-gap: 3px; }
+  .page:not(.ax-page) > .app-head .brand .mark { grid-row: 1 / span 2; }
+  .page:not(.ax-page) > .app-head .brand .wordmark { align-self: end; }
+  .brand .page-name { align-self: start; font-size: 0.8rem; padding-left: 0; border-left: 0; }
+}
+/* Tap targets on touch screens: pad the buttons, not the glyphs */
+@media (pointer: coarse) {
+  .icon { padding: 8px; margin: -5px -3px; }
+  .icon.armed { padding: 2px 6px; margin: 0; }
+  .icon.armed::after { content: ""; position: absolute; inset: -9px -4px; }
+  .grip { padding: 8px 6px; margin: -6px -2px -6px -10px; }
+  .exit { padding: 9px; margin: -9px; }
+  .chev { padding: 8px 4px; margin-top: -6px; margin-bottom: -6px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* Thresholds, edited in an open Details box. The tune button sits by the
+   chevron; the edit table takes the attribute table's place, its inputs
+   in the threshold column and the default muted. No colours of its own. */
+.tune { margin-left: auto; margin-block: -6px; background: none; border: 0; padding: 6px 4.4px 6px 7.6px; cursor: pointer; line-height: 0; color: var(--dim); border-radius: 3px; }
+/* The bright look is edit mode's alone, bound to aria-pressed. Hover gets a
+   lesser grey and only where a pointer can hover, so a click or tap that
+   leaves edit mode does not leave the glyph looking on. */
+.tune[aria-pressed="true"] { color: var(--paper); }
+@media (hover: hover) { .tune[aria-pressed="false"]:hover { color: var(--grey); } }
+/* The page's outline for keyboard focus only, never after a click */
+.tune:focus:not(:focus-visible) { outline: none; }
+/* The owner's two sliders, filled, 12.6 px: 90% of the 14 px before. The
+   padding makes a 24.6 px square to tap; the negative block margins keep
+   the line's height, and the narrower right padding sets the glyph 4.4 px
+   from the chevron's button, about half its width nearer than before. */
+.tune svg { width: 12.6px; height: 12.6px; fill: currentColor; stroke: none; }
+.tune ~ .chev { margin-left: -14px; }  /* the tune button meets the chevron's */
+.thr { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
+table.attrs .thr-in { width: 72px; max-width: 72px; text-align: right; }
+table.attrs tr td.def { color: var(--dim); font-weight: 400; }
+.thr-where { margin: 0; font-size: 0.72rem; color: var(--dim); }
+.thr-err { margin: 0; font-size: 0.78rem; color: var(--paper); }
+/* Two rows, both right-aligned: Accept and Reset above, Cancel then Save
+   below with Save hard right, also when a row wraps. The pending note
+   sits right on the line above. */
+.thr-btns { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.thr-l, .thr-r { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: 100%; }
+.thr-foot { display: flex; align-items: baseline; gap: 10px; }
+.thr-pending { margin-left: auto; font-size: 0.72rem; color: var(--dim); }
+/* A field changed but not saved: its text bold, in the main type. */
+table.attrs .thr-in.pending { color: var(--paper); font-weight: 700; }
+
+/* Connect by hand: what to type into the integration; each value opens
+   the exact-number popover with Copy. Quiet, in the summary area above
+   the table. */
+.conn { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 14px; font-size: 0.74rem; color: var(--dim);
+        padding: 4px 0 5px; border-bottom: 1px solid #141414; min-width: 0; }
+.conn-h { color: var(--dim); flex-basis: 100%; }
+.cp { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.cp-k { color: var(--dim); }
+.cp-v { color: var(--grey); font-size: 0.72rem; overflow-wrap: anywhere; -webkit-user-select: all; user-select: all; }
+.copy { background: none; border: 0; padding: 2px; margin: -2px 0; cursor: pointer; line-height: 0; color: var(--dim); border-radius: 3px; flex: none; }
+.copy:hover { color: var(--paper); }
+.copy:focus:not(:focus-visible) { outline: none; }
+.copy svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linejoin: round; }
+.copied { font-size: 0.66rem; color: var(--dim); }
+.conn-note { margin: 0; flex-basis: 100%; font-size: 0.72rem; color: var(--dim); }
+@media (pointer: coarse) {
+  .tune { padding: 8px 6px; margin-top: -6px; margin-bottom: -6px; }
+  .copy { padding: 7px; margin: -7px -3px; }
+}
+
+/* ------------------------------------------------------------------
+   Agentic access (agentic.html): the whole data set as JSON. Dark like
+   the Control Center; the JSON block scrolls sideways, the page never.
+   ------------------------------------------------------------------ */
+.ax-page .brand { gap: 14px; }
+.ax-back { font-size: 0.95rem; color: var(--grey); }
+.ax-title { margin: 0; font-size: 0.95rem; font-weight: 600; color: var(--paper); padding-left: 14px; border-left: 1px solid var(--rule-2); line-height: 1.1; }
+.ax-lead { margin: 16px 0 0; font-size: 0.86rem; max-width: 82ch; }
+.ax-lead + .ax-lead { margin-top: 4px; }
+.ax-tools { margin: 16px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ax-status { font-size: 0.74rem; color: var(--dim); }
+.ax-meta { margin: 12px 0 8px; font-size: 0.74rem; overflow-wrap: anywhere; }
+.ax-json { margin: 0; padding: 12px 14px; background: var(--panel); border: 1px solid var(--rule); border-radius: 3px;
+           font: 0.76rem/1.45 var(--mono); color: var(--grey); white-space: pre; overflow: auto; tab-size: 2;
+           max-width: 100%; max-height: 75vh; }
+
+/* ── SMART Sniffer panel (v0.9) ─────────────────────────────────────────
+   The "Install the SMART Sniffer App" note: the built notice line, under
+   the empty line and at the foot of the open + card. */
+.ha-notice.app-note { margin: 0 0 14px; }
+.ha-notice.add-note { margin: 12px 0 0; }
+/* ── The Replica (v0.9) ──────────────────────────────────────────────────
+   + > Replica: the library in its groups, one row per file with its kind
+   in muted type; rows that cannot be ticked (invalid, or at the cap) dim.
+   A Replica card whose file is gone says so in its health box. */
+.rep-group { display: grid; gap: 2px; min-width: 0; }
+.rep-gh { margin: 2px 0 0; font-size: 0.7rem; color: var(--dim); }
+.replica-pick label .rep-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.replica-pick label .rep-kind { flex: none; margin-left: auto; font-size: 0.72rem; color: var(--dim); white-space: nowrap; }
+.replica-pick label.off { color: var(--dim); cursor: default; }
+.replica-up { margin-top: 0; }
+.h-unk.h-missing { white-space: normal; font-weight: 400; color: var(--dim); font-size: 0.8rem; }
+.toast .toast-sub { color: var(--dim); }
+.ha-notice.moved-note { margin: 0 0 14px; }
+
+/* + > Replica: your own files have the cards' trash, small, at the row's
+   right after the kind; Delete? waits for its second click */
+.replica-pick .rep-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.replica-pick .rep-row label { flex: 1 1 auto; }
+.replica-pick .rep-del { flex: none; padding: 2px; }
+.replica-pick .rep-del svg { width: 14px; height: 14px; }
+.replica-pick .rep-del.armed { padding: 1px 6px; height: 20px; line-height: 16px; }
+.rep-ask-err { grid-column: 1 / -1; margin: 2px 0 6px; font-size: 0.8rem; color: var(--att); }
+/* A shown number with an exact one behind it: plain at rest. Where the
+   device can hover, hovering shows a dotted underline, the pointer and the
+   tooltip (its title); a click or tap opens the popover with the exact
+   number and Copy on every device. */
+.bign { white-space: nowrap; text-underline-offset: 3px; }
+@media (hover: hover) {
+  .bign:hover { cursor: pointer; text-decoration: underline dotted var(--dim); }
+}
+.bign:focus-visible { outline: 1px solid var(--grey); outline-offset: 2px; }
+/* The same for a text value (model, serial, firmware, host, port): it may
+   wrap like the text it replaces, and selects as text. */
+.bign.txt { white-space: normal; overflow-wrap: anywhere; -webkit-user-select: text; user-select: text; }
+/* Device Statistics in Details: a small heading over a table in the
+   attribute table's style */
+.devstat { display: grid; gap: 4px; min-width: 0; }
+.sub-h { margin: 4px 0 0; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
+.numpop { position: fixed; z-index: 45; display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  background: var(--panel-2); border: 1px solid var(--rule-2); border-radius: 4px; color: var(--paper);
+  font-size: 0.8rem; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6); max-width: calc(100vw - 16px); }
+.numpop .copied { color: var(--dim); }
+.toast .toast-act { margin-left: 10px; }
+.card.flash { animation: pick-flash 0.9s ease-out 1; }
+/* A Replica card's readings, in the thresholds editor */
+.rep-raw { margin-top: 10px; }
+table.attrs .thr-in.rep-in { width: 128px; max-width: 128px; }
+
+/* The SMART Sniffer App's handover report: once, dismissible; skipped
+   machines behind Show, one muted line each with Discard. */
+.ha-notice.import-note { margin: 0 0 14px; align-items: flex-start; }
+.import-note .imp-body { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; }
+.import-note .imp-skipped { flex-basis: 100%; list-style: none; margin: 2px 0 0; padding: 0; display: grid; gap: 4px; }
+.import-note .imp-skipped li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+.ax-token code { overflow-wrap: anywhere; word-break: break-word; }
+a.btn.ax-raw { text-decoration: none; }

@@ -24,7 +24,8 @@ from homeassistant.const import MAJOR_VERSION, MINOR_VERSION
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 
-from .const import CONF_HOST, DOMAIN
+from .const import DOMAIN
+from .source import agent_address
 from .device_link import agent_link
 from .device_removal import our_identifier
 from .host_name import (
@@ -59,7 +60,7 @@ def agent_device_info(entry: ConfigEntry) -> dict[str, Any]:
     """Device info for the per-agent device (sensor and binary_sensor)."""
     return {
         "identifiers": {(DOMAIN, f"{entry.entry_id}_agent")},
-        "name": agent_name(entry.title, entry.data.get(CONF_HOST), display_host(entry)),
+        "name": agent_name(entry.title, agent_address(entry.data), display_host(entry)),
         "manufacturer": "SMART Sniffer",
         "model": "Agent",
     }
@@ -140,14 +141,14 @@ def _sync_names(hass: HomeAssistant, entry: ConfigEntry) -> None:
     registry = dr.async_get(hass)
     entry_id = entry.entry_id
     host = display_host(entry)
-    fallback = legacy_host(entry.title, entry.data.get(CONF_HOST))
+    fallback = legacy_host(entry.title, agent_address(entry.data))
     renamed = 0
     for device in dr.async_entries_for_config_entry(registry, entry_id):
         identifier = our_identifier(device.identifiers)
         if identifier is None:
             continue
         if identifier == f"{entry_id}_agent":
-            name = agent_name(entry.title, entry.data.get(CONF_HOST), host)
+            name = agent_name(entry.title, agent_address(entry.data), host)
         elif identifier == f"{entry_id}_filesystems":
             name = disk_usage_name(host, fallback)
         elif (pool := pool_name_from_identifier(identifier, entry_id)) is not None:

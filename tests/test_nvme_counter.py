@@ -106,12 +106,15 @@ def test_unreadable_is_logged_once_per_drive(att, drive, caplog):
     att._UNREADABLE_LOGGED.clear()
     payload = drive(UNREADABLE)
     payload["id"] = "fx-nvme-unreadable"
+    payload["device_path"] = "/dev/nvme0"
     with caplog.at_level(logging.DEBUG, logger=att.__name__):
         att.evaluate_attention(payload)
         att.evaluate_attention(payload)
     lines = [r for r in caplog.records if "not readable" in r.getMessage()]
     assert len(lines) == 1
-    assert "fx-nvme-unreadable" in lines[0].getMessage()
+    # Named by its device path; the id is a slug of the serial.
+    assert "/dev/nvme0" in lines[0].getMessage()
+    assert "fx-nvme-unreadable" not in lines[0].getMessage()
     assert "1449400005035951791936293027446784" in lines[0].getMessage()
 
 

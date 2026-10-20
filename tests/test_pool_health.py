@@ -293,6 +293,23 @@ def test_the_first_poll_is_a_baseline():
     assert state == {"tank": ph.pool_problems(one("degraded-faulted"))}
 
 
+def test_the_replica_notifies_an_unhealthy_pool_when_first_seen():
+    """first_sighting (the Replica, v0.9): an unhealthy pool tells on its
+    first read, a healthy one does not, and the next read changes nothing."""
+    actions, state = ph.notification_actions({}, pools("degraded-faulted"), (),
+                                             first_sighting=True)
+    assert [(a.kind, a.name) for a in actions] == [("create", "tank")]
+    assert actions[0].reasons == ph.pool_problems(one("degraded-faulted"))
+    again, _ = ph.notification_actions(state, pools("degraded-faulted"), (),
+                                       first_sighting=True)
+    assert again == []
+    healthy = [p for stem in ("never-scrubbed", "scrub-in-progress", "spares", "resilver")
+               for p in pools(stem) if not ph.pool_problems(p)]
+    assert healthy
+    quiet, _ = ph.notification_actions({}, healthy, (), first_sighting=True)
+    assert quiet == []
+
+
 def test_healthy_to_unhealthy_notifies_once():
     healthy = [{**one("degraded-faulted"), "state": "ONLINE", "read_errors": 0,
                 "write_errors": 0, "checksum_errors": 0}]

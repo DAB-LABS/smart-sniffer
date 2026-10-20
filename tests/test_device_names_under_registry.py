@@ -427,3 +427,23 @@ def test_setup_names_devices_and_survives_missing_data(tmp_path, monkeypatch):
     result = _setup(tmp_path / "bare", monkeypatch, {}, False)
     assert result["ok"] is True
     assert "Samsung (S1)" in result["names"]
+
+
+# --- the entries a device belongs to (2026.10 deprecates config_entries) ---------
+
+
+def test_device_entry_ids_reads_the_registry_without_the_deprecation(tmp_path, caplog):
+    """The panel's live updates ask which of our entries a changed device
+    belongs to. From 2026.10 DeviceEntry.config_entries logs a deprecation
+    (it breaks in 2027.10); the helper reads config_entry_id where the core
+    has it and config_entries before that, with the same answer."""
+    device_link = importlib.import_module("custom_components.smart_sniffer.device_link")
+
+    async def body(hass):
+        entry = _add(hass, "e1", "nas1")
+        device = _device(hass, entry, "S1", "nas1 Drive")
+        with caplog.at_level(logging.WARNING):
+            assert device_link.device_entry_ids(device) == {"e1"}
+        assert "config_entries" not in caplog.text
+
+    _run(tmp_path, body)

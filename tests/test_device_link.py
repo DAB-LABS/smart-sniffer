@@ -143,3 +143,53 @@ def test_the_platforms_use_the_helper():
     assert count(r"\*\*agent_link\(", "sensor.py", "binary_sensor.py") == 1  # Disk Usage
     assert count(r"\*\*agent_link\(", "device_naming.py") == 1
     assert count(r"= drive_device_info\(", "sensor.py", "binary_sensor.py") == 5
+
+
+# --- The entries a device belongs to ------------------------------------------
+
+
+class _OldDevice:
+    """A device before 2026.8: several entries, no config_entry_id."""
+
+    def __init__(self, entries):
+        self.config_entries = set(entries)
+
+
+class _NewDevice:
+    """A device from 2026.8: one entry. From 2026.10 config_entries warns."""
+
+    def __init__(self, entry_id, composite=None):
+        self.config_entry_id = entry_id
+        self._composite = composite
+
+    @property
+    def is_composite_device(self):
+        return self._composite is not None
+
+    @property
+    def config_entries(self):
+        if self._composite is None:
+            raise AssertionError("config_entries read on a plain new device")
+        return set(self._composite)
+
+
+def test_an_old_device_answers_every_entry():
+    assert device_link.device_entry_ids(_OldDevice({"a", "b"})) == {"a", "b"}
+    assert device_link.device_entry_ids(_OldDevice(())) == set()
+
+
+def test_a_new_device_answers_its_one_entry_without_config_entries():
+    assert device_link.device_entry_ids(_NewDevice("a")) == {"a"}
+    assert device_link.device_entry_ids(_NewDevice(None)) == set()
+
+
+def test_a_restored_composite_device_answers_the_union():
+    assert device_link.device_entry_ids(_NewDevice("a", composite={"a", "b"})) == {"a", "b"}
+
+
+def test_the_panel_reads_device_entries_through_the_helper():
+    """panel_ws runs on every core from 2024.4: it must not read
+    DeviceEntry.config_entries itself."""
+    text = (_COMPONENT / "panel_ws.py").read_text()
+    assert ".config_entries)" not in text and "device.config_entries" not in text
+    assert "device_entry_ids(device)" in text

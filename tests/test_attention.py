@@ -71,9 +71,10 @@ def test_coerce_logs_the_arriving_type_for_unusable_input(att, caplog):
     """The debug line names the type, which is the whole diagnostic value:
     NoneType points at an old agent, str at JSON that would not parse."""
     with caplog.at_level(logging.DEBUG, logger=att.__name__):
-        att.coerce_smart_data({"id": "sda-wfl3abcd", "smart_data": None})
+        att.coerce_smart_data({"id": "sda-wfl3abcd", "device_path": "/dev/sda", "smart_data": None})
 
-    assert "sda-wfl3abcd" in caplog.text
+    # Named by its device path; the id is a slug of the serial.
+    assert "/dev/sda" in caplog.text and "sda-wfl3abcd" not in caplog.text
     assert "NoneType" in caplog.text
 
 

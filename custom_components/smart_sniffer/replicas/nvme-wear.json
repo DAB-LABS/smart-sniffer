@@ -1,0 +1,79 @@
+{
+  "format": "smart-sniffer-replica",
+  "version": 1,
+  "name": "NVMe, worn",
+  "kind": "nvme",
+  "description": "An NVMe SSD low on spare blocks.",
+  "origin": {
+    "type": "shipped"
+  },
+  "order": 8,
+  "meta": {
+    "model": "Samsung SSD 980 PRO 1TB",
+    "serial": "MOCK-NVME-0001",
+    "protocol": "NVMe",
+    "device_path": "/dev/nvme9n1"
+  },
+  "smart": {
+    "smart_status": {
+      "passed": true
+    },
+    "nvme_smart_health_information_log": {
+      "critical_warning": 0,
+      "temperature": 41,
+      "available_spare": 15,
+      "available_spare_threshold": 10,
+      "percentage_used": 3,
+      "power_on_hours": 2210,
+      "power_cycles": 11,
+      "media_errors": 0,
+      "data_units_written": 9121094,
+      "data_units_read": 18242188
+    },
+    "model_name": "Samsung SSD 980 PRO 1TB",
+    "firmware_version": "5B2QGXA7",
+    "user_capacity": {
+      "blocks": 1953525168,
+      "bytes": 1000204886016
+    },
+    "nvme_total_capacity": 1000204886016
+  },
+  "devstat": {
+    "status": "not_applicable"
+  },
+  "filesystems": [
+    {
+      "id": "fs-1d000005",
+      "uuid": "1d000005-0000-4000-8000-000000000005",
+      "mountpoint": "/",
+      "device": "/dev/nvme9n1p2",
+      "fstype": "ext4",
+      "total_bytes": 200000000000,
+      "used_bytes": 194000000000,
+      "available_bytes": 6000000000,
+      "use_percent": 97.0,
+      "status": "ok"
+    },
+    {
+      "id": "fs-1d000006",
+      "uuid": "1d000006-0000-4000-8000-000000000006",
+      "mountpoint": "/home",
+      "device": "/dev/nvme9n1p3",
+      "fstype": "ext4",
+      "total_bytes": 780000000000,
+      "used_bytes": 234000000000,
+      "available_bytes": 546000000000,
+      "use_percent": 30.0,
+      "status": "ok"
+    }
+  ],
+  "verdict": {
+    "state": "MAYBE",
+    "severity": "warning",
+    "reasons": [
+      "NVMe available spare low: 15% remaining"
+    ],
+    "rules_version": "0.9.0",
+    "at": "2026-10-18T00:00:00Z"
+  }
+}

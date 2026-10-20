@@ -1,0 +1,5452 @@
+{
+ "board": {
+  "drive": {
+   "mock-nvme-0001": {
+    "derived": {
+     "host_reads": {
+      "bytes": 9340000256000,
+      "source": "nvme"
+     },
+     "host_writes": {
+      "bytes": 4670000128000,
+      "source": "nvme"
+     }
+    },
+    "device_path": "/dev/nvme9n1",
+    "device_statistics": {
+     "status": "not_applicable"
+    },
+    "id": "mock-nvme-0001",
+    "last_updated": "2026-10-19T21:22:21Z",
+    "model": "Samsung SSD 980 PRO 1TB",
+    "protocol": "NVMe",
+    "readable": true,
+    "serial": "MOCK-NVME-0001",
+    "smart_data": {
+     "firmware_version": "5B2QGXA7",
+     "model_name": "Samsung SSD 980 PRO 1TB",
+     "nvme_smart_health_information_log": {
+      "available_spare": 15,
+      "available_spare_threshold": 10,
+      "critical_warning": 0,
+      "data_units_read": 18242188,
+      "data_units_written": 9121094,
+      "media_errors": 0,
+      "percentage_used": 3,
+      "power_cycles": 11,
+      "power_on_hours": 2210,
+      "temperature": 41
+     },
+     "nvme_total_capacity": 1000204886016,
+     "smart_status": {
+      "passed": true
+     },
+     "user_capacity": {
+      "blocks": 1953525168,
+      "bytes": 1000204886016
+     }
+    }
+   },
+   "mock-sata-0002": {
+    "derived": {
+     "host_reads": {
+      "bytes": 24000000000000,
+      "source": "ata_device_statistics"
+     },
+     "host_writes": {
+      "bytes": 12000000000000,
+      "source": "ata_device_statistics"
+     }
+    },
+    "device_path": "/dev/sdz",
+    "device_statistics": {
+     "complete": true,
+     "exit_status": 0,
+     "logical_block_size": 512,
+     "pages": [
+      {
+       "name": "General Statistics",
+       "number": 1,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Lifetime Power-On Resets",
+         "offset": 8,
+         "size": 4,
+         "value": 142
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Power-on Hours",
+         "offset": 16,
+         "size": 4,
+         "value": 8760
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Logical Sectors Written",
+         "offset": 24,
+         "size": 6,
+         "value": 23437500000
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Write Commands",
+         "offset": 32,
+         "size": 6,
+         "value": 366210937
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Logical Sectors Read",
+         "offset": 40,
+         "size": 6,
+         "value": 46875000000
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Read Commands",
+         "offset": 48,
+         "size": 6,
+         "value": 488281250
+        }
+       ]
+      },
+      {
+       "name": "Rotating Media Statistics",
+       "number": 3,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Spindle Motor Power-on Hours",
+         "offset": 8,
+         "size": 4,
+         "value": 8585
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Head Flying Hours",
+         "offset": 16,
+         "size": 4,
+         "value": 8135
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Head Load Events",
+         "offset": 24,
+         "size": 4,
+         "value": 1278
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Reallocated Logical Sectors",
+         "offset": 32,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Read Recovery Attempts",
+         "offset": 40,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Mechanical Start Failures",
+         "offset": 48,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Realloc. Candidate Logical Sectors",
+         "offset": 56,
+         "size": 4,
+         "value": 0
+        }
+       ]
+      },
+      {
+       "name": "General Errors Statistics",
+       "number": 4,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Reported Uncorrectable Errors",
+         "offset": 8,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Resets Between Cmd Acceptance and Completion",
+         "offset": 16,
+         "size": 4,
+         "value": 0
+        }
+       ]
+      },
+      {
+       "name": "Temperature Statistics",
+       "number": 5,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Current Temperature",
+         "offset": 8,
+         "size": 1,
+         "value": 36
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Average Short Term Temperature",
+         "offset": 16,
+         "size": 1,
+         "value": 35
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Average Long Term Temperature",
+         "offset": 24,
+         "size": 1,
+         "value": 34
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Highest Temperature",
+         "offset": 32,
+         "size": 1,
+         "value": 52
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Lowest Temperature",
+         "offset": 40,
+         "size": 1,
+         "value": 18
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Time in Over-Temperature",
+         "offset": 80,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Specified Maximum Operating Temperature",
+         "offset": 88,
+         "size": 1,
+         "value": 60
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Time in Under-Temperature",
+         "offset": 96,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Specified Minimum Operating Temperature",
+         "offset": 104,
+         "size": 1,
+         "value": 5
+        }
+       ]
+      },
+      {
+       "name": "Transport Statistics",
+       "number": 6,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Hardware Resets",
+         "offset": 8,
+         "size": 4,
+         "value": 145
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of ASR Events",
+         "offset": 16,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Interface CRC Errors",
+         "offset": 24,
+         "size": 4,
+         "value": 0
+        }
+       ]
+      }
+     ],
+     "status": "present"
+    },
+    "id": "mock-sata-0002",
+    "last_updated": "2026-10-19T21:22:21Z",
+    "model": "Seagate Barracuda ST2000DM008",
+    "protocol": "ATA",
+    "readable": true,
+    "serial": "MOCK-SATA-0002",
+    "smart_data": {
+     "ata_smart_attributes": {
+      "table": [
+       {
+        "id": 5,
+        "name": "Reallocated_Sector_Ct",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 10,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 9,
+        "name": "Power_On_Hours",
+        "raw": {
+         "string": "8760",
+         "value": 8760
+        },
+        "thresh": 0,
+        "value": 80,
+        "worst": 80
+       },
+       {
+        "id": 10,
+        "name": "Spin_Retry_Count",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 97,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 12,
+        "name": "Power_Cycle_Count",
+        "raw": {
+         "string": "142",
+         "value": 142
+        },
+        "thresh": 20,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 187,
+        "name": "Reported_Uncorrect",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 188,
+        "name": "Command_Timeout",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 194,
+        "name": "Temperature_Celsius",
+        "raw": {
+         "string": "36",
+         "value": 36
+        },
+        "thresh": 0,
+        "value": 36,
+        "worst": 52
+       },
+       {
+        "id": 196,
+        "name": "Reallocated_Event_Count",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 197,
+        "name": "Current_Pending_Sector",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 198,
+        "name": "Offline_Uncorrectable",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 241,
+        "name": "Total_LBAs_Written",
+        "raw": {
+         "string": "23437500000",
+         "value": 23437500000
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 253
+       },
+       {
+        "id": 242,
+        "name": "Total_LBAs_Read",
+        "raw": {
+         "string": "46875000000",
+         "value": 46875000000
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 253
+       }
+      ]
+     },
+     "firmware_version": "0001",
+     "in_smartctl_database": true,
+     "interface_speed": {
+      "current": {
+       "bits_per_unit": 100000000,
+       "sata_value": 3,
+       "string": "6.0 Gb/s",
+       "units_per_second": 60
+      },
+      "max": {
+       "bits_per_unit": 100000000,
+       "sata_value": 14,
+       "string": "6.0 Gb/s",
+       "units_per_second": 60
+      }
+     },
+     "logical_block_size": 512,
+     "model_name": "Seagate Barracuda ST2000DM008",
+     "power_cycle_count": 142,
+     "power_on_time": {
+      "hours": 8760
+     },
+     "serial_number": "MOCK-SATA-0002",
+     "smart_status": {
+      "passed": true
+     },
+     "temperature": {
+      "current": 36
+     },
+     "user_capacity": {
+      "blocks": 3907029168,
+      "bytes": 2000398934016
+     }
+    }
+   },
+   "mock-usb-0001": {
+    "derived": {
+     "host_reads_omitted": "device_statistics_unavailable",
+     "host_writes_omitted": "device_statistics_unavailable"
+    },
+    "device_path": "/dev/sdu",
+    "device_statistics": {
+     "reason": "failed",
+     "status": "unavailable"
+    },
+    "id": "mock-usb-0001",
+    "last_updated": "2026-10-19T21:22:21Z",
+    "model": "WD Elements 2TB (USB)",
+    "protocol": "ATA",
+    "readable": true,
+    "serial": "MOCK-USB-0001",
+    "smart_data": {}
+   }
+  },
+  "drives": [
+   {
+    "device_path": "/dev/sdz",
+    "id": "mock-sata-0002",
+    "model": "Seagate Barracuda ST2000DM008",
+    "protocol": "ATA",
+    "readable": true,
+    "serial": "MOCK-SATA-0002"
+   },
+   {
+    "device_path": "/dev/nvme9n1",
+    "id": "mock-nvme-0001",
+    "model": "Samsung SSD 980 PRO 1TB",
+    "protocol": "NVMe",
+    "readable": true,
+    "serial": "MOCK-NVME-0001"
+   },
+   {
+    "device_path": "/dev/sdu",
+    "id": "mock-usb-0001",
+    "model": "WD Elements 2TB (USB)",
+    "protocol": "ATA",
+    "readable": true,
+    "serial": "MOCK-USB-0001"
+   }
+  ],
+  "files": [
+   "shipped.sata-hdd-healthy",
+   "shipped.nvme-wear",
+   "shipped.zfs-pool-degraded",
+   "shipped.usb-smart-blocked"
+  ],
+  "filesystems": [
+   {
+    "available_bytes": 150000000000,
+    "device": "/dev/sdz1",
+    "fstype": "ext4",
+    "id": "fs-1d000001",
+    "mountpoint": "/",
+    "status": "ok",
+    "total_bytes": 250000000000,
+    "use_percent": 40.0,
+    "used_bytes": 100000000000,
+    "uuid": "1d000001-0000-4000-8000-000000000001"
+   },
+   {
+    "available_bytes": 306000000000,
+    "device": "/dev/sdz2",
+    "fstype": "ext4",
+    "id": "fs-1d000002",
+    "mountpoint": "/data",
+    "status": "ok",
+    "total_bytes": 1700000000000,
+    "use_percent": 82.0,
+    "used_bytes": 1394000000000,
+    "uuid": "1d000002-0000-4000-8000-000000000002"
+   },
+   {
+    "available_bytes": 6000000000,
+    "device": "/dev/nvme9n1p2",
+    "fstype": "ext4",
+    "id": "fs-1d000005",
+    "mountpoint": "/",
+    "status": "ok",
+    "total_bytes": 200000000000,
+    "use_percent": 97.0,
+    "used_bytes": 194000000000,
+    "uuid": "1d000005-0000-4000-8000-000000000005"
+   },
+   {
+    "available_bytes": 546000000000,
+    "device": "/dev/nvme9n1p3",
+    "fstype": "ext4",
+    "id": "fs-1d000006",
+    "mountpoint": "/home",
+    "status": "ok",
+    "total_bytes": 780000000000,
+    "use_percent": 30.0,
+    "used_bytes": 234000000000,
+    "uuid": "1d000006-0000-4000-8000-000000000006"
+   },
+   {
+    "available_bytes": 3160000000000,
+    "device": "tank",
+    "fstype": "zfs",
+    "id": "fs-1d000007",
+    "mountpoint": "/tank",
+    "status": "ok",
+    "total_bytes": 4000000000000,
+    "use_percent": 21.0,
+    "used_bytes": 840000000000,
+    "uuid": "1d000007-0000-4000-8000-000000000007"
+   },
+   {
+    "available_bytes": 480000000000,
+    "device": "tank/media",
+    "fstype": "zfs",
+    "id": "fs-1d000008",
+    "mountpoint": "/tank/media",
+    "status": "ok",
+    "total_bytes": 4000000000000,
+    "use_percent": 88.0,
+    "used_bytes": 3520000000000,
+    "uuid": "1d000008-0000-4000-8000-000000000008"
+   },
+   {
+    "available_bytes": 1800000000000,
+    "device": "tank/backups",
+    "fstype": "zfs",
+    "id": "fs-1d000009",
+    "mountpoint": "/tank/backups",
+    "status": "ok",
+    "total_bytes": 4000000000000,
+    "use_percent": 55.0,
+    "used_bytes": 2200000000000,
+    "uuid": "1d000009-0000-4000-8000-000000000009"
+   }
+  ],
+  "health": {
+   "agent_id": "replica-golden-0001",
+   "auth_enabled": false,
+   "drive_count": 3,
+   "drives": 3,
+   "endpoints": [
+    "/api/health",
+    "/api/drives",
+    "/api/drives/{id}",
+    "/api/filesystems",
+    "/api/pools"
+   ],
+   "filesystems": 7,
+   "mock": true,
+   "os": "mock",
+   "pools": 1,
+   "pools_status": "ok",
+   "port": 36781,
+   "status": "ok",
+   "uptime_seconds": 0,
+   "version": "0.8.0-mock"
+  },
+  "pools": [
+   {
+    "action": null,
+    "checksum_errors": 0,
+    "data_errors": 0,
+    "last_scrub_end": "2026-10-06T00:22:21Z",
+    "last_scrub_errors": 0,
+    "last_scrub_repaired": 0,
+    "name": "tank",
+    "problem_vdevs": [
+     {
+      "checksum_errors": 0,
+      "name": "mirror-0",
+      "read_errors": 0,
+      "state": "DEGRADED",
+      "type": "mirror",
+      "write_errors": 0
+     },
+     {
+      "checksum_errors": 0,
+      "name": "MOCK0002",
+      "read_errors": 12,
+      "state": "FAULTED",
+      "type": "disk",
+      "write_errors": 0
+     }
+    ],
+    "read_errors": 12,
+    "scan_function": "SCRUB",
+    "scan_state": "FINISHED",
+    "scrub_in_progress": false,
+    "state": "DEGRADED",
+    "status": null,
+    "write_errors": 0
+   }
+  ]
+ },
+ "nvme-healthy": {
+  "drive": {
+   "mock-nvme-0001": {
+    "derived": {
+     "host_reads": {
+      "bytes": 9340000256000,
+      "source": "nvme"
+     },
+     "host_writes": {
+      "bytes": 4670000128000,
+      "source": "nvme"
+     }
+    },
+    "device_path": "/dev/nvme9n1",
+    "device_statistics": {
+     "status": "not_applicable"
+    },
+    "id": "mock-nvme-0001",
+    "last_updated": "2026-10-19T21:22:15Z",
+    "model": "Samsung SSD 980 PRO 1TB",
+    "protocol": "NVMe",
+    "readable": true,
+    "serial": "MOCK-NVME-0001",
+    "smart_data": {
+     "firmware_version": "5B2QGXA7",
+     "model_name": "Samsung SSD 980 PRO 1TB",
+     "nvme_smart_health_information_log": {
+      "available_spare": 100,
+      "available_spare_threshold": 10,
+      "critical_warning": 0,
+      "data_units_read": 18242188,
+      "data_units_written": 9121094,
+      "media_errors": 0,
+      "percentage_used": 0,
+      "power_cycles": 11,
+      "power_on_hours": 2210,
+      "temperature": 41
+     },
+     "nvme_total_capacity": 1000204886016,
+     "smart_status": {
+      "passed": true
+     },
+     "user_capacity": {
+      "blocks": 1953525168,
+      "bytes": 1000204886016
+     }
+    }
+   }
+  },
+  "drives": [
+   {
+    "device_path": "/dev/nvme9n1",
+    "id": "mock-nvme-0001",
+    "model": "Samsung SSD 980 PRO 1TB",
+    "protocol": "NVMe",
+    "readable": true,
+    "serial": "MOCK-NVME-0001"
+   }
+  ],
+  "files": [
+   "shipped.nvme-healthy"
+  ],
+  "filesystems": [
+   {
+    "available_bytes": 6000000000,
+    "device": "/dev/nvme9n1p2",
+    "fstype": "ext4",
+    "id": "fs-1d000005",
+    "mountpoint": "/",
+    "status": "ok",
+    "total_bytes": 200000000000,
+    "use_percent": 97.0,
+    "used_bytes": 194000000000,
+    "uuid": "1d000005-0000-4000-8000-000000000005"
+   },
+   {
+    "available_bytes": 546000000000,
+    "device": "/dev/nvme9n1p3",
+    "fstype": "ext4",
+    "id": "fs-1d000006",
+    "mountpoint": "/home",
+    "status": "ok",
+    "total_bytes": 780000000000,
+    "use_percent": 30.0,
+    "used_bytes": 234000000000,
+    "uuid": "1d000006-0000-4000-8000-000000000006"
+   }
+  ],
+  "health": {
+   "agent_id": "replica-golden-0001",
+   "auth_enabled": false,
+   "drive_count": 1,
+   "drives": 1,
+   "endpoints": [
+    "/api/health",
+    "/api/drives",
+    "/api/drives/{id}",
+    "/api/filesystems"
+   ],
+   "filesystems": 2,
+   "mock": true,
+   "os": "mock",
+   "port": 42575,
+   "status": "ok",
+   "uptime_seconds": 0,
+   "version": "0.8.0-mock"
+  },
+  "pools": {
+   "_status": 404
+  }
+ },
+ "nvme-wear": {
+  "drive": {
+   "mock-nvme-0001": {
+    "derived": {
+     "host_reads": {
+      "bytes": 9340000256000,
+      "source": "nvme"
+     },
+     "host_writes": {
+      "bytes": 4670000128000,
+      "source": "nvme"
+     }
+    },
+    "device_path": "/dev/nvme9n1",
+    "device_statistics": {
+     "status": "not_applicable"
+    },
+    "id": "mock-nvme-0001",
+    "last_updated": "2026-10-19T21:22:16Z",
+    "model": "Samsung SSD 980 PRO 1TB",
+    "protocol": "NVMe",
+    "readable": true,
+    "serial": "MOCK-NVME-0001",
+    "smart_data": {
+     "firmware_version": "5B2QGXA7",
+     "model_name": "Samsung SSD 980 PRO 1TB",
+     "nvme_smart_health_information_log": {
+      "available_spare": 15,
+      "available_spare_threshold": 10,
+      "critical_warning": 0,
+      "data_units_read": 18242188,
+      "data_units_written": 9121094,
+      "media_errors": 0,
+      "percentage_used": 3,
+      "power_cycles": 11,
+      "power_on_hours": 2210,
+      "temperature": 41
+     },
+     "nvme_total_capacity": 1000204886016,
+     "smart_status": {
+      "passed": true
+     },
+     "user_capacity": {
+      "blocks": 1953525168,
+      "bytes": 1000204886016
+     }
+    }
+   }
+  },
+  "drives": [
+   {
+    "device_path": "/dev/nvme9n1",
+    "id": "mock-nvme-0001",
+    "model": "Samsung SSD 980 PRO 1TB",
+    "protocol": "NVMe",
+    "readable": true,
+    "serial": "MOCK-NVME-0001"
+   }
+  ],
+  "files": [
+   "shipped.nvme-wear"
+  ],
+  "filesystems": [
+   {
+    "available_bytes": 6000000000,
+    "device": "/dev/nvme9n1p2",
+    "fstype": "ext4",
+    "id": "fs-1d000005",
+    "mountpoint": "/",
+    "status": "ok",
+    "total_bytes": 200000000000,
+    "use_percent": 97.0,
+    "used_bytes": 194000000000,
+    "uuid": "1d000005-0000-4000-8000-000000000005"
+   },
+   {
+    "available_bytes": 546000000000,
+    "device": "/dev/nvme9n1p3",
+    "fstype": "ext4",
+    "id": "fs-1d000006",
+    "mountpoint": "/home",
+    "status": "ok",
+    "total_bytes": 780000000000,
+    "use_percent": 30.0,
+    "used_bytes": 234000000000,
+    "uuid": "1d000006-0000-4000-8000-000000000006"
+   }
+  ],
+  "health": {
+   "agent_id": "replica-golden-0001",
+   "auth_enabled": false,
+   "drive_count": 1,
+   "drives": 1,
+   "endpoints": [
+    "/api/health",
+    "/api/drives",
+    "/api/drives/{id}",
+    "/api/filesystems"
+   ],
+   "filesystems": 2,
+   "mock": true,
+   "os": "mock",
+   "port": 35751,
+   "status": "ok",
+   "uptime_seconds": 0,
+   "version": "0.8.0-mock"
+  },
+  "pools": {
+   "_status": 404
+  }
+ },
+ "sata-hdd-devstat-uncorrectables": {
+  "drive": {
+   "mock-ds-9jg0x1": {
+    "derived": {
+     "host_reads": {
+      "bytes": 791804967834112,
+      "source": "ata_device_statistics"
+     },
+     "host_writes": {
+      "bytes": 107830377472000,
+      "source": "ata_device_statistics"
+     }
+    },
+    "device_path": "/dev/sdy",
+    "device_statistics": {
+     "complete": true,
+     "exit_status": 0,
+     "logical_block_size": 512,
+     "pages": [
+      {
+       "name": "General Statistics",
+       "number": 1,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Lifetime Power-On Resets",
+         "offset": 8,
+         "size": 4,
+         "value": 10
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Power-on Hours",
+         "offset": 16,
+         "size": 4,
+         "value": 27694
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Logical Sectors Written",
+         "offset": 24,
+         "size": 6,
+         "value": 210606206000
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Write Commands",
+         "offset": 32,
+         "size": 6,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Logical Sectors Read",
+         "offset": 40,
+         "size": 6,
+         "value": 1546494077801
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Read Commands",
+         "offset": 48,
+         "size": 6,
+         "value": 0
+        }
+       ]
+      },
+      {
+       "name": "Rotating Media Statistics",
+       "number": 3,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Spindle Motor Power-on Hours",
+         "offset": 8,
+         "size": 4,
+         "value": 27141
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Head Flying Hours",
+         "offset": 16,
+         "size": 4,
+         "value": 25716
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Head Load Events",
+         "offset": 24,
+         "size": 4,
+         "value": 1895
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Reallocated Logical Sectors",
+         "offset": 32,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Read Recovery Attempts",
+         "offset": 40,
+         "size": 4,
+         "value": 37
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Mechanical Start Failures",
+         "offset": 48,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Realloc. Candidate Logical Sectors",
+         "offset": 56,
+         "size": 4,
+         "value": 0
+        }
+       ]
+      },
+      {
+       "name": "General Errors Statistics",
+       "number": 4,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Reported Uncorrectable Errors",
+         "offset": 8,
+         "size": 4,
+         "value": 18
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Resets Between Cmd Acceptance and Completion",
+         "offset": 16,
+         "size": 4,
+         "value": 0
+        }
+       ]
+      },
+      {
+       "name": "Temperature Statistics",
+       "number": 5,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Current Temperature",
+         "offset": 8,
+         "size": 1,
+         "value": 38
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Average Short Term Temperature",
+         "offset": 16,
+         "size": 1,
+         "value": 37
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Average Long Term Temperature",
+         "offset": 24,
+         "size": 1,
+         "value": 36
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Highest Temperature",
+         "offset": 32,
+         "size": 1,
+         "value": 48
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Lowest Temperature",
+         "offset": 40,
+         "size": 1,
+         "value": 19
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Time in Over-Temperature",
+         "offset": 80,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Specified Maximum Operating Temperature",
+         "offset": 88,
+         "size": 1,
+         "value": 60
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Time in Under-Temperature",
+         "offset": 96,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Specified Minimum Operating Temperature",
+         "offset": 104,
+         "size": 1,
+         "value": 5
+        }
+       ]
+      },
+      {
+       "name": "Transport Statistics",
+       "number": 6,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Hardware Resets",
+         "offset": 8,
+         "size": 4,
+         "value": 13
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of ASR Events",
+         "offset": 16,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Interface CRC Errors",
+         "offset": 24,
+         "size": 4,
+         "value": 0
+        }
+       ]
+      }
+     ],
+     "status": "present"
+    },
+    "id": "mock-ds-9jg0x1",
+    "last_updated": "2026-10-19T21:22:16Z",
+    "model": "WDC  WUH721414ALE604",
+    "protocol": "ATA",
+    "readable": true,
+    "serial": "MOCK-DS-9JG0X1",
+    "smart_data": {
+     "ata_smart_attributes": {
+      "revision": 16,
+      "table": [
+       {
+        "flags": {
+         "auto_keep": false,
+         "error_rate": true,
+         "event_count": false,
+         "performance": false,
+         "prefailure": true,
+         "string": "PO-R-- ",
+         "updated_online": true,
+         "value": 11
+        },
+        "id": 1,
+        "name": "Raw_Read_Error_Rate",
+        "raw": {
+         "string": "1",
+         "value": 1
+        },
+        "thresh": 1,
+        "value": 100,
+        "when_failed": "",
+        "worst": 100
+       },
+       {
+        "flags": {
+         "auto_keep": false,
+         "error_rate": false,
+         "event_count": false,
+         "performance": true,
+         "prefailure": true,
+         "string": "P-S--- ",
+         "updated_online": false,
+         "value": 5
+        },
+        "id": 2,
+        "name": "Throughput_Performance",
+        "raw": {
+         "string": "96",
+         "value": 96
+        },
+        "thresh": 54,
+        "value": 138,
+        "when_failed": "",
+        "worst": 138
+       },
+       {
+        "flags": {
+         "auto_keep": false,
+         "error_rate": false,
+         "event_count": false,
+         "performance": true,
+         "prefailure": true,
+         "string": "POS--- ",
+         "updated_online": true,
+         "value": 7
+        },
+        "id": 3,
+        "name": "Spin_Up_Time",
+        "raw": {
+         "string": "383 (Average 380)",
+         "value": 30089675135
+        },
+        "thresh": 1,
+        "value": 81,
+        "when_failed": "",
+        "worst": 81
+       },
+       {
+        "flags": {
+         "auto_keep": false,
+         "error_rate": false,
+         "event_count": true,
+         "performance": false,
+         "prefailure": false,
+         "string": "-O--C- ",
+         "updated_online": true,
+         "value": 18
+        },
+        "id": 4,
+        "name": "Start_Stop_Count",
+        "raw": {
+         "string": "10",
+         "value": 10
+        },
+        "thresh": 0,
+        "value": 100,
+        "when_failed": "",
+        "worst": 100
+       },
+       {
+        "flags": {
+         "auto_keep": true,
+         "error_rate": false,
+         "event_count": true,
+         "performance": false,
+         "prefailure": true,
+         "string": "PO--CK ",
+         "updated_online": true,
+         "value": 51
+        },
+        "id": 5,
+        "name": "Reallocated_Sector_Ct",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 1,
+        "value": 100,
+        "when_failed": "",
+        "worst": 100
+       },
+       {
+        "flags": {
+         "auto_keep": false,
+         "error_rate": true,
+         "event_count": false,
+         "performance": false,
+         "prefailure": true,
+         "string": "PO-R-- ",
+         "updated_online": true,
+         "value": 11
+        },
+        "id": 7,
+        "name": "Seek_Error_Rate",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 1,
+        "value": 100,
+        "when_failed": "",
+        "worst": 100
+       },
+       {
+        "flags": {
+         "auto_keep": false,
+         "error_rate": false,
+         "event_count": false,
+         "performance": true,
+         "prefailure": true,
+         "string": "P-S--- ",
+         "updated_online": false,
+         "value": 5
+        },
+        "id": 8,
+        "name": "Seek_Time_Performance",
+        "raw": {
+         "string": "18",
+         "value": 18
+        },
+        "thresh": 20,
+        "value": 133,
+        "when_failed": "",
+        "worst": 133
+       },
+       {
+        "flags": {
+         "auto_keep": false,
+         "error_rate": false,
+         "event_count": true,
+         "performance": false,
+         "prefailure": false,
+         "string": "-O--C- ",
+         "updated_online": true,
+         "value": 18
+        },
+        "id": 9,
+        "name": "Power_On_Hours",
+        "raw": {
+         "string": "27694",
+         "value": 27694
+        },
+        "thresh": 0,
+        "value": 97,
+        "when_failed": "",
+        "worst": 97
+       },
+       {
+        "flags": {
+         "auto_keep": false,
+         "error_rate": false,
+         "event_count": true,
+         "performance": false,
+         "prefailure": true,
+         "string": "PO--C- ",
+         "updated_online": true,
+         "value": 19
+        },
+        "id": 10,
+        "name": "Spin_Retry_Count",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 1,
+        "value": 100,
+        "when_failed": "",
+        "worst": 100
+       },
+       {
+        "flags": {
+         "auto_keep": true,
+         "error_rate": false,
+         "event_count": true,
+         "performance": false,
+         "prefailure": false,
+         "string": "-O--CK ",
+         "updated_online": true,
+         "value": 50
+        },
+        "id": 12,
+        "name": "Power_Cycle_Count",
+        "raw": {
+         "string": "10",
+         "value": 10
+        },
+        "thresh": 0,
+        "value": 100,
+        "when_failed": "",
+        "worst": 100
+       },
+       {
+        "flags": {
+         "auto_keep": true,
+         "error_rate": false,
+         "event_count": false,
+         "performance": false,
+         "prefailure": true,
+         "string": "PO---K ",
+         "updated_online": true,
+         "value": 35
+        },
+        "id": 22,
+        "name": "Helium_Level",
+        "raw": {
+         "string": "100",
+         "value": 100
+        },
+        "thresh": 25,
+        "value": 100,
+        "when_failed": "",
+        "worst": 100
+       },
+       {
+        "flags": {
+         "auto_keep": true,
+         "error_rate": false,
+         "event_count": true,
+         "performance": false,
+         "prefailure": false,
+         "string": "-O--CK ",
+         "updated_online": true,
+         "value": 50
+        },
+        "id": 192,
+        "name": "Power-Off_Retract_Count",
+        "raw": {
+         "string": "1895",
+         "value": 1895
+        },
+        "thresh": 0,
+        "value": 100,
+        "when_failed": "",
+        "worst": 100
+       },
+       {
+        "flags": {
+         "auto_keep": false,
+         "error_rate": false,
+         "event_count": true,
+         "performance": false,
+         "prefailure": false,
+         "string": "-O--C- ",
+         "updated_online": true,
+         "value": 18
+        },
+        "id": 193,
+        "name": "Load_Cycle_Count",
+        "raw": {
+         "string": "1895",
+         "value": 1895
+        },
+        "thresh": 0,
+        "value": 100,
+        "when_failed": "",
+        "worst": 100
+       },
+       {
+        "flags": {
+         "auto_keep": false,
+         "error_rate": false,
+         "event_count": false,
+         "performance": false,
+         "prefailure": false,
+         "string": "-O---- ",
+         "updated_online": true,
+         "value": 2
+        },
+        "id": 194,
+        "name": "Temperature_Celsius",
+        "raw": {
+         "string": "38 (Min/Max 19/48)",
+         "value": 206159675430
+        },
+        "thresh": 0,
+        "value": 56,
+        "when_failed": "",
+        "worst": 56
+       },
+       {
+        "flags": {
+         "auto_keep": true,
+         "error_rate": false,
+         "event_count": true,
+         "performance": false,
+         "prefailure": false,
+         "string": "-O--CK ",
+         "updated_online": true,
+         "value": 50
+        },
+        "id": 196,
+        "name": "Reallocated_Event_Count",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "when_failed": "",
+        "worst": 100
+       },
+       {
+        "flags": {
+         "auto_keep": true,
+         "error_rate": false,
+         "event_count": false,
+         "performance": false,
+         "prefailure": false,
+         "string": "-O---K ",
+         "updated_online": true,
+         "value": 34
+        },
+        "id": 197,
+        "name": "Current_Pending_Sector",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "when_failed": "",
+        "worst": 100
+       },
+       {
+        "flags": {
+         "auto_keep": false,
+         "error_rate": true,
+         "event_count": false,
+         "performance": false,
+         "prefailure": false,
+         "string": "---R-- ",
+         "updated_online": false,
+         "value": 8
+        },
+        "id": 198,
+        "name": "Offline_Uncorrectable",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "when_failed": "",
+        "worst": 100
+       },
+       {
+        "flags": {
+         "auto_keep": false,
+         "error_rate": true,
+         "event_count": false,
+         "performance": false,
+         "prefailure": false,
+         "string": "-O-R-- ",
+         "updated_online": true,
+         "value": 10
+        },
+        "id": 199,
+        "name": "UDMA_CRC_Error_Count",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "when_failed": "",
+        "worst": 100
+       }
+      ]
+     },
+     "device": {
+      "info_name": "/dev/sdy [SAT]",
+      "name": "/dev/sdy",
+      "protocol": "ATA",
+      "type": "sat"
+     },
+     "firmware_version": "LDGNW400",
+     "in_smartctl_database": true,
+     "interface_speed": {
+      "current": {
+       "bits_per_unit": 100000000,
+       "sata_value": 3,
+       "string": "6.0 Gb/s",
+       "units_per_second": 60
+      },
+      "max": {
+       "bits_per_unit": 100000000,
+       "sata_value": 14,
+       "string": "6.0 Gb/s",
+       "units_per_second": 60
+      }
+     },
+     "json_format_version": [
+      1,
+      0
+     ],
+     "logical_block_size": 512,
+     "model_family": "Western Digital Ultrastar DC HC530",
+     "model_name": "WDC  WUH721414ALE604",
+     "power_cycle_count": 10,
+     "power_on_time": {
+      "hours": 27694
+     },
+     "serial_number": "MOCK-DS-9JG0X1",
+     "smart_status": {
+      "passed": true
+     },
+     "smartctl": {
+      "exit_status": 0,
+      "version": [
+       7,
+       5
+      ]
+     },
+     "temperature": {
+      "current": 38,
+      "lifetime_max": 48,
+      "lifetime_min": 19,
+      "lifetime_over_limit_minutes": 0,
+      "lifetime_under_limit_minutes": 0,
+      "limit_max": 70,
+      "limit_min": -40,
+      "op_limit_max": 60,
+      "op_limit_min": 0,
+      "power_cycle_max": 41,
+      "power_cycle_min": 29
+     },
+     "user_capacity": {
+      "blocks": 27344764928,
+      "bytes": 14000519643136
+     }
+    }
+   }
+  },
+  "drives": [
+   {
+    "device_path": "/dev/sdy",
+    "id": "mock-ds-9jg0x1",
+    "model": "WDC  WUH721414ALE604",
+    "protocol": "ATA",
+    "readable": true,
+    "serial": "MOCK-DS-9JG0X1"
+   }
+  ],
+  "files": [
+   "shipped.sata-hdd-devstat-uncorrectables"
+  ],
+  "filesystems": [
+   {
+    "available_bytes": 0,
+    "device": "/dev/sdy1",
+    "fstype": "xfs",
+    "id": "fs-1d000004",
+    "mountpoint": "/mnt/archive",
+    "status": "unavailable",
+    "total_bytes": 0,
+    "use_percent": 0.0,
+    "used_bytes": 0,
+    "uuid": "1d000004-0000-4000-8000-000000000004"
+   }
+  ],
+  "health": {
+   "agent_id": "replica-golden-0001",
+   "auth_enabled": false,
+   "drive_count": 1,
+   "drives": 1,
+   "endpoints": [
+    "/api/health",
+    "/api/drives",
+    "/api/drives/{id}",
+    "/api/filesystems"
+   ],
+   "filesystems": 1,
+   "mock": true,
+   "os": "mock",
+   "port": 39867,
+   "status": "ok",
+   "uptime_seconds": 0,
+   "version": "0.8.0-mock"
+  },
+  "pools": {
+   "_status": 404
+  }
+ },
+ "sata-hdd-healthy": {
+  "drive": {
+   "mock-sata-0002": {
+    "derived": {
+     "host_reads": {
+      "bytes": 24000000000000,
+      "source": "ata_device_statistics"
+     },
+     "host_writes": {
+      "bytes": 12000000000000,
+      "source": "ata_device_statistics"
+     }
+    },
+    "device_path": "/dev/sdz",
+    "device_statistics": {
+     "complete": true,
+     "exit_status": 0,
+     "logical_block_size": 512,
+     "pages": [
+      {
+       "name": "General Statistics",
+       "number": 1,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Lifetime Power-On Resets",
+         "offset": 8,
+         "size": 4,
+         "value": 142
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Power-on Hours",
+         "offset": 16,
+         "size": 4,
+         "value": 8760
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Logical Sectors Written",
+         "offset": 24,
+         "size": 6,
+         "value": 23437500000
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Write Commands",
+         "offset": 32,
+         "size": 6,
+         "value": 366210937
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Logical Sectors Read",
+         "offset": 40,
+         "size": 6,
+         "value": 46875000000
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Read Commands",
+         "offset": 48,
+         "size": 6,
+         "value": 488281250
+        }
+       ]
+      },
+      {
+       "name": "Rotating Media Statistics",
+       "number": 3,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Spindle Motor Power-on Hours",
+         "offset": 8,
+         "size": 4,
+         "value": 8585
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Head Flying Hours",
+         "offset": 16,
+         "size": 4,
+         "value": 8135
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Head Load Events",
+         "offset": 24,
+         "size": 4,
+         "value": 1278
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Reallocated Logical Sectors",
+         "offset": 32,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Read Recovery Attempts",
+         "offset": 40,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Mechanical Start Failures",
+         "offset": 48,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Realloc. Candidate Logical Sectors",
+         "offset": 56,
+         "size": 4,
+         "value": 0
+        }
+       ]
+      },
+      {
+       "name": "General Errors Statistics",
+       "number": 4,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Reported Uncorrectable Errors",
+         "offset": 8,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Resets Between Cmd Acceptance and Completion",
+         "offset": 16,
+         "size": 4,
+         "value": 0
+        }
+       ]
+      },
+      {
+       "name": "Temperature Statistics",
+       "number": 5,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Current Temperature",
+         "offset": 8,
+         "size": 1,
+         "value": 36
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Average Short Term Temperature",
+         "offset": 16,
+         "size": 1,
+         "value": 35
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Average Long Term Temperature",
+         "offset": 24,
+         "size": 1,
+         "value": 34
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Highest Temperature",
+         "offset": 32,
+         "size": 1,
+         "value": 52
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Lowest Temperature",
+         "offset": 40,
+         "size": 1,
+         "value": 18
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Time in Over-Temperature",
+         "offset": 80,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Specified Maximum Operating Temperature",
+         "offset": 88,
+         "size": 1,
+         "value": 60
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Time in Under-Temperature",
+         "offset": 96,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Specified Minimum Operating Temperature",
+         "offset": 104,
+         "size": 1,
+         "value": 5
+        }
+       ]
+      },
+      {
+       "name": "Transport Statistics",
+       "number": 6,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Hardware Resets",
+         "offset": 8,
+         "size": 4,
+         "value": 145
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of ASR Events",
+         "offset": 16,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Interface CRC Errors",
+         "offset": 24,
+         "size": 4,
+         "value": 0
+        }
+       ]
+      }
+     ],
+     "status": "present"
+    },
+    "id": "mock-sata-0002",
+    "last_updated": "2026-10-19T21:22:17Z",
+    "model": "Seagate Barracuda ST2000DM008",
+    "protocol": "ATA",
+    "readable": true,
+    "serial": "MOCK-SATA-0002",
+    "smart_data": {
+     "ata_smart_attributes": {
+      "table": [
+       {
+        "id": 5,
+        "name": "Reallocated_Sector_Ct",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 10,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 9,
+        "name": "Power_On_Hours",
+        "raw": {
+         "string": "8760",
+         "value": 8760
+        },
+        "thresh": 0,
+        "value": 80,
+        "worst": 80
+       },
+       {
+        "id": 10,
+        "name": "Spin_Retry_Count",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 97,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 12,
+        "name": "Power_Cycle_Count",
+        "raw": {
+         "string": "142",
+         "value": 142
+        },
+        "thresh": 20,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 187,
+        "name": "Reported_Uncorrect",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 188,
+        "name": "Command_Timeout",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 194,
+        "name": "Temperature_Celsius",
+        "raw": {
+         "string": "36",
+         "value": 36
+        },
+        "thresh": 0,
+        "value": 36,
+        "worst": 52
+       },
+       {
+        "id": 196,
+        "name": "Reallocated_Event_Count",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 197,
+        "name": "Current_Pending_Sector",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 198,
+        "name": "Offline_Uncorrectable",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 241,
+        "name": "Total_LBAs_Written",
+        "raw": {
+         "string": "23437500000",
+         "value": 23437500000
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 253
+       },
+       {
+        "id": 242,
+        "name": "Total_LBAs_Read",
+        "raw": {
+         "string": "46875000000",
+         "value": 46875000000
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 253
+       }
+      ]
+     },
+     "firmware_version": "0001",
+     "in_smartctl_database": true,
+     "interface_speed": {
+      "current": {
+       "bits_per_unit": 100000000,
+       "sata_value": 3,
+       "string": "6.0 Gb/s",
+       "units_per_second": 60
+      },
+      "max": {
+       "bits_per_unit": 100000000,
+       "sata_value": 14,
+       "string": "6.0 Gb/s",
+       "units_per_second": 60
+      }
+     },
+     "logical_block_size": 512,
+     "model_name": "Seagate Barracuda ST2000DM008",
+     "power_cycle_count": 142,
+     "power_on_time": {
+      "hours": 8760
+     },
+     "serial_number": "MOCK-SATA-0002",
+     "smart_status": {
+      "passed": true
+     },
+     "temperature": {
+      "current": 36
+     },
+     "user_capacity": {
+      "blocks": 3907029168,
+      "bytes": 2000398934016
+     }
+    }
+   }
+  },
+  "drives": [
+   {
+    "device_path": "/dev/sdz",
+    "id": "mock-sata-0002",
+    "model": "Seagate Barracuda ST2000DM008",
+    "protocol": "ATA",
+    "readable": true,
+    "serial": "MOCK-SATA-0002"
+   }
+  ],
+  "files": [
+   "shipped.sata-hdd-healthy"
+  ],
+  "filesystems": [
+   {
+    "available_bytes": 150000000000,
+    "device": "/dev/sdz1",
+    "fstype": "ext4",
+    "id": "fs-1d000001",
+    "mountpoint": "/",
+    "status": "ok",
+    "total_bytes": 250000000000,
+    "use_percent": 40.0,
+    "used_bytes": 100000000000,
+    "uuid": "1d000001-0000-4000-8000-000000000001"
+   },
+   {
+    "available_bytes": 306000000000,
+    "device": "/dev/sdz2",
+    "fstype": "ext4",
+    "id": "fs-1d000002",
+    "mountpoint": "/data",
+    "status": "ok",
+    "total_bytes": 1700000000000,
+    "use_percent": 82.0,
+    "used_bytes": 1394000000000,
+    "uuid": "1d000002-0000-4000-8000-000000000002"
+   }
+  ],
+  "health": {
+   "agent_id": "replica-golden-0001",
+   "auth_enabled": false,
+   "drive_count": 1,
+   "drives": 1,
+   "endpoints": [
+    "/api/health",
+    "/api/drives",
+    "/api/drives/{id}",
+    "/api/filesystems"
+   ],
+   "filesystems": 2,
+   "mock": true,
+   "os": "mock",
+   "port": 34131,
+   "status": "ok",
+   "uptime_seconds": 0,
+   "version": "0.8.0-mock"
+  },
+  "pools": {
+   "_status": 404
+  }
+ },
+ "sata-hdd-pending-sectors": {
+  "drive": {
+   "mock-sata-0002": {
+    "derived": {
+     "host_reads": {
+      "bytes": 24000000000000,
+      "source": "ata_device_statistics"
+     },
+     "host_writes": {
+      "bytes": 12000000000000,
+      "source": "ata_device_statistics"
+     }
+    },
+    "device_path": "/dev/sdz",
+    "device_statistics": {
+     "complete": true,
+     "exit_status": 0,
+     "logical_block_size": 512,
+     "pages": [
+      {
+       "name": "General Statistics",
+       "number": 1,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Lifetime Power-On Resets",
+         "offset": 8,
+         "size": 4,
+         "value": 142
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Power-on Hours",
+         "offset": 16,
+         "size": 4,
+         "value": 8760
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Logical Sectors Written",
+         "offset": 24,
+         "size": 6,
+         "value": 23437500000
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Write Commands",
+         "offset": 32,
+         "size": 6,
+         "value": 366210937
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Logical Sectors Read",
+         "offset": 40,
+         "size": 6,
+         "value": 46875000000
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Read Commands",
+         "offset": 48,
+         "size": 6,
+         "value": 488281250
+        }
+       ]
+      },
+      {
+       "name": "Rotating Media Statistics",
+       "number": 3,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Spindle Motor Power-on Hours",
+         "offset": 8,
+         "size": 4,
+         "value": 8585
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Head Flying Hours",
+         "offset": 16,
+         "size": 4,
+         "value": 8135
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Head Load Events",
+         "offset": 24,
+         "size": 4,
+         "value": 1278
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Reallocated Logical Sectors",
+         "offset": 32,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Read Recovery Attempts",
+         "offset": 40,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Mechanical Start Failures",
+         "offset": 48,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Realloc. Candidate Logical Sectors",
+         "offset": 56,
+         "size": 4,
+         "value": 3
+        }
+       ]
+      },
+      {
+       "name": "General Errors Statistics",
+       "number": 4,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Reported Uncorrectable Errors",
+         "offset": 8,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Resets Between Cmd Acceptance and Completion",
+         "offset": 16,
+         "size": 4,
+         "value": 0
+        }
+       ]
+      },
+      {
+       "name": "Temperature Statistics",
+       "number": 5,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Current Temperature",
+         "offset": 8,
+         "size": 1,
+         "value": 36
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Average Short Term Temperature",
+         "offset": 16,
+         "size": 1,
+         "value": 35
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Average Long Term Temperature",
+         "offset": 24,
+         "size": 1,
+         "value": 34
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Highest Temperature",
+         "offset": 32,
+         "size": 1,
+         "value": 52
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Lowest Temperature",
+         "offset": 40,
+         "size": 1,
+         "value": 18
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Time in Over-Temperature",
+         "offset": 80,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Specified Maximum Operating Temperature",
+         "offset": 88,
+         "size": 1,
+         "value": 60
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Time in Under-Temperature",
+         "offset": 96,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Specified Minimum Operating Temperature",
+         "offset": 104,
+         "size": 1,
+         "value": 5
+        }
+       ]
+      },
+      {
+       "name": "Transport Statistics",
+       "number": 6,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Hardware Resets",
+         "offset": 8,
+         "size": 4,
+         "value": 145
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of ASR Events",
+         "offset": 16,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Interface CRC Errors",
+         "offset": 24,
+         "size": 4,
+         "value": 0
+        }
+       ]
+      }
+     ],
+     "status": "present"
+    },
+    "id": "mock-sata-0002",
+    "last_updated": "2026-10-19T21:22:18Z",
+    "model": "Seagate Barracuda ST2000DM008",
+    "protocol": "ATA",
+    "readable": true,
+    "serial": "MOCK-SATA-0002",
+    "smart_data": {
+     "ata_smart_attributes": {
+      "table": [
+       {
+        "id": 5,
+        "name": "Reallocated_Sector_Ct",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 10,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 9,
+        "name": "Power_On_Hours",
+        "raw": {
+         "string": "8760",
+         "value": 8760
+        },
+        "thresh": 0,
+        "value": 80,
+        "worst": 80
+       },
+       {
+        "id": 10,
+        "name": "Spin_Retry_Count",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 97,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 12,
+        "name": "Power_Cycle_Count",
+        "raw": {
+         "string": "142",
+         "value": 142
+        },
+        "thresh": 20,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 187,
+        "name": "Reported_Uncorrect",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 188,
+        "name": "Command_Timeout",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 194,
+        "name": "Temperature_Celsius",
+        "raw": {
+         "string": "36",
+         "value": 36
+        },
+        "thresh": 0,
+        "value": 36,
+        "worst": 52
+       },
+       {
+        "id": 196,
+        "name": "Reallocated_Event_Count",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 197,
+        "name": "Current_Pending_Sector",
+        "raw": {
+         "string": "3",
+         "value": 3
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 198,
+        "name": "Offline_Uncorrectable",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 241,
+        "name": "Total_LBAs_Written",
+        "raw": {
+         "string": "23437500000",
+         "value": 23437500000
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 253
+       },
+       {
+        "id": 242,
+        "name": "Total_LBAs_Read",
+        "raw": {
+         "string": "46875000000",
+         "value": 46875000000
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 253
+       }
+      ]
+     },
+     "firmware_version": "0001",
+     "in_smartctl_database": true,
+     "interface_speed": {
+      "current": {
+       "bits_per_unit": 100000000,
+       "sata_value": 3,
+       "string": "6.0 Gb/s",
+       "units_per_second": 60
+      },
+      "max": {
+       "bits_per_unit": 100000000,
+       "sata_value": 14,
+       "string": "6.0 Gb/s",
+       "units_per_second": 60
+      }
+     },
+     "logical_block_size": 512,
+     "model_name": "Seagate Barracuda ST2000DM008",
+     "power_cycle_count": 142,
+     "power_on_time": {
+      "hours": 8760
+     },
+     "serial_number": "MOCK-SATA-0002",
+     "smart_status": {
+      "passed": true
+     },
+     "temperature": {
+      "current": 36
+     },
+     "user_capacity": {
+      "blocks": 3907029168,
+      "bytes": 2000398934016
+     }
+    }
+   }
+  },
+  "drives": [
+   {
+    "device_path": "/dev/sdz",
+    "id": "mock-sata-0002",
+    "model": "Seagate Barracuda ST2000DM008",
+    "protocol": "ATA",
+    "readable": true,
+    "serial": "MOCK-SATA-0002"
+   }
+  ],
+  "files": [
+   "shipped.sata-hdd-pending-sectors"
+  ],
+  "filesystems": [
+   {
+    "available_bytes": 150000000000,
+    "device": "/dev/sdz1",
+    "fstype": "ext4",
+    "id": "fs-1d000001",
+    "mountpoint": "/",
+    "status": "ok",
+    "total_bytes": 250000000000,
+    "use_percent": 40.0,
+    "used_bytes": 100000000000,
+    "uuid": "1d000001-0000-4000-8000-000000000001"
+   },
+   {
+    "available_bytes": 306000000000,
+    "device": "/dev/sdz2",
+    "fstype": "ext4",
+    "id": "fs-1d000002",
+    "mountpoint": "/data",
+    "status": "ok",
+    "total_bytes": 1700000000000,
+    "use_percent": 82.0,
+    "used_bytes": 1394000000000,
+    "uuid": "1d000002-0000-4000-8000-000000000002"
+   }
+  ],
+  "health": {
+   "agent_id": "replica-golden-0001",
+   "auth_enabled": false,
+   "drive_count": 1,
+   "drives": 1,
+   "endpoints": [
+    "/api/health",
+    "/api/drives",
+    "/api/drives/{id}",
+    "/api/filesystems"
+   ],
+   "filesystems": 2,
+   "mock": true,
+   "os": "mock",
+   "port": 41887,
+   "status": "ok",
+   "uptime_seconds": 0,
+   "version": "0.8.0-mock"
+  },
+  "pools": {
+   "_status": 404
+  }
+ },
+ "sata-hdd-reallocated": {
+  "drive": {
+   "mock-sata-0003": {
+    "derived": {
+     "host_reads": {
+      "bytes": 52000000000000,
+      "source": "ata_device_statistics"
+     },
+     "host_writes": {
+      "bytes": 28800000000000,
+      "source": "ata_device_statistics"
+     }
+    },
+    "device_path": "/dev/sdw",
+    "device_statistics": {
+     "complete": true,
+     "exit_status": 0,
+     "logical_block_size": 512,
+     "pages": [
+      {
+       "name": "General Statistics",
+       "number": 1,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Lifetime Power-On Resets",
+         "offset": 8,
+         "size": 4,
+         "value": 188
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Power-on Hours",
+         "offset": 16,
+         "size": 4,
+         "value": 21310
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Logical Sectors Written",
+         "offset": 24,
+         "size": 6,
+         "value": 56250000000
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Write Commands",
+         "offset": 32,
+         "size": 6,
+         "value": 878906250
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Logical Sectors Read",
+         "offset": 40,
+         "size": 6,
+         "value": 101562500000
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Read Commands",
+         "offset": 48,
+         "size": 6,
+         "value": 1057942708
+        }
+       ]
+      },
+      {
+       "name": "Rotating Media Statistics",
+       "number": 3,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Spindle Motor Power-on Hours",
+         "offset": 8,
+         "size": 4,
+         "value": 20884
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Head Flying Hours",
+         "offset": 16,
+         "size": 4,
+         "value": 19788
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Head Load Events",
+         "offset": 24,
+         "size": 4,
+         "value": 1692
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Reallocated Logical Sectors",
+         "offset": 32,
+         "size": 4,
+         "value": 8
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Read Recovery Attempts",
+         "offset": 40,
+         "size": 4,
+         "value": 6
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Mechanical Start Failures",
+         "offset": 48,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Realloc. Candidate Logical Sectors",
+         "offset": 56,
+         "size": 4,
+         "value": 0
+        }
+       ]
+      },
+      {
+       "name": "General Errors Statistics",
+       "number": 4,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Reported Uncorrectable Errors",
+         "offset": 8,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Resets Between Cmd Acceptance and Completion",
+         "offset": 16,
+         "size": 4,
+         "value": 0
+        }
+       ]
+      },
+      {
+       "name": "Temperature Statistics",
+       "number": 5,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Current Temperature",
+         "offset": 8,
+         "size": 1,
+         "value": 38
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Average Short Term Temperature",
+         "offset": 16,
+         "size": 1,
+         "value": 37
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Average Long Term Temperature",
+         "offset": 24,
+         "size": 1,
+         "value": 36
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Highest Temperature",
+         "offset": 32,
+         "size": 1,
+         "value": 54
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Lowest Temperature",
+         "offset": 40,
+         "size": 1,
+         "value": 18
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Time in Over-Temperature",
+         "offset": 80,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Specified Maximum Operating Temperature",
+         "offset": 88,
+         "size": 1,
+         "value": 60
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Time in Under-Temperature",
+         "offset": 96,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Specified Minimum Operating Temperature",
+         "offset": 104,
+         "size": 1,
+         "value": 5
+        }
+       ]
+      },
+      {
+       "name": "Transport Statistics",
+       "number": 6,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Hardware Resets",
+         "offset": 8,
+         "size": 4,
+         "value": 191
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of ASR Events",
+         "offset": 16,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Interface CRC Errors",
+         "offset": 24,
+         "size": 4,
+         "value": 0
+        }
+       ]
+      }
+     ],
+     "status": "present"
+    },
+    "id": "mock-sata-0003",
+    "last_updated": "2026-10-19T21:22:18Z",
+    "model": "Seagate Barracuda ST2000DM008",
+    "protocol": "ATA",
+    "readable": true,
+    "serial": "MOCK-SATA-0003",
+    "smart_data": {
+     "ata_smart_attributes": {
+      "table": [
+       {
+        "id": 5,
+        "name": "Reallocated_Sector_Ct",
+        "raw": {
+         "string": "8",
+         "value": 8
+        },
+        "thresh": 10,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 9,
+        "name": "Power_On_Hours",
+        "raw": {
+         "string": "21310",
+         "value": 21310
+        },
+        "thresh": 0,
+        "value": 80,
+        "worst": 80
+       },
+       {
+        "id": 10,
+        "name": "Spin_Retry_Count",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 97,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 12,
+        "name": "Power_Cycle_Count",
+        "raw": {
+         "string": "188",
+         "value": 188
+        },
+        "thresh": 20,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 187,
+        "name": "Reported_Uncorrect",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 188,
+        "name": "Command_Timeout",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 194,
+        "name": "Temperature_Celsius",
+        "raw": {
+         "string": "38",
+         "value": 38
+        },
+        "thresh": 0,
+        "value": 38,
+        "worst": 52
+       },
+       {
+        "id": 196,
+        "name": "Reallocated_Event_Count",
+        "raw": {
+         "string": "2",
+         "value": 2
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 197,
+        "name": "Current_Pending_Sector",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 198,
+        "name": "Offline_Uncorrectable",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 241,
+        "name": "Total_LBAs_Written",
+        "raw": {
+         "string": "56250000000",
+         "value": 56250000000
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 253
+       },
+       {
+        "id": 242,
+        "name": "Total_LBAs_Read",
+        "raw": {
+         "string": "101562500000",
+         "value": 101562500000
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 253
+       }
+      ]
+     },
+     "firmware_version": "0001",
+     "in_smartctl_database": true,
+     "interface_speed": {
+      "current": {
+       "bits_per_unit": 100000000,
+       "sata_value": 3,
+       "string": "6.0 Gb/s",
+       "units_per_second": 60
+      },
+      "max": {
+       "bits_per_unit": 100000000,
+       "sata_value": 14,
+       "string": "6.0 Gb/s",
+       "units_per_second": 60
+      }
+     },
+     "logical_block_size": 512,
+     "model_name": "Seagate Barracuda ST2000DM008",
+     "power_cycle_count": 188,
+     "power_on_time": {
+      "hours": 21310
+     },
+     "serial_number": "MOCK-SATA-0003",
+     "smart_status": {
+      "passed": true
+     },
+     "temperature": {
+      "current": 38
+     },
+     "user_capacity": {
+      "blocks": 3907029168,
+      "bytes": 2000398934016
+     }
+    }
+   }
+  },
+  "drives": [
+   {
+    "device_path": "/dev/sdw",
+    "id": "mock-sata-0003",
+    "model": "Seagate Barracuda ST2000DM008",
+    "protocol": "ATA",
+    "readable": true,
+    "serial": "MOCK-SATA-0003"
+   }
+  ],
+  "files": [
+   "shipped.sata-hdd-reallocated"
+  ],
+  "filesystems": [
+   {
+    "available_bytes": 180000000000,
+    "device": "/dev/sdw1",
+    "fstype": "ext4",
+    "id": "fs-1d000003",
+    "mountpoint": "/srv/media",
+    "status": "ok",
+    "total_bytes": 2000000000000,
+    "use_percent": 91.0,
+    "used_bytes": 1820000000000,
+    "uuid": "1d000003-0000-4000-8000-000000000003"
+   }
+  ],
+  "health": {
+   "agent_id": "replica-golden-0001",
+   "auth_enabled": false,
+   "drive_count": 1,
+   "drives": 1,
+   "endpoints": [
+    "/api/health",
+    "/api/drives",
+    "/api/drives/{id}",
+    "/api/filesystems"
+   ],
+   "filesystems": 1,
+   "mock": true,
+   "os": "mock",
+   "port": 46089,
+   "status": "ok",
+   "uptime_seconds": 0,
+   "version": "0.8.0-mock"
+  },
+  "pools": {
+   "_status": 404
+  }
+ },
+ "sata-hdd-smart-failed": {
+  "drive": {
+   "mock-sata-0001": {
+    "derived": {
+     "host_reads": {
+      "bytes": 97920000000000,
+      "source": "ata_device_statistics"
+     },
+     "host_writes": {
+      "bytes": 61200000000000,
+      "source": "ata_device_statistics"
+     }
+    },
+    "device_path": "/dev/sdx",
+    "device_statistics": {
+     "complete": true,
+     "exit_status": 0,
+     "logical_block_size": 512,
+     "pages": [
+      {
+       "name": "General Statistics",
+       "number": 1,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Lifetime Power-On Resets",
+         "offset": 8,
+         "size": 4,
+         "value": 212
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Power-on Hours",
+         "offset": 16,
+         "size": 4,
+         "value": 18240
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Logical Sectors Written",
+         "offset": 24,
+         "size": 6,
+         "value": 119531250000
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Write Commands",
+         "offset": 32,
+         "size": 6,
+         "value": 1867675781
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Logical Sectors Read",
+         "offset": 40,
+         "size": 6,
+         "value": 191250000000
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Read Commands",
+         "offset": 48,
+         "size": 6,
+         "value": 1992187500
+        }
+       ]
+      },
+      {
+       "name": "Rotating Media Statistics",
+       "number": 3,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Spindle Motor Power-on Hours",
+         "offset": 8,
+         "size": 4,
+         "value": 17876
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Head Flying Hours",
+         "offset": 16,
+         "size": 4,
+         "value": 16938
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Head Load Events",
+         "offset": 24,
+         "size": 4,
+         "value": 1908
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Reallocated Logical Sectors",
+         "offset": 32,
+         "size": 4,
+         "value": 24
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Read Recovery Attempts",
+         "offset": 40,
+         "size": 4,
+         "value": 412
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Mechanical Start Failures",
+         "offset": 48,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Realloc. Candidate Logical Sectors",
+         "offset": 56,
+         "size": 4,
+         "value": 3
+        }
+       ]
+      },
+      {
+       "name": "General Errors Statistics",
+       "number": 4,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Reported Uncorrectable Errors",
+         "offset": 8,
+         "size": 4,
+         "value": 1
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Resets Between Cmd Acceptance and Completion",
+         "offset": 16,
+         "size": 4,
+         "value": 0
+        }
+       ]
+      },
+      {
+       "name": "Temperature Statistics",
+       "number": 5,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Current Temperature",
+         "offset": 8,
+         "size": 1,
+         "value": 36
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Average Short Term Temperature",
+         "offset": 16,
+         "size": 1,
+         "value": 35
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Average Long Term Temperature",
+         "offset": 24,
+         "size": 1,
+         "value": 34
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Highest Temperature",
+         "offset": 32,
+         "size": 1,
+         "value": 52
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Lowest Temperature",
+         "offset": 40,
+         "size": 1,
+         "value": 18
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Time in Over-Temperature",
+         "offset": 80,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Specified Maximum Operating Temperature",
+         "offset": 88,
+         "size": 1,
+         "value": 60
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Time in Under-Temperature",
+         "offset": 96,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Specified Minimum Operating Temperature",
+         "offset": 104,
+         "size": 1,
+         "value": 5
+        }
+       ]
+      },
+      {
+       "name": "Transport Statistics",
+       "number": 6,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Hardware Resets",
+         "offset": 8,
+         "size": 4,
+         "value": 215
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of ASR Events",
+         "offset": 16,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Interface CRC Errors",
+         "offset": 24,
+         "size": 4,
+         "value": 0
+        }
+       ]
+      }
+     ],
+     "status": "present"
+    },
+    "id": "mock-sata-0001",
+    "last_updated": "2026-10-19T21:22:19Z",
+    "model": "Seagate Barracuda ST2000DM008",
+    "protocol": "ATA",
+    "readable": true,
+    "serial": "MOCK-SATA-0001",
+    "smart_data": {
+     "ata_smart_attributes": {
+      "table": [
+       {
+        "id": 5,
+        "name": "Reallocated_Sector_Ct",
+        "raw": {
+         "string": "24",
+         "value": 24
+        },
+        "thresh": 10,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 9,
+        "name": "Power_On_Hours",
+        "raw": {
+         "string": "18240",
+         "value": 18240
+        },
+        "thresh": 0,
+        "value": 80,
+        "worst": 80
+       },
+       {
+        "id": 10,
+        "name": "Spin_Retry_Count",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 97,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 12,
+        "name": "Power_Cycle_Count",
+        "raw": {
+         "string": "212",
+         "value": 212
+        },
+        "thresh": 20,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 187,
+        "name": "Reported_Uncorrect",
+        "raw": {
+         "string": "1",
+         "value": 1
+        },
+        "thresh": 0,
+        "value": 99,
+        "worst": 99
+       },
+       {
+        "id": 188,
+        "name": "Command_Timeout",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 194,
+        "name": "Temperature_Celsius",
+        "raw": {
+         "string": "36",
+         "value": 36
+        },
+        "thresh": 0,
+        "value": 36,
+        "worst": 52
+       },
+       {
+        "id": 196,
+        "name": "Reallocated_Event_Count",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 197,
+        "name": "Current_Pending_Sector",
+        "raw": {
+         "string": "3",
+         "value": 3
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 198,
+        "name": "Offline_Uncorrectable",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 241,
+        "name": "Total_LBAs_Written",
+        "raw": {
+         "string": "119531250000",
+         "value": 119531250000
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 253
+       }
+      ]
+     },
+     "firmware_version": "0001",
+     "in_smartctl_database": true,
+     "interface_speed": {
+      "current": {
+       "bits_per_unit": 100000000,
+       "sata_value": 3,
+       "string": "6.0 Gb/s",
+       "units_per_second": 60
+      },
+      "max": {
+       "bits_per_unit": 100000000,
+       "sata_value": 14,
+       "string": "6.0 Gb/s",
+       "units_per_second": 60
+      }
+     },
+     "logical_block_size": 512,
+     "model_name": "Seagate Barracuda ST2000DM008",
+     "power_cycle_count": 212,
+     "power_on_time": {
+      "hours": 18240
+     },
+     "serial_number": "MOCK-SATA-0001",
+     "smart_status": {
+      "passed": false
+     },
+     "temperature": {
+      "current": 36
+     },
+     "user_capacity": {
+      "blocks": 3907029168,
+      "bytes": 2000398934016
+     }
+    }
+   }
+  },
+  "drives": [
+   {
+    "device_path": "/dev/sdx",
+    "id": "mock-sata-0001",
+    "model": "Seagate Barracuda ST2000DM008",
+    "protocol": "ATA",
+    "readable": true,
+    "serial": "MOCK-SATA-0001"
+   }
+  ],
+  "files": [
+   "shipped.sata-hdd-smart-failed"
+  ],
+  "filesystems": [
+   {
+    "available_bytes": 1060000000000,
+    "device": "/dev/sdx1",
+    "fstype": "ext4",
+    "id": "fs-1d00000a",
+    "mountpoint": "/mnt/backup",
+    "status": "ok",
+    "total_bytes": 2000000000000,
+    "use_percent": 47.0,
+    "used_bytes": 940000000000,
+    "uuid": "1d00000a-0000-4000-8000-00000000000a"
+   }
+  ],
+  "health": {
+   "agent_id": "replica-golden-0001",
+   "auth_enabled": false,
+   "drive_count": 1,
+   "drives": 1,
+   "endpoints": [
+    "/api/health",
+    "/api/drives",
+    "/api/drives/{id}",
+    "/api/filesystems"
+   ],
+   "filesystems": 1,
+   "mock": true,
+   "os": "mock",
+   "port": 37187,
+   "status": "ok",
+   "uptime_seconds": 0,
+   "version": "0.8.0-mock"
+  },
+  "pools": {
+   "_status": 404
+  }
+ },
+ "sata-ssd-healthy": {
+  "drive": {
+   "mock-ssd-0001": {
+    "derived": {
+     "host_reads": {
+      "bytes": 13440000000000,
+      "source": "ata_device_statistics"
+     },
+     "host_writes": {
+      "bytes": 9600000000000,
+      "source": "ata_device_statistics"
+     }
+    },
+    "device_path": "/dev/sdv",
+    "device_statistics": {
+     "complete": true,
+     "exit_status": 0,
+     "logical_block_size": 512,
+     "pages": [
+      {
+       "name": "General Statistics",
+       "number": 1,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Lifetime Power-On Resets",
+         "offset": 8,
+         "size": 4,
+         "value": 315
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Power-on Hours",
+         "offset": 16,
+         "size": 4,
+         "value": 4200
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Logical Sectors Written",
+         "offset": 24,
+         "size": 6,
+         "value": 18750000000
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Write Commands",
+         "offset": 32,
+         "size": 6,
+         "value": 292968750
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Logical Sectors Read",
+         "offset": 40,
+         "size": 6,
+         "value": 26250000000
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Read Commands",
+         "offset": 48,
+         "size": 6,
+         "value": 273437500
+        }
+       ]
+      },
+      {
+       "name": "General Errors Statistics",
+       "number": 4,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Reported Uncorrectable Errors",
+         "offset": 8,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Resets Between Cmd Acceptance and Completion",
+         "offset": 16,
+         "size": 4,
+         "value": 0
+        }
+       ]
+      },
+      {
+       "name": "Temperature Statistics",
+       "number": 5,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Current Temperature",
+         "offset": 8,
+         "size": 1,
+         "value": 31
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Highest Temperature",
+         "offset": 32,
+         "size": 1,
+         "value": 55
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Lowest Temperature",
+         "offset": 40,
+         "size": 1,
+         "value": 17
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Time in Over-Temperature",
+         "offset": 80,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Specified Maximum Operating Temperature",
+         "offset": 88,
+         "size": 1,
+         "value": 70
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Time in Under-Temperature",
+         "offset": 96,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Specified Minimum Operating Temperature",
+         "offset": 104,
+         "size": 1,
+         "value": 0
+        }
+       ]
+      },
+      {
+       "name": "Transport Statistics",
+       "number": 6,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Hardware Resets",
+         "offset": 8,
+         "size": 4,
+         "value": 318
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of ASR Events",
+         "offset": 16,
+         "size": 4,
+         "value": 0
+        },
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": false,
+          "string": "V--- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 192
+         },
+         "name": "Number of Interface CRC Errors",
+         "offset": 24,
+         "size": 4,
+         "value": 0
+        }
+       ]
+      },
+      {
+       "name": "Solid State Device Statistics",
+       "number": 7,
+       "revision": 1,
+       "table": [
+        {
+         "flags": {
+          "monitored_condition_met": false,
+          "normalized": true,
+          "string": "VN-- ",
+          "supports_dsn": false,
+          "valid": true,
+          "value": 224
+         },
+         "name": "Percentage Used Endurance Indicator",
+         "offset": 8,
+         "size": 1,
+         "value": 1
+        }
+       ]
+      }
+     ],
+     "status": "present"
+    },
+    "id": "mock-ssd-0001",
+    "last_updated": "2026-10-19T21:22:19Z",
+    "model": "Samsung SSD 870 EVO 500GB",
+    "protocol": "ATA",
+    "readable": true,
+    "serial": "MOCK-SSD-0001",
+    "smart_data": {
+     "ata_smart_attributes": {
+      "table": [
+       {
+        "id": 5,
+        "name": "Reallocated_Sector_Ct",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 196,
+        "name": "Reallocated_Event_Count",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 198,
+        "name": "Offline_Uncorrectable",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 177,
+        "name": "Wear_Leveling_Count",
+        "raw": {
+         "string": "2",
+         "value": 2
+        },
+        "thresh": 0,
+        "value": 99,
+        "worst": 99
+       },
+       {
+        "id": 188,
+        "name": "Command_Timeout",
+        "raw": {
+         "string": "0",
+         "value": 0
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 194,
+        "name": "Temperature_Celsius",
+        "raw": {
+         "string": "31",
+         "value": 31
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 9,
+        "name": "Power_On_Hours",
+        "raw": {
+         "string": "4200",
+         "value": 4200
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 12,
+        "name": "Power_Cycle_Count",
+        "raw": {
+         "string": "315",
+         "value": 315
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       },
+       {
+        "id": 241,
+        "name": "Total_LBAs_Written",
+        "raw": {
+         "string": "18750000000",
+         "value": 18750000000
+        },
+        "thresh": 0,
+        "value": 100,
+        "worst": 100
+       }
+      ]
+     },
+     "firmware_version": "SVT02B6Q",
+     "in_smartctl_database": true,
+     "interface_speed": {
+      "current": {
+       "bits_per_unit": 100000000,
+       "sata_value": 3,
+       "string": "6.0 Gb/s",
+       "units_per_second": 60
+      },
+      "max": {
+       "bits_per_unit": 100000000,
+       "sata_value": 14,
+       "string": "6.0 Gb/s",
+       "units_per_second": 60
+      }
+     },
+     "logical_block_size": 512,
+     "model_name": "Samsung SSD 870 EVO 500GB",
+     "smart_status": {
+      "passed": true
+     },
+     "user_capacity": {
+      "blocks": 976773168,
+      "bytes": 500107862016
+     }
+    }
+   }
+  },
+  "drives": [
+   {
+    "device_path": "/dev/sdv",
+    "id": "mock-ssd-0001",
+    "model": "Samsung SSD 870 EVO 500GB",
+    "protocol": "ATA",
+    "readable": true,
+    "serial": "MOCK-SSD-0001"
+   }
+  ],
+  "files": [
+   "shipped.sata-ssd-healthy"
+  ],
+  "filesystems": {
+   "_status": 404
+  },
+  "health": {
+   "agent_id": "replica-golden-0001",
+   "auth_enabled": false,
+   "drive_count": 1,
+   "drives": 1,
+   "endpoints": [
+    "/api/health",
+    "/api/drives",
+    "/api/drives/{id}"
+   ],
+   "filesystems": 0,
+   "mock": true,
+   "os": "mock",
+   "port": 37953,
+   "status": "ok",
+   "uptime_seconds": 0,
+   "version": "0.8.0-mock"
+  },
+  "pools": {
+   "_status": 404
+  }
+ },
+ "usb-smart-blocked": {
+  "drive": {
+   "mock-usb-0001": {
+    "derived": {
+     "host_reads_omitted": "device_statistics_unavailable",
+     "host_writes_omitted": "device_statistics_unavailable"
+    },
+    "device_path": "/dev/sdu",
+    "device_statistics": {
+     "reason": "failed",
+     "status": "unavailable"
+    },
+    "id": "mock-usb-0001",
+    "last_updated": "2026-10-19T21:22:20Z",
+    "model": "WD Elements 2TB (USB)",
+    "protocol": "ATA",
+    "readable": true,
+    "serial": "MOCK-USB-0001",
+    "smart_data": {}
+   }
+  },
+  "drives": [
+   {
+    "device_path": "/dev/sdu",
+    "id": "mock-usb-0001",
+    "model": "WD Elements 2TB (USB)",
+    "protocol": "ATA",
+    "readable": true,
+    "serial": "MOCK-USB-0001"
+   }
+  ],
+  "files": [
+   "shipped.usb-smart-blocked"
+  ],
+  "filesystems": {
+   "_status": 404
+  },
+  "health": {
+   "agent_id": "replica-golden-0001",
+   "auth_enabled": false,
+   "drive_count": 1,
+   "drives": 1,
+   "endpoints": [
+    "/api/health",
+    "/api/drives",
+    "/api/drives/{id}"
+   ],
+   "filesystems": 0,
+   "mock": true,
+   "os": "mock",
+   "port": 40589,
+   "status": "ok",
+   "uptime_seconds": 0,
+   "version": "0.8.0-mock"
+  },
+  "pools": {
+   "_status": 404
+  }
+ },
+ "zfs-pool-degraded": {
+  "drive": {},
+  "drives": [],
+  "files": [
+   "shipped.zfs-pool-degraded"
+  ],
+  "filesystems": [
+   {
+    "available_bytes": 3160000000000,
+    "device": "tank",
+    "fstype": "zfs",
+    "id": "fs-1d000007",
+    "mountpoint": "/tank",
+    "status": "ok",
+    "total_bytes": 4000000000000,
+    "use_percent": 21.0,
+    "used_bytes": 840000000000,
+    "uuid": "1d000007-0000-4000-8000-000000000007"
+   },
+   {
+    "available_bytes": 480000000000,
+    "device": "tank/media",
+    "fstype": "zfs",
+    "id": "fs-1d000008",
+    "mountpoint": "/tank/media",
+    "status": "ok",
+    "total_bytes": 4000000000000,
+    "use_percent": 88.0,
+    "used_bytes": 3520000000000,
+    "uuid": "1d000008-0000-4000-8000-000000000008"
+   },
+   {
+    "available_bytes": 1800000000000,
+    "device": "tank/backups",
+    "fstype": "zfs",
+    "id": "fs-1d000009",
+    "mountpoint": "/tank/backups",
+    "status": "ok",
+    "total_bytes": 4000000000000,
+    "use_percent": 55.0,
+    "used_bytes": 2200000000000,
+    "uuid": "1d000009-0000-4000-8000-000000000009"
+   }
+  ],
+  "health": {
+   "agent_id": "replica-golden-0001",
+   "auth_enabled": false,
+   "drive_count": 0,
+   "drives": 0,
+   "endpoints": [
+    "/api/health",
+    "/api/drives",
+    "/api/drives/{id}",
+    "/api/filesystems",
+    "/api/pools"
+   ],
+   "filesystems": 3,
+   "mock": true,
+   "os": "mock",
+   "pools": 1,
+   "pools_status": "ok",
+   "port": 37435,
+   "status": "ok",
+   "uptime_seconds": 0,
+   "version": "0.8.0-mock"
+  },
+  "pools": [
+   {
+    "action": null,
+    "checksum_errors": 0,
+    "data_errors": 0,
+    "last_scrub_end": "2026-10-06T00:22:20Z",
+    "last_scrub_errors": 0,
+    "last_scrub_repaired": 0,
+    "name": "tank",
+    "problem_vdevs": [
+     {
+      "checksum_errors": 0,
+      "name": "mirror-0",
+      "read_errors": 0,
+      "state": "DEGRADED",
+      "type": "mirror",
+      "write_errors": 0
+     },
+     {
+      "checksum_errors": 0,
+      "name": "MOCK0002",
+      "read_errors": 12,
+      "state": "FAULTED",
+      "type": "disk",
+      "write_errors": 0
+     }
+    ],
+    "read_errors": 12,
+    "scan_function": "SCRUB",
+    "scan_state": "FINISHED",
+    "scrub_in_progress": false,
+    "state": "DEGRADED",
+    "status": null,
+    "write_errors": 0
+   }
+  ]
+ },
+ "zfs-pool-healthy": {
+  "drive": {},
+  "drives": [],
+  "files": [
+   "shipped.zfs-pool-healthy"
+  ],
+  "filesystems": [
+   {
+    "available_bytes": 3160000000000,
+    "device": "tank",
+    "fstype": "zfs",
+    "id": "fs-1d000007",
+    "mountpoint": "/tank",
+    "status": "ok",
+    "total_bytes": 4000000000000,
+    "use_percent": 21.0,
+    "used_bytes": 840000000000,
+    "uuid": "1d000007-0000-4000-8000-000000000007"
+   },
+   {
+    "available_bytes": 480000000000,
+    "device": "tank/media",
+    "fstype": "zfs",
+    "id": "fs-1d000008",
+    "mountpoint": "/tank/media",
+    "status": "ok",
+    "total_bytes": 4000000000000,
+    "use_percent": 88.0,
+    "used_bytes": 3520000000000,
+    "uuid": "1d000008-0000-4000-8000-000000000008"
+   },
+   {
+    "available_bytes": 1800000000000,
+    "device": "tank/backups",
+    "fstype": "zfs",
+    "id": "fs-1d000009",
+    "mountpoint": "/tank/backups",
+    "status": "ok",
+    "total_bytes": 4000000000000,
+    "use_percent": 55.0,
+    "used_bytes": 2200000000000,
+    "uuid": "1d000009-0000-4000-8000-000000000009"
+   }
+  ],
+  "health": {
+   "agent_id": "replica-golden-0001",
+   "auth_enabled": false,
+   "drive_count": 0,
+   "drives": 0,
+   "endpoints": [
+    "/api/health",
+    "/api/drives",
+    "/api/drives/{id}",
+    "/api/filesystems",
+    "/api/pools"
+   ],
+   "filesystems": 3,
+   "mock": true,
+   "os": "mock",
+   "pools": 1,
+   "pools_status": "ok",
+   "port": 43839,
+   "status": "ok",
+   "uptime_seconds": 0,
+   "version": "0.8.0-mock"
+  },
+  "pools": [
+   {
+    "action": null,
+    "checksum_errors": 0,
+    "data_errors": 0,
+    "last_scrub_end": "2026-10-06T00:22:21Z",
+    "last_scrub_errors": 0,
+    "last_scrub_repaired": 0,
+    "name": "tank",
+    "problem_vdevs": [],
+    "read_errors": 0,
+    "scan_function": "SCRUB",
+    "scan_state": "FINISHED",
+    "scrub_in_progress": false,
+    "state": "ONLINE",
+    "status": null,
+    "write_errors": 0
+   }
+  ]
+ }
+}

@@ -161,3 +161,28 @@ def test_discovered_name_rejects_what_names_no_machine():
     # An App entry found by discovery is still HAOS or Replica.
     assert entry_host({"host": "172.30.32.1", "agent_mock": False}, f"SMART Sniffer ({APP})", "zeroconf") == "HAOS"
     assert entry_host({"host": "172.30.32.1"}, f"SMART Sniffer ({APP})", "zeroconf") is None
+
+
+def test_the_apps_agent_under_any_slug_or_from_the_supervisor():
+    """Round 4: a local dev build of the App ("local-smart-sniffer-agent-dev")
+    is this box's App agent too, and so is any entry the Supervisor's
+    discovery made; the Replica and field agents are unchanged."""
+    from custom_components.smart_sniffer.host_name import APP_HOST, is_app_entry
+
+    for name in ("local-smart-sniffer-agent-dev", "0449a086-smart-sniffer-agent-beta2",
+                 "local-smart-sniffer-agent", "a0d7b954-smart-sniffer-agent"):
+        assert APP_HOST.match(name), name
+    for name in ("smart-sniffer-agent", "nas-smart-sniffer-agent", "local-smart-sniffer-agent-",
+                 "local-smart-sniffer-agentx", "local-smart-sniffer-agent-dev.lan.example"):
+        assert not APP_HOST.match(name), name
+    dev = {"host": "local-smart-sniffer-agent-dev", "port": 9099}
+    assert is_app_entry(dev, "SMART Sniffer (local-smart-sniffer-agent-dev)")
+    assert entry_host({**dev, "agent_mock": False}, "") == "HAOS"
+    # Made by the Supervisor's discovery: HAOS at once, whatever its host.
+    lan = {"host": "10.0.10.7", "port": 9199}
+    assert entry_host(lan, "SMART Sniffer (10.0.10.7)", "hassio") == "HAOS"
+    assert entry_host({**lan, "app_slug": "local_x"}, "") == "HAOS"
+    assert is_app_entry(lan, "", source="hassio") and not is_app_entry(lan, "")
+    # A field agent and the Replica stay what they were.
+    assert entry_host({"host": "10.0.10.20", "agent_hostname": "nas-01"}, "", "zeroconf") == "nas-01"
+    assert entry_host({"kind": "replica", "host": "replica.invalid", "port": 9099}, "", "import") == "Replica"

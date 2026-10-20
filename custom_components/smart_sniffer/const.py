@@ -42,6 +42,10 @@ POOLS_KEY = "_pools"
 # agent does not advertise pools, None when the pool fetch failed.
 POOLS_MISSING_KEY = "_pools_missing"
 
+# Key in a waiting discovery flow's context: what the SMART Sniffer panel's
+# Network list shows of the agent (host, port, hostname, drives, auth, version).
+DISCOVERY_CONTEXT = "smart_sniffer_agent"
+
 # Service name for the get_drive_data action.
 SERVICE_GET_DRIVE_DATA = "get_drive_data"
 
@@ -52,3 +56,8 @@ SERVICE_GET_DRIVE_DATA = "get_drive_data"
 STORE_KEY_PREFIX = "smart_sniffer.devstat"
 STORE_VERSION = 1
 STORE_SAVE_DELAY = 600
+
+# Key in the import step's data: a field machine the SMART Sniffer App hands
+# over (panel_import.py). Such a machine is added even when it does not
+# answer now. Never stored in an entry.
+IMPORT_FROM_APP = "from_app"

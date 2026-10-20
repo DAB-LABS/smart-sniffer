@@ -28,7 +28,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from typing import Any
 
-from .attention import ata_wear_note, coerce_smart_data, is_dead_wear_attr
+from .attention import ata_wear_note, coerce_smart_data, drive_log_name, is_dead_wear_attr
 from .const import FILESYSTEMS_KEY
 from .devstat import data_volume
 from .extract import (
@@ -196,7 +196,7 @@ def _drives(data: dict[str, Any]) -> Iterable[tuple[str, dict[str, Any]]]:
             # trustworthy. Do not build a device for it. Agents before v0.6.1
             # omit the field entirely, which reads as None here rather than
             # False, so they are unaffected. See smart-sniffer-app#7.
-            _LOGGER.debug("Skipping unreadable drive %s", drive_id)
+            _LOGGER.debug("Skipping unreadable drive %s", drive_log_name(drive_data))
             continue
         yield drive_id, drive_data
 
@@ -270,12 +270,14 @@ def _drive_sensor_specs(
     for key in SENSOR_KEYS:
         if key in ATA_ONLY_KEYS and not cls.is_ata:
             _LOGGER.debug(
-                "Skipping ATA-only sensor '%s' for %s drive %s", key, cls.protocol, drive_id
+                "Skipping ATA-only sensor '%s' for %s drive %s", key, cls.protocol,
+                drive_log_name(drive_data),
             )
             continue
         if key in NVME_ONLY_KEYS and not cls.is_nvme:
             _LOGGER.debug(
-                "Skipping NVMe-only sensor '%s' for ATA/SATA drive %s", key, drive_id
+                "Skipping NVMe-only sensor '%s' for ATA/SATA drive %s", key,
+                drive_log_name(drive_data),
             )
             continue
         if (
@@ -286,7 +288,8 @@ def _drive_sensor_specs(
             and not (key == "wear_leveling_count" and ata_wear_note(drive_data))
         ):
             _LOGGER.debug(
-                "Skipping sensor '%s' for drive %s — not in SMART data", key, drive_id
+                "Skipping sensor '%s' for drive %s — not in SMART data", key,
+                drive_log_name(drive_data),
             )
             continue
         specs.append(spec(KIND_ATTRIBUTE, key, key=key))
@@ -339,8 +342,10 @@ def sensor_specs(
     entry_id: str,
     registered_pools: Iterable[str],
     pinned: dict[str, DriveClass],
+    replica: bool = False,
 ) -> list[EntitySpec]:
-    """Every sensor this payload calls for, in v0.7.0's order."""
+    """Every sensor this payload calls for, in v0.7.0's order. The Replica
+    machine (v0.9) has no address: no agent IP or port sensor."""
     data = data or {}
     specs: list[EntitySpec] = []
     for drive_id, drive_data in _drives(data):
@@ -373,6 +378,8 @@ def sensor_specs(
 
     # --- Agent diagnostic sensors ---
     for kind in _AGENT_SENSOR_KINDS:
+        if replica and kind in (KIND_AGENT_IP, KIND_AGENT_PORT):
+            continue
         specs.append(EntitySpec(SENSOR, kind, f"{entry_id}_{kind}", f"{entry_id}_agent"))
     return specs
 
@@ -381,8 +388,10 @@ def binary_sensor_specs(
     data: dict[str, Any] | None,
     entry_id: str,
     registered_pools: Iterable[str],
+    replica: bool = False,
 ) -> list[EntitySpec]:
-    """Every binary sensor this payload calls for, in v0.7.0's order."""
+    """Every binary sensor this payload calls for, in v0.7.0's order. The
+    Replica machine (v0.9) has no password: no Auth Active sensor."""
     data = data or {}
     specs: list[EntitySpec] = []
     # Per-drive health + standby sensors.
@@ -403,9 +412,11 @@ def binary_sensor_specs(
     specs.append(
         EntitySpec(BINARY_SENSOR, KIND_AGENT_STATUS, f"{entry_id}_agent_status", f"{entry_id}_agent")
     )
-    specs.append(
-        EntitySpec(BINARY_SENSOR, KIND_AUTH_ACTIVE, f"{entry_id}_auth_active", f"{entry_id}_agent")
-    )
+    if not replica:
+        specs.append(
+            EntitySpec(BINARY_SENSOR, KIND_AUTH_ACTIVE, f"{entry_id}_auth_active",
+                       f"{entry_id}_agent")
+        )
     return specs
 
 

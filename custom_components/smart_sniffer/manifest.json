@@ -3,12 +3,12 @@
   "name": "SMART Sniffer",
   "codeowners": ["@DAB-LABS"],
   "config_flow": true,
-  "dependencies": ["zeroconf"],
+  "dependencies": ["zeroconf", "http", "frontend", "panel_custom", "websocket_api"],
   "documentation": "https://github.com/DAB-LABS/smart-sniffer",
   "integration_type": "device",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/DAB-LABS/smart-sniffer/issues",
   "requirements": [],
-  "version": "0.8.5",
+  "version": "0.9.0-dev",
   "zeroconf": [{"type": "_smartha._tcp.local."}]
 }

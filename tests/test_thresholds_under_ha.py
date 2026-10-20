@@ -216,7 +216,11 @@ async def _other_readers(h):
         blocking=True, return_response=True,
     )
     diag = await diagnostics.async_get_config_entry_diagnostics(h.hass, h.entry)
-    attention = diag["drives"][DRIVE]["attention"]
+    # Keyed by position, never by the drive id (a slug of the serial).
+    assert list(diag["drives"]) == ["drive_1"]
+    attention = diag["drives"]["drive_1"]["attention"]
+    stored = {"drive_1": attention["thresholds"]} if attention["thresholds"] else {}
+    assert (diag["config_entry"].get("thresholds") or {}) == stored
     return (response["drives"][DRIVE]["attention"]["state"],
             attention["state"], attention["thresholds"])
 

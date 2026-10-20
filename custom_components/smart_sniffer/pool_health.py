@@ -422,6 +422,7 @@ def notification_actions(
     previous: dict[str, list[str]],
     pools: list[dict[str, Any]] | None,
     missing: Iterable[str] | None = (),
+    first_sighting: bool = False,
 ) -> tuple[list[PoolAction], dict[str, list[str]]]:
     """What to do with notifications after a poll, and the state to keep.
 
@@ -437,6 +438,9 @@ def notification_actions(
     the first poll: a pool that failed to import before Home Assistant started
     is the case most worth hearing about. When it comes back the usual rules
     apply: healthy dismisses, unhealthy updates.
+
+    ``first_sighting`` (the Replica, v0.9): an unhealthy pool raises its
+    notification when first seen too, instead of being a silent baseline.
 
     ``pools`` None means this poll could not tell (the fetch failed), so the
     state is kept as it was and nothing is done.
@@ -456,6 +460,11 @@ def notification_actions(
         reasons = pool_lines + device_lines
         current[name] = reasons
         if name not in previous:
+            if first_sighting and reasons:
+                actions.append(
+                    PoolAction("create", name, reasons, notification_pool_lines(pool),
+                               device_lines)
+                )
             continue  # baseline
         before = previous[name]
         if sorted(reasons) == sorted(before):

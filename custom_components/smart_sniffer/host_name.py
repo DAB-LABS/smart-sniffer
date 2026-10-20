@@ -35,12 +35,21 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from .agent_identity import ENTRY_AGENT_HOSTNAME, ENTRY_AGENT_MOCK, display_hostname, is_ip
-from .const import CONF_HOST
+from .source import REPLICA_LABEL, agent_address, is_replica_data
 
 # The container host name of the HA App: "<8 hex repo hash>-smart-sniffer-agent",
-# or "local-smart-sniffer-agent" for a local build. The real agent and the
-# replica agent in the App both report it.
-APP_HOST = re.compile(r"^(?:[0-9a-f]{8}|local)-smart-sniffer-agent$")
+# or "local-smart-sniffer-agent" for a local build, with an optional
+# "-<suffix>" for an App built under another slug (a local dev build:
+# "local-smart-sniffer-agent-dev"). The real agent and the replica agent in
+# the App both report it.
+APP_HOST = re.compile(r"^(?:[0-9a-f]{8}|local)-smart-sniffer-agent(?:-[a-z0-9][a-z0-9-]{0,30})?$")
+
+# An entry made from the Supervisor's discovery (config_entries.SOURCE_HASSIO)
+# is the HA App's agent: the App posts it, and its replica agent never does.
+SOURCE_HASSIO = "hassio"
+# What the Supervisor's discovery said about the App, kept on the entry the
+# discovery made: the App's slug.
+ENTRY_APP_SLUG = "app_slug"
 APP_AGENT_LABEL = "HAOS"
 APP_REPLICA_LABEL = "Replica"
 
@@ -115,16 +124,31 @@ def _title_text(title: Any) -> str | None:
     return address_label(match.group(1))
 
 
-def is_app_entry(data: Mapping[str, Any], title: Any, live_hostname: Any = None) -> bool:
-    """Whether an entry is one of the HA App's agents: its stored or live
-    host name, title or address is the App's container name."""
+def is_app_entry(data: Mapping[str, Any], title: Any, live_hostname: Any = None,
+                 source: Any = None) -> bool:
+    """Whether an entry is one of the HA App's agents: made from the
+    Supervisor's discovery (its source, or the App facts it keeps), or its
+    stored or live host name, title or address is the App's container name."""
+    if source == SOURCE_HASSIO or data.get(ENTRY_APP_SLUG):
+        return True
     names = (
         clean_host(data.get(ENTRY_AGENT_HOSTNAME)),
         clean_host(live_hostname),
         _title_text(title),
-        address_label(data.get(CONF_HOST)),
+        address_label(agent_address(data)),
     )
     return any(_is_app_host(name) for name in names)
+
+
+def app_names(data: Mapping[str, Any], title: Any) -> set[str]:
+    """The HA App container names an entry carries (stored host name, title,
+    address), lower case: which App's agent an App entry is."""
+    names = (
+        clean_host(data.get(ENTRY_AGENT_HOSTNAME)),
+        _title_text(title),
+        address_label(agent_address(data)),
+    )
+    return {name.lower() for name in names if _is_app_host(name)}
 
 
 def discovered_name(title: Any, source: Any) -> str | None:
@@ -152,19 +176,21 @@ def entry_host(data: Mapping[str, Any], title: Any, source: Any = None) -> str |
     ``source`` is the entry's source; only a discovered entry ("zeroconf")
     may take its name from its title. None only for an HA App entry whose
     kind (agent or replica) is not known yet: no health read has succeeded
-    since it was added.
+    since it was added. The Replica machine (v0.9) is "Replica".
     """
-    if is_app_entry(data, title):
+    if is_replica_data(data):
+        return REPLICA_LABEL
+    if is_app_entry(data, title, source=source):
         mock = data.get(ENTRY_AGENT_MOCK)
         if mock is True:
             return APP_REPLICA_LABEL
-        if mock is False:
-            return APP_AGENT_LABEL
+        if mock is False or source == SOURCE_HASSIO or data.get(ENTRY_APP_SLUG):
+            return APP_AGENT_LABEL  # the discovery never offers the replica agent
         return None
     return (
         clean_host(data.get(ENTRY_AGENT_HOSTNAME))
         or discovered_name(title, source)
-        or address_label(data.get(CONF_HOST))
+        or address_label(agent_address(data))
     )
 
 

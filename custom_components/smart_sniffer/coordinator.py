@@ -11,7 +11,8 @@ previous state. When a drive's state changes it fires or dismisses a HA
 persistent_notification automatically — no user automation required.
 
 Transition rules:
-  first poll         Record baseline, no notification.
+  first poll         Record baseline, no notification (the Replica: notify
+                     a MAYBE or YES drive or an unhealthy pool at once).
   NO  → MAYBE       Fire ⚠️ WARNING notification.
   NO  → YES         Fire 🔴 CRITICAL notification.
   MAYBE → YES       Update notification to escalate.
@@ -57,8 +58,9 @@ from homeassistant.components.persistent_notification import (
     async_dismiss as pn_dismiss,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
+from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.issue_registry import (
@@ -77,6 +79,7 @@ from .attention import (
     STATE_NO,
     STATE_UNSUPPORTED,
     STATE_YES,
+    drive_log_name,
     evaluate_attention,
     get_thresholds,
 )
@@ -103,6 +106,8 @@ from .devstat import (
 from .host_name import app_kind_change, entry_host, legacy_host
 from .entity_plan import DriveClass, EntitySpec, forget_device as forget_created
 from .smart_presence import EVENT_BACK, EVENT_LOST, SmartPresence
+from .source import REPLICA_LABEL, agent_address, agent_port, is_replica_data
+from .replica_engine import ReplicaError as ReplicaUnavailable
 from .poll_timeout import AGENT_POLL_TIMEOUT, PollTimeouts
 from .pool_health import (
     advertises_pools,
@@ -172,9 +177,13 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entry: ConfigEntry,
         store: Store | None = None,
         stored: Any = None,
+        replica: Any = None,
     ) -> None:
-        self.host:  str = entry.data[CONF_HOST]
-        self.port:  int = entry.data[CONF_PORT]
+        # The Replica machine (v0.9) has no address: its source is the
+        # replica engine in this process (replica.ReplicaSource).
+        self._replica = replica
+        self.host:  str = agent_address(entry.data) or REPLICA_LABEL
+        self.port:  int = agent_port(entry.data) or 0
         self.token: str = entry.data.get(CONF_TOKEN, "")
         interval = entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
 
@@ -224,6 +233,13 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._other_agent_logged = False
 
     @property
+    def _notifies_first_poll(self) -> bool:
+        """Whether a drive or pool raises its notification when first seen:
+        only on the Replica, whose drives are picked to be looked at. Real
+        agents keep the first-poll baseline."""
+        return getattr(self, "_replica", None) is not None
+
+    @property
     def display_host(self) -> str | None:
         """The host label in device names (host_name.entry_host)."""
         entry = self.config_entry
@@ -248,7 +264,10 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return {}
 
     def _check_agent_version(self, agent_version: str) -> None:
-        """Create or clear a HA repair issue based on agent version."""
+        """Create or clear a HA repair issue based on agent version. Never
+        for the Replica, which is no agent to update."""
+        if getattr(self, "_replica", None) is not None:
+            return
         issue_id = f"agent_outdated_{self.host}"
 
         if not agent_version or agent_is_outdated(agent_version, MIN_AGENT_VERSION):
@@ -284,48 +303,45 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         After fetching, evaluates attention states and fires/dismisses
         notifications as needed.
         """
-        session = async_get_clientsession(self.hass)
+        replica = getattr(self, "_replica", None)
+        session = async_get_clientsession(self.hass) if replica is None else None
         timeout = aiohttp.ClientTimeout(total=AGENT_POLL_TIMEOUT)
 
-        # The request in flight, for the timeout message. Requests whose
-        # failure does not fail the poll (health, filesystems, pools) catch
-        # their own timeouts below.
-        path = "/api/drives"
-        try:
+        async def _fetch(path: str) -> Any:
+            """One agent request: over HTTP, or from the Replica in process."""
+            if replica is not None:
+                return await replica.get_json(path)
             async with session.get(
-                f"{self._base_url}/api/drives",
+                f"{self._base_url}{path}",
                 headers=self._headers,
                 timeout=timeout,
             ) as resp:
                 resp.raise_for_status()
-                drives_list: list[dict[str, Any]] = await resp.json()
+                return await resp.json()
+
+        # The request in flight, for the error messages. Requests whose
+        # failure does not fail the poll (health, filesystems, pools) catch
+        # their own timeouts below.
+        path = "/api/drives"
+        try:
+            drives_list: list[dict[str, Any]] = await _fetch("/api/drives")
 
             result: dict[str, Any] = {}
             for drive_summary in drives_list:
                 drive_id = drive_summary["id"]
-                path = f"/api/drives/{drive_id}"
-                async with session.get(
-                    f"{self._base_url}/api/drives/{drive_id}",
-                    headers=self._headers,
-                    timeout=timeout,
-                ) as resp:
-                    resp.raise_for_status()
-                    result[drive_id] = await resp.json()
+                # Named in messages by its device path, not by its id (a
+                # slug of the serial).
+                path = f"/api/drives/{{id}} for {drive_log_name(drive_summary)}"
+                result[drive_id] = await _fetch(f"/api/drives/{drive_id}")
 
             # Check agent version via /api/health (tiny payload, negligible overhead).
             fs_count = 0
             health: dict[str, Any] | None = None
             try:
-                async with session.get(
-                    f"{self._base_url}/api/health",
-                    headers=self._headers,
-                    timeout=timeout,
-                ) as resp:
-                    resp.raise_for_status()
-                    health = await resp.json()
+                health = await _fetch("/api/health")
                 agent_version = health.get("version", "")
                 fs_count = health.get("filesystems", 0)
-            except (aiohttp.ClientError, asyncio.TimeoutError):
+            except (aiohttp.ClientError, asyncio.TimeoutError, ReplicaUnavailable):
                 # Health check failed — don't block the poll, but treat as
                 # unknown version so the repair fires.
                 agent_version = ""
@@ -339,14 +355,8 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             filesystems: list[dict[str, Any]] = []
             if fs_count > 0:
                 try:
-                    async with session.get(
-                        f"{self._base_url}/api/filesystems",
-                        headers=self._headers,
-                        timeout=timeout,
-                    ) as resp:
-                        resp.raise_for_status()
-                        filesystems = await resp.json()
-                except (aiohttp.ClientError, asyncio.TimeoutError):
+                    filesystems = await _fetch("/api/filesystems")
+                except (aiohttp.ClientError, asyncio.TimeoutError, ReplicaUnavailable):
                     _LOGGER.debug(
                         "SMART Sniffer: /api/filesystems fetch failed, skipping"
                     )
@@ -359,14 +369,8 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # stores None: pools unknown, not pools gone.
             async def _get_json(path: str) -> Any:
                 try:
-                    async with session.get(
-                        f"{self._base_url}{path}",
-                        headers=self._headers,
-                        timeout=timeout,
-                    ) as resp:
-                        resp.raise_for_status()
-                        return await resp.json()
-                except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
+                    return await _fetch(path)
+                except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, ReplicaUnavailable):
                     _LOGGER.debug("SMART Sniffer: %s fetch failed, skipping", path)
                     return None
 
@@ -381,10 +385,28 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # both. Without this HA logs only "Timeout fetching
             # smart_sniffer data", with no host.
             raise UpdateFailed(self._timeouts.timed_out(path)) from err
+        except aiohttp.ClientResponseError as err:
+            # The agent refused the password (or wants one) for its drives
+            # (v0.9): Home Assistant asks the user for it (reauth) instead
+            # of retrying forever. Health needs no password, so only the
+            # drive requests get here with 401.
+            if err.status in (401, 403):
+                raise ConfigEntryAuthFailed(
+                    f"The SMART Sniffer agent at {self.host}:{self.port} refused "
+                    "the password" if self.token else
+                    f"The SMART Sniffer agent at {self.host}:{self.port} wants a password"
+                ) from err
+            # Not {err}: its text carries the URL, and so the drive id.
+            raise UpdateFailed(
+                f"Error communicating with SMART Sniffer agent: {err.status}, "
+                f"{err.message} on {path}"
+            ) from err
         except aiohttp.ClientError as err:
             raise UpdateFailed(
                 f"Error communicating with SMART Sniffer agent: {err}"
             ) from err
+        except ReplicaUnavailable as err:
+            raise UpdateFailed(f"The SMART Sniffer Replica could not be read: {err}") from err
 
         self._timeouts.succeeded()
         self._store_identity(health, drives_list)
@@ -406,6 +428,8 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         the devices when the host label changed.
         """
         entry = self.config_entry
+        if is_replica_data(entry.data):
+            return  # the Replica's identity is its own; nothing to learn
         changes, other_agent = identity_changes(entry.data, health, drives)
         if not other_agent:
             changes.update(
@@ -506,7 +530,8 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     ) -> None:
         """Raise, update or dismiss ZFS pool notifications after a poll."""
         actions, self._prev_pool_reasons = pool_notification_actions(
-            self._prev_pool_reasons, pools, missing
+            self._prev_pool_reasons, pools, missing,
+            first_sighting=self._notifies_first_poll,
         )
         entry_id = self.config_entry.entry_id
         for action in actions:
@@ -547,10 +572,13 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     "data (agent says: %s); its attention state is unknown until "
                     "it does again. A USB bridge or the driver that passes SMART "
                     "through it may have stopped working",
-                    drive_id, drive_data.get("smart_unavailable_reason") or "no reason given",
+                    drive_log_name(drive_data),
+                    drive_data.get("smart_unavailable_reason") or "no reason given",
                 )
             elif event == EVENT_BACK:
-                _LOGGER.info("SMART Sniffer: %s is giving SMART data again", drive_id)
+                _LOGGER.info(
+                    "SMART Sniffer: %s is giving SMART data again", drive_log_name(drive_data)
+                )
             if self.smart_presence.is_lost(drive_id):
                 # Not the "SMART Monitoring Unavailable" notification, which
                 # blames the enclosure, and no change of baseline: the state
@@ -569,10 +597,25 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # First observation — record baseline, no notification.
                 _LOGGER.debug(
                     "SMART Sniffer: first observation of %s, state=%s",
-                    drive_id, state,
+                    drive_log_name(drive_data), state,
                 )
                 self._prev_state[drive_id] = state
                 self._prev_reasons[drive_id] = reasons
+                # Except for the Replica (v0.9): a drive is picked to see what
+                # it raises, so a failing pick (and one added later) tells at
+                # once. Its baseline is the pick itself, not a real drive's
+                # history.
+                if self._notifies_first_poll and state in (STATE_MAYBE, STATE_YES):
+                    _LOGGER.info(
+                        "SMART Sniffer: Replica drive %s requires attention: %s",
+                        drive_log_name(drive_data), "; ".join(reasons),
+                    )
+                    title, message = _build_notification(
+                        drive_data, state, severity, reasons, self.notice_host,
+                    )
+                    pn_create(self.hass, message=message, title=title,
+                              notification_id=_notif_id(drive_id))
+                    continue
                 # Except (D11): a reason only Device Statistics could give,
                 # never announced for this drive, is news even on the first
                 # poll; otherwise a combined agent and integration upgrade
@@ -584,7 +627,7 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if announce:
                     _LOGGER.warning(
                         "SMART Sniffer: %s now requires attention: %s",
-                        drive_id, "; ".join(reasons),
+                        drive_log_name(drive_data), "; ".join(reasons),
                     )
                     title, message = _build_notification(
                         drive_data, state, severity, reasons, self.notice_host,
@@ -605,7 +648,8 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if state == STATE_NO:
                 # Resolved — dismiss.
                 _LOGGER.info(
-                    "SMART Sniffer: %s attention cleared (was %s)", drive_id, prev,
+                    "SMART Sniffer: %s attention cleared (was %s)",
+                    drive_log_name(drive_data), prev,
                 )
                 pn_dismiss(self.hass, notif_id)
 
@@ -615,7 +659,7 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # or YES, so it gave SMART data, and losing it is handled
                 # above as lost.
                 _LOGGER.info(
-                    "SMART Sniffer: %s has no usable SMART data", drive_id,
+                    "SMART Sniffer: %s has no usable SMART data", drive_log_name(drive_data),
                 )
                 title, message = _build_notification(
                     drive_data, state, severity, reasons, self.notice_host,
@@ -638,7 +682,7 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                 _LOGGER.warning(
                     "SMART Sniffer: %s %s: %s",
-                    drive_id, action, "; ".join(reasons),
+                    drive_log_name(drive_data), action, "; ".join(reasons),
                 )
                 title, message = _build_notification(
                     drive_data, state, severity, reasons, self.notice_host,
@@ -655,8 +699,11 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Clean up state for drives that disappeared (e.g., USB unplugged).
         removed = set(self._prev_state.keys()) - current_drive_ids
+        if removed:
+            _LOGGER.debug(
+                "SMART Sniffer: %d drive(s) no longer present, cleaning up", len(removed)
+            )
         for drive_id in removed:
-            _LOGGER.debug("SMART Sniffer: %s no longer present, cleaning up", drive_id)
             del self._prev_state[drive_id]
             self._prev_reasons.pop(drive_id, None)
             pn_dismiss(self.hass, _notif_id(drive_id))
@@ -670,9 +717,10 @@ class AgentHealthCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     when the agent is offline.
     """
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        self.host: str = entry.data[CONF_HOST]
-        self.port: int = entry.data[CONF_PORT]
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, replica: Any = None) -> None:
+        self._replica = replica
+        self.host: str = agent_address(entry.data) or REPLICA_LABEL
+        self.port: int = agent_port(entry.data) or 0
         self.token: str = entry.data.get(CONF_TOKEN, "")
         self.entry = entry
         interval = entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
@@ -699,35 +747,38 @@ class AgentHealthCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Ping the agent health endpoint. Never raises UpdateFailed."""
         from homeassistant.util import dt as dt_util
 
-        session = async_get_clientsession(self.hass)
-        url = f"http://{self.host}:{self.port}/api/health"
-        headers = {"Authorization": f"Bearer {self.token}"} if self.token else {}
-
+        replica = getattr(self, "_replica", None)
         try:
-            async with session.get(
-                url,
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                resp.raise_for_status()
-                data = await resp.json()
-                now = dt_util.utcnow()
-                self._last_version = data.get("version", "")
-                self._last_seen = now.isoformat()
-                self._last_os = data.get("os", "")
-                self._last_uptime = data.get("uptime_seconds")
-                self._last_hostname = _text(data.get("hostname"))
-                self._last_os_name = _text(data.get("os_name"))
-                self._last_os_version = _text(data.get("os_version"))
-                return {
-                    "connected": True,
-                    "version": self._last_version,
-                    "os": self._last_os,
-                    "uptime_seconds": self._last_uptime,
-                    "last_seen": self._last_seen,
-                    **self._identity(),
-                }
-        except (aiohttp.ClientError, asyncio.TimeoutError, TimeoutError):
+            if replica is not None:
+                data = await replica.get_json("/api/health")
+            else:
+                session = async_get_clientsession(self.hass)
+                url = f"http://{self.host}:{self.port}/api/health"
+                headers = {"Authorization": f"Bearer {self.token}"} if self.token else {}
+                async with session.get(
+                    url,
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as resp:
+                    resp.raise_for_status()
+                    data = await resp.json()
+            now = dt_util.utcnow()
+            self._last_version = data.get("version", "")
+            self._last_seen = now.isoformat()
+            self._last_os = data.get("os", "")
+            self._last_uptime = data.get("uptime_seconds")
+            self._last_hostname = _text(data.get("hostname"))
+            self._last_os_name = _text(data.get("os_name"))
+            self._last_os_version = _text(data.get("os_version"))
+            return {
+                "connected": True,
+                "version": self._last_version,
+                "os": self._last_os,
+                "uptime_seconds": self._last_uptime,
+                "last_seen": self._last_seen,
+                **self._identity(),
+            }
+        except (aiohttp.ClientError, asyncio.TimeoutError, TimeoutError, ReplicaUnavailable):
             return {
                 "connected": False,
                 "version": self._last_version,
