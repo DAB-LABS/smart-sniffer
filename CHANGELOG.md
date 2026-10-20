@@ -2,7 +2,7 @@
 
 All notable changes to SMART Sniffer are documented here.
 
-## Unreleased: v0.9.0
+## v0.9.0-beta.1 -- 2026-10-20
 
 SMART Sniffer is evolving, for the better: everything now lives in one place. The integration has its own Control Center in the sidebar for every machine you monitor, replicas included. Update from HACS and restart, then update your agents (run the install command again) to pick up the security fixes. Using the SMART Sniffer App? Update this integration first, then the App to 0.4.0. Your App machines move over by themselves. Old App replicas are removed, so create them again from + > Replica.
 
