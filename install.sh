@@ -1833,11 +1833,18 @@ success "Binary installed."
 # ---------------------------------------------------------------------------
 # Write config (skip if keeping existing config)
 # ---------------------------------------------------------------------------
+# The config can hold the agent's token: readable by root only (the agent
+# runs as root). An older installer left it world-readable, so a kept or
+# rewritten file is tightened too; the empty file is made 600 before the
+# token is written to it.
 if [ "$KEEP_CONFIG" = "true" ]; then
   info "Keeping existing config at $INSTALL_CFG/config.yaml"
+  chmod 600 "$INSTALL_CFG/config.yaml"
 else
   info "Writing config to $INSTALL_CFG/config.yaml..."
   mkdir -p "$INSTALL_CFG"
+  : > "$INSTALL_CFG/config.yaml"
+  chmod 600 "$INSTALL_CFG/config.yaml"
 
   cat > "$INSTALL_CFG/config.yaml" <<CONFEOF
 port: $PORT

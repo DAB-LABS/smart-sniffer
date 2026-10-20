@@ -470,6 +470,22 @@ function Format-SmartctlPathYaml {
     return "smartctl_path: '" + ($Path -replace "'", "''") + "'"
 }
 
+# Protect-ConfigFile lets only Administrators and SYSTEM (the service's
+# account) read the config: it can hold the agent's token, and a file under
+# Program Files inherits read access for every user. SIDs, not names, so it
+# works on any Windows language. An empty file is made first when there is
+# none, so the token is never written to a file others can read.
+function Protect-ConfigFile {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) {
+        New-Item -ItemType File -Path $Path -Force | Out-Null
+    }
+    & icacls.exe $Path /inheritance:r /grant:r "*S-1-5-32-544:(F)" "*S-1-5-18:(F)" | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn "Could not restrict access to $Path (icacls exit code $LASTEXITCODE)."
+    }
+}
+
 # ---------------------------------------------------------------------------
 # Banner
 # ---------------------------------------------------------------------------
@@ -846,8 +862,10 @@ try {
     # ---------------------------------------------------------------------------
     if ($KeepConfig) {
         Write-Step "Keeping config at $ConfigFile"
+        Protect-ConfigFile $ConfigFile
     } else {
         Write-Step "Writing config to $ConfigFile..."
+        Protect-ConfigFile $ConfigFile
         $ConfigContent = "port: $Port`nscan_interval: $ScanInterval"
         if ($Token) {
             $ConfigContent += "`ntoken: `"$Token`""
