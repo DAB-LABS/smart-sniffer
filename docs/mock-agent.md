@@ -8,7 +8,7 @@ Every fake drive and pool is a **replica**: a JSON file in the shape the agent s
 **Requirements:** Python 3.9+ (stdlib only, no pip install needed)
 **Optional:** `pip install zeroconf` for mDNS auto-discovery advertisement
 
-The SMART Sniffer app runs this same file as its replica agent, always on, with `--no-mdns`. Its image takes `tools/mock-agent.py` and the six files in `tools/replicas/` from the smart-sniffer release, so a change here reaches the app with the next release.
+The SMART Sniffer App 0.3.x ran this same file as its replica agent. From v0.9 the integration serves replicas itself, in Home Assistant (+ > Replica in the Control Center, see the [README](../README.md#replicas)), and App 0.4.0 no longer runs the mock. The integration reads the replica file format described below; any `scenarios` in a file are ignored there. Its seed set, `custom_components/smart_sniffer/replicas/`, is built from the files here by `tools/make-seed-replicas.py`.
 
 ---
 
@@ -137,7 +137,7 @@ An old preset key gets its file's filesystems (`--preload sata_hdd` has `/` and 
 
 ### The shipped replicas
 
-These six are in `tools/replicas/` and ship in the app's image.
+These six are in `tools/replicas/`. App 0.3.x shipped them in its image; the integration's seed set is built from them.
 
 | File id | Name | Kind | Serial | Reads as |
 |---------|------|------|--------|----------|
@@ -152,7 +152,7 @@ A shipped pool's `last_scrub_end` is read as an age: the time between it and the
 
 ### The extra replicas
 
-`tools/replicas/extra/` holds the other old presets. The repo checkout loads them by default; the app's image does not ship them.
+`tools/replicas/extra/` holds the other old presets. The repo checkout loads them by default; App 0.3.x did not ship them.
 
 | File id | Kind | Old preset key | Notes |
 |---------|------|----------------|-------|

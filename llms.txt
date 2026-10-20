@@ -44,7 +44,33 @@ Key behaviors:
   (S5Y...)", "nas1 ZFS pool rpool", "nas1 Disk Usage", "SMART Sniffer (nas1)". The host
   name comes from the agent's /api/health (agent v0.8.3+), else the name discovery found
   (discovered entries), else the configured address;
-  the HAOS App's agents are "HAOS" and "Replica". Entity ids are never changed.
+  the SMART Sniffer App's agent is "HAOS" and the integration's test machine is
+  "Replica". Entity ids are never changed.
+- Control Center (v0.9+): a "SMART Sniffer" page in the HA sidebar, admins only,
+  registered when the integration loads (it needs at least one config entry). One card
+  per drive, ZFS pool and filesystem of every machine, with the integration's verdict
+  and reasons. Add machines (+ card: HA's discovered agents, an IP block scan up to /22
+  that asks /api/health and /api/drives only, or add by hand), rename (a drive or pool
+  rename writes the HA device's name_by_user), hide, reorder, remove, and edit
+  per-drive thresholds. Page state is shared by all admins. A machine that stops
+  answering keeps its last readings, marked with when it was last seen.
+- Replicas (v0.9+): test drives and pools in JSON files, served in process as one
+  "Replica" config entry with normal sensors and alerts (at most 12 drives and 4
+  pools). Library: the seed set in custom_components/smart_sniffer/replicas, the
+  user's folder <config>/smart_sniffer/replicas (Save as replica from a card, upload,
+  1 MB per file), and /share/smart-sniffer/replicas read only when HA can see it.
+  Works on every install type. The SMART Sniffer App's old replica entries are
+  removed at startup with a one-time note.
+- Agentic access (v0.9+): the Control Center's JSON document of every machine, drive,
+  verdict, pool and filesystem, with a field guide. Also served at
+  GET /api/smart_sniffer/agentic.json for admin users (long-lived access token as a
+  Bearer header); ?fresh=1 polls every agent first, ?download=1 sets a file name.
+  Never contains agent tokens.
+- Passwords (v0.9+): the token is checked when an agent is added; a 401 later starts
+  HA's re-authentication flow instead of failing every poll.
+- Supervisor discovery (v0.9+): the SMART Sniffer App 0.4.0 posts a "smart_sniffer"
+  discovery with its agent's host and port; HA offers it as "SMART Sniffer (HAOS)"
+  unless an entry already matches by agent_id, as the App's entry, or by address.
 - Per-drive alert thresholds (v0.6.3+): Configure > Alert thresholds lets a user raise the
   limit for an attribute on one drive, so old stable damage stops alerting while new
   damage still does.
@@ -98,17 +124,21 @@ What SMART Sniffer is NOT:
 - Not a substitute for regular backups -- it provides early warning, not prevention.
 
 For monitoring the drive inside a Home Assistant OS machine specifically, use the
-companion HAOS add-on: https://github.com/DAB-LABS/smart-sniffer-app
+companion HAOS add-on: https://github.com/DAB-LABS/smart-sniffer-app. Same Control
+Center: the App adds the drives of the box Home Assistant runs on; the integration
+covers everything else. On Container or Core installs, install the agent on the HA
+machine instead.
 
 ## Repositories
 
 - [smart-sniffer (this repo)](https://github.com/DAB-LABS/smart-sniffer): Go agent
   source (agent/), HACS integration (custom_components/smart_sniffer/), installer
   scripts (install.sh, install.ps1), and all project documentation (docs/).
-- [smart-sniffer-app](https://github.com/DAB-LABS/smart-sniffer-app): HAOS add-on.
-  Runs the agent inside Home Assistant OS to monitor the local HAOS boot drive.
-  Includes the Control Center page, which shows this machine's drives, replicas
-  (fake drives for testing) and field agents on other network machines.
+- [smart-sniffer-app](https://github.com/DAB-LABS/smart-sniffer-app): HAOS add-on
+  ("SMART Sniffer App"). Runs the agent inside Home Assistant OS to monitor the drives
+  of the HA box itself. From App 0.4.0 its page shows this box's drives only, read
+  only, with a link to the integration's Control Center; it hands the field machines
+  its 0.3.x page kept to the integration once, and no longer runs replicas.
 
 ## Documentation
 

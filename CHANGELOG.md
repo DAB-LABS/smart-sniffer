@@ -2,6 +2,39 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## Unreleased: v0.9.0
+
+SMART Sniffer is evolving, for the better: everything now lives in one place. The integration has its own Control Center in the sidebar for every machine you monitor, replicas included. Update from HACS and restart, then update your agents (run the install command again) to pick up the security fixes. Using the SMART Sniffer App? Update this integration first, then the App to 0.4.0. Your App machines move over by themselves. Old App replicas are removed, so create them again from + > Replica.
+
+### Added
+- The Control Center in the sidebar (admins only): one card per drive, ZFS pool and filesystem of every machine. Rename, hide, remove and reorder cards; renaming a drive or pool renames its device in Home Assistant. Alert thresholds are edited on each drive's card.
+- Add machines from the page: pick from the agents Home Assistant has found, scan an IP range (a /22 at most, health and drive count only, never a password), or add one by hand.
+- Machines that stop answering stay on the page, with their last readings and when they were last seen.
+- Replicas in the integration: + > Replica adds test drives and pools, with sensors and alerts like any other (up to 12 drives and 4 pools). Pick from a shipped set, save any card as a replica, upload a file, or drop files in /share/smart-sniffer/replicas. Works on every install type.
+- Drive cards at a glance: a row of temperature, days powered on, data written and read, and wear. Details show model, serial, firmware, capacity and interface, plus the drive's Device Statistics when available. Big numbers read as sizes and days; click any value for the exact figure and Copy.
+- Agentic access: all drive data as one JSON document, with Copy and Download on the page, or from /api/smart_sniffer/agentic.json with an admin's long-lived token. No passwords are included.
+- This box, found for you: with SMART Sniffer App 0.4.0, Home Assistant offers the App's agent as "Discovered: SMART Sniffer (HAOS)".
+- On HAOS without the App, a note you can dismiss offers to install it.
+
+### Changed
+- A wrong password is refused when you add an agent, instead of creating an entry that fails later.
+- An agent that refuses its password asks for it again, in Settings and on its card.
+- The App's old Replica machine is removed at start, with a one-time note. No other machine is touched.
+
+### Security
+- Discovery never sends a saved password to a newly found address. Thanks to @frenck for the report.
+- A discovered machine that has a password is no longer moved to a new address on its own.
+- Diagnostics leave out drive serials and WWNs, and log lines name drives by device path.
+- Passwords show as dots in every form.
+- The agent drops stalled and idle connections.
+- The installers keep the agent's config (which can hold its password) private: root only on Linux and macOS, Administrators only on Windows.
+
+### Upgrade notes
+- A SMART Sniffer entry appears in the sidebar for admins once at least one machine is set up.
+- App replicas and their sensors go away. Files in /share/smart-sniffer/replicas stay and show in the list.
+- Machines from the App's 0.3.x Control Center move here once, with their names, hidden cards, order and thresholds. What you set here wins.
+- Home Assistant 2024.4 or later, unchanged.
+
 ## v0.8.5 -- 2026-10-18
 
 **Integration only: install the update from HACS and restart; no agent update.**

@@ -22,7 +22,23 @@ SMART Sniffer follows the trail, sniffing out the [early warning signs](https://
 
 <br>
 
+## What's new in v0.9
+
+SMART Sniffer is evolving, for the better.
+
+Until now, SMART Sniffer lived in two places: the integration made your sensors and alerts, and the App had the Control Center. With v0.9 everything comes together in one place. The integration now has its own Control Center in the sidebar, with every machine, every drive and your test replicas, on any Home Assistant install.
+
+The SMART Sniffer App keeps doing what only it can do: it watches the drives of the Home Assistant box itself, and shows them on its own page. Install both, and the App's box shows up in the Control Center next to everything else.
+
+Two parts, one place to look. Better together.
+
+<br>
+
 ## Features
+
+**The Control Center** -- A **SMART Sniffer** page in the Home Assistant sidebar (admins only, v0.9) shows every drive, ZFS pool and filesystem of every machine as a card, with its health and the reason behind it. Add machines, rename, hide, reorder and remove cards, and edit alert thresholds from the page. See [The Control Center](#the-control-center).
+
+**Replicas for testing** -- Test drives and pools with the readings you choose, as one Replica machine with real sensors and alerts, so you can try notifications and automations without a failing drive (v0.9).
 
 **Early warning alerts** — The Attention Needed sensor monitors leading indicators of failure across ATA, SATA, NVMe, and SAS drives. Four clear states: `NO` · `MAYBE` · `YES` · `UNSUPPORTED`.
 
@@ -32,7 +48,7 @@ SMART Sniffer follows the trail, sniffing out the [early warning signs](https://
 
 **ZFS pool health** -- On a machine with ZFS, each pool appears as its own device with its state, error counts and last scrub. A notification names the pool and the failing disks when a pool degrades, and tells you when a pool disappears. Pool devices are named for their host, "pve-nas ZFS pool rpool", so two machines with the same pool name stay apart.
 
-**Device names start with the host** -- Every device carries the name of the machine it belongs to: "nas1 Samsung 870 EVO (S5Y...)", "nas1 ZFS pool rpool", "nas1 Disk Usage", and "SMART Sniffer (nas1)" for the agent, so drives from several machines are easy to tell apart. The host name comes from the agent (v0.8.3 or later) over HTTP, without mDNS; an older agent keeps the name discovery found for it, or else shows the address you added it with. The HAOS App's agents are "HAOS" and "Replica". Names you give a device yourself are kept, and renaming the machine renames its devices (v0.8.4).
+**Device names start with the host** -- Every device carries the name of the machine it belongs to: "nas1 Samsung 870 EVO (S5Y...)", "nas1 ZFS pool rpool", "nas1 Disk Usage", and "SMART Sniffer (nas1)" for the agent, so drives from several machines are easy to tell apart. The host name comes from the agent (v0.8.3 or later) over HTTP, without mDNS; an older agent keeps the name discovery found for it, or else shows the address you added it with. The SMART Sniffer App's agent is "HAOS", and the integration's test machine is "Replica". Names you give a device yourself are kept, and renaming the machine renames its devices (v0.8.4).
 
 **Data Written** -- Each drive reports how much the host has written to it over its life, in TB, from the drive's own Device Statistics log on SATA and the health log on NVMe, with long-term statistics so you can see the write rate per day or month. Needs the v0.8.0 agent.
 
@@ -310,6 +326,23 @@ Binaries output to `agent/build/`.
 
 <br>
 
+## App or integration?
+
+Same Control Center. The App adds the drives of the box Home Assistant runs on. Install the integration for everything else.
+
+| Your setup | What to install |
+|---|---|
+| Drives on a NAS, Proxmox host, PC or Mac | The agent on each of those machines, and this integration |
+| Home Assistant OS or Supervised, and you want the drives in that box | This integration, and the [SMART Sniffer App](https://github.com/DAB-LABS/smart-sniffer-app) |
+| Home Assistant Container or Core | This integration. The App needs the Supervisor; for the drives of the Home Assistant machine, install the agent on that machine |
+| You want to try alerts and automations without real failing drives | This integration: + > Replica |
+
+- **The integration** owns every machine. Its **SMART Sniffer** page in the sidebar is the Control Center: the cards, the + card for adding machines, names, thresholds, replicas and Agentic access. Home Assistant loads the integration once it has at least one machine, so add one first (an agent, or the App's agent from the Discovered card).
+- **The App** (**SMART Sniffer App** in the sidebar, HAOS and Supervised only) runs the agent that reads the drives of the Home Assistant box. Its page shows those drives only, read only, with a card that opens the Control Center. The App 0.4.0 needs this integration at v0.9 or later to hand its machines over and to be found for you.
+- On HAOS or Supervised without the App, the Control Center shows a short note offering to install it. Close it if you do not want it; it stays closed for every admin.
+
+<br>
+
 ## Quick Start
 
 **Requires:** `smartmontools` **7.0+** on each monitored machine (for JSON output support). The installer handles installation automatically (Homebrew on macOS, apt/dnf/yum on Linux), but some older distros ship smartctl 6.x which does not support the `--json` flag the agent relies on. Run `smartctl --version` to check. If you're on 6.x, install a newer version from the [smartmontools releases page](https://www.smartmontools.org/wiki/Download) or from a backports repository.
@@ -443,9 +476,75 @@ Or add it by hand:
   <img src="images/discovery-screenshot-mock.svg" alt="Auto-discovery prompt" width="400">
 </p>
 
-**Manual:** **Settings → Devices & Services → Add Integration → SMART Sniffer** — enter the agent's host, port, optional token, and polling interval.
+**Manual:** **Settings → Devices & Services → Add Integration → SMART Sniffer** -- enter the agent's host, port, optional token, and polling interval. From v0.9 you can also add it from the **+** card in the Control Center.
+
+**Passwords:** from v0.9 the token is checked when you add the agent, and a wrong one is refused at once. If an agent later refuses the saved token (it was changed on that machine), Home Assistant asks for it again under **Settings → Devices & Services**, and the machine's card in the Control Center asks too.
 
 Every drive on the machine appears as its own HA device.
+
+## The Control Center
+
+<p align="center"><em>Sidebar → SMART Sniffer</em> (admins only, v0.9)</p>
+
+One grid of cards: one per drive, one per ZFS pool, and one for each filesystem that belongs to no drive or pool. The label at the top right of a card names its machine (`HAOS` for the App's agent, `Replica` for test drives). A card shows where the drive is, its temperature, power-on hours and data written, its disk space and its health word: **Attention**, **Maybe**, **Health OK** or **Health not known**, with the rows that caused it underneath. The chevron opens **Details** with every counter and attribute. Large counts read as sizes (28.8 TB) and power-on hours as days (887 d); click one for the exact number and a copy button. The verdicts are the integration's own, the same ones behind the Attention Needed sensor.
+
+- **Arrange** cards by dragging the dots beside the title (or with the arrow keys), **hide** one with the eye, and **remove** one with the trash (click twice). A drive or pool still reported by its agent then offers **Remove here** (the page only) or **Remove here + disable entities**; one its agent no longer reports offers **Remove here + delete entities**.
+- **Rename** a card by clicking its title. A drive or pool takes the name as its device name in Home Assistant. A machine's label is renamed the same way and is a page name only.
+- **Thresholds**: the sliders icon in Details edits the drive's alert thresholds, the same ones as **Configure → Alert thresholds**.
+- **A machine that stops answering** keeps its last readings, and its cards say when it was last seen. One that wants its password shows a password field.
+- The page is shared by every admin: names, hidden cards and the order are kept by the integration, not the browser.
+
+With the SMART Sniffer App running, the line at the top gives this box's agent address and mDNS name, with copy buttons.
+
+### Adding machines
+
+The last card, **+**, has three parts and one **Add** button for everything ticked:
+
+- **Network** lists the SMART Sniffer agents Home Assistant has found (the ones already added are marked), and can **Scan** an IP block for more: the block around Home Assistant is filled in, a /22 is the largest it takes, and each address is asked only for its health and drive count, never a password. The App's own agent is never listed here; it comes from the Discovered card.
+- **Add by hand** checks one host name or address and port, for a machine the scan cannot reach.
+- **Replica** adds test drives (below).
+
+Machines added here go through the same checks as **Add Integration**, password included.
+
+### Replicas
+
+Replicas are test drives and pools with readings you choose. They belong to one **Replica** machine, with the same sensors, notifications and automations as a real one, so you can see how Home Assistant reacts to a failing drive without having one. A failing replica alerts as soon as you add it. Nothing a replica does touches a real drive, and it needs no App: replicas work on every install type.
+
+- **+ > Replica** lists the replica files. Tick the ones you want and press **Add**; each becomes one card. The Replica holds up to 12 drives and 4 pools. To change one, remove its card and pick another file.
+- **The library** has three sources: a set that ships with SMART Sniffer (healthy, worn and failing SATA and NVMe drives, a USB drive that blocks SMART, a healthy and a degraded ZFS pool); your own files in `/config/smart_sniffer/replicas`; and on HAOS and Supervised, files you drop into `/share/smart-sniffer/replicas` (over Samba, for example), read only.
+- **Save as replica**: the icon at the foot of any real drive or pool card saves it into your own folder, with its serial number and other identifiers replaced. **Upload a replica** takes a `.json` replica file (1 MB at most).
+- **Your own files** can be deleted from the + > Replica list with the trash, unless a Replica card is showing them.
+- **Edit readings**: a Replica drive's thresholds editor also edits its readings (SMART attribute raw values; NVMe temperature, available spare, percentage used and media errors). A shipped or `/share` file is first saved as your own copy, `<name>, edited`.
+
+The file format is described in the [Mock Agent](docs/mock-agent.md) guide.
+
+### Agentic access
+
+**Agentic access**, in the page footer, opens everything the Control Center knows as one JSON document for an AI assistant or a script: every machine with its health, each drive's SMART data and verdict, the pools, the filesystems, and a guide to the fields at the end. **Copy** and **Download** are at the top, and **Raw JSON** opens the plain file.
+
+Scripts can fetch the same document with a long-lived access token of an admin user (your profile → **Security** → **Long-lived access tokens**):
+
+```bash
+curl -H "Authorization: Bearer YOUR_LONG_LIVED_TOKEN" \
+  "http://homeassistant.local:8123/api/smart_sniffer/agentic.json"
+```
+
+Add `?fresh=1` to ask every agent before answering, and `?download=1` to get it as a dated file. A token of a user who is not an admin gets `403`. The document has serial numbers, host names and addresses, so share it only with people and tools you trust. Agent passwords are never in it.
+
+### This box: found through the App
+
+With the SMART Sniffer App 0.4.0 or later running, the App tells Home Assistant where its agent is (host and port only), and **Settings → Devices & Services** offers it as **Discovered: SMART Sniffer (HAOS)**. **Add** asks "Create sensors and alerts for HAOS?". The App's own page has the same line under DRIVES. It is not offered when this box is already a machine here (recognised by its agent ID, as the App's machine, or by address), so it is never added twice.
+
+If you delete the HAOS machine on purpose, the Discovered card comes back; choose **Ignore** to stop it. Removing the App leaves the HAOS machine in place, offline, until you delete it.
+
+### Upgrading to v0.9
+
+- **A new SMART Sniffer entry** appears in the sidebar for admins.
+- **From the SMART Sniffer App 0.3.x**: update this integration first and restart, then update the App to 0.4.0. The App hands over the machines its Control Center kept (address, port and password), their names, hidden cards, card order and thresholds, once. A machine already here is matched and never added twice, and what you set here wins. A line on the page says what moved, for example "Moved 2 machines from the SMART Sniffer App.", with **Show** for any machine that could not be moved and **Discard** to let it go. A machine you delete afterwards is not brought back.
+- **App replicas are removed.** The App's old Replica machine and its sensors are removed when Home Assistant starts, with a one-time note: "Replicas moved into the integration. Create them again from + > Replica." Files you kept in `/share/smart-sniffer/replicas` stay where they are and show in the + > Replica list.
+- **Passwords**: adding an agent checks its password, and an agent that refuses the saved one asks for it again (see Quick Start, step 3).
+- **Home Assistant 2024.4 or later**, as before.
+- **Going back to v0.8.5**: the Replica machine shows as not ready (v0.8.5 cannot read it) until you delete it or update again. Other machines are not affected.
 
 ## NAS & RAID Setup
 
@@ -500,6 +599,8 @@ SMART Sniffer includes a `smart_sniffer.get_drive_data` service call that return
 **Example use case: automated weekly health report.** Create an HA automation that runs every Monday morning, calls `smart_sniffer.get_drive_data` for each agent, passes the JSON to a conversation agent (Google AI, OpenAI, Claude, Ollama) with a prompt like "Analyze these SMART readings and flag anything concerning," then emails you the AI's response. The AI can catch patterns like rising reallocated sector counts, aging drives approaching end-of-life, or storage filling up -- things the raw sensor values alone don't always make obvious.
 
 The service uses `supports_response: only`, so it also works from **Developer Tools > Services** for manual inspection of the full response payload.
+
+For every machine at once, use [Agentic access](#agentic-access) in the Control Center, or fetch `/api/smart_sniffer/agentic.json` with a long-lived access token.
 
 For one-off analysis without automation, use **Download Diagnostics** (Settings > Devices & Services > SMART Sniffer > three-dot menu). The downloaded JSON contains the same raw SMART data and can be pasted directly into any AI chat interface. See [Raw SMART data](#raw-smart-data) above.
 
@@ -650,6 +751,7 @@ Drive-specific `smartctl -a --json` output samples are especially welcome — th
 - [x] Integration: every device name starts with its host, and drive notifications name the host -- shipped v0.8.4 (GH #50)
 - [x] Mock agent: replica files (drives and pools in JSON, with scenarios and your own replica folder) and filesystems, for testing without real drives -- shipped v0.8.2
 - [x] HAOS App: the Control Center -- this machine's drives, your other agents and replicas on one page, judged by the integration's rules -- shipped in App v0.3.0
+- [x] Integration: the Control Center in the Home Assistant sidebar, every machine on one page, replicas in the integration, Agentic access as JSON for scripts -- v0.9.0
 - [ ] Listed in the HACS default store (submitted, awaiting review)
 - [ ] Integration: optional area-on-setup (choose an area once and apply it to all of an agent's drives)
 - [x] Integration: split consolidated wear-leveling / uncorrectable / pending-sector sensors into separate diagnostic entities when a drive reports multiple variants -- shipped v0.5.14
