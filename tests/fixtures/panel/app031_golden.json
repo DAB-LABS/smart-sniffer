@@ -2692,7 +2692,7 @@
       "expect": "expected 0, from device statistics",
       "key": "reported_unc_devstat",
       "mark": "crit",
-      "name": "Uncorrectable, page 4",
+      "name": "Reported uncorrectable",
       "note": null,
       "value": "18"
      },
@@ -3587,7 +3587,7 @@
       "expect": "expected 0, from device statistics",
       "key": "reported_unc_devstat",
       "mark": "crit",
-      "name": "Uncorrectable, page 4",
+      "name": "Reported uncorrectable",
       "note": null,
       "value": "18"
      },

@@ -236,11 +236,11 @@ _MAIN_ROWS = {
 # integration's gap-fill): reading -> (page, offset, row key, row name,
 # the attribute row it stands in for, the note on that row).
 _DEVSTAT_ROWS: dict[str, tuple[int, int, str, str, str, str]] = {
-    "unc": (4, 0x008, "reported_unc_devstat", "Uncorrectable, page 4",
+    "unc": (4, 0x008, "reported_unc_devstat", "Reported uncorrectable",
             "reported_unc", "no attribute 187"),
-    "realloc": (3, 0x020, "reallocated_devstat", "Reallocated, page 3",
+    "realloc": (3, 0x020, "reallocated_devstat", "Reallocated sectors",
                 "reallocated", "no attribute 5"),
-    "wear_used": (7, 0x008, "wear_devstat", "Wear used, page 7",
+    "wear_used": (7, 0x008, "wear_devstat", "Wear used",
                   "wear", "no wear attribute"),
 }
 _DEVSTAT_SUFFIX = "from device statistics"

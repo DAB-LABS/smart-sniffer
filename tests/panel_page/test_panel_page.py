@@ -1077,7 +1077,7 @@ def test_device_statistics_table_takes_the_stand_in_rows(page):
     attrs = card.locator("table.attrs").first
     attrs.wait_for()
     # The page 4 count no longer sits in the attribute table...
-    assert attrs.locator("tr", has_text="page 4").count() == 0
+    assert attrs.locator("tr", has_text="Reported uncorrectable").count() == 0
     # ...but in Device Statistics, marked, with its note.
     ds = card.locator("table.devstat-t")
     row = ds.locator("tr", has_text="Reported uncorrectable")
