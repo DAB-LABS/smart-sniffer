@@ -6,8 +6,8 @@ cards, the card order and per-card thresholds. App 0.4.0 sends all of it
 here once, over the Supervisor's Core websocket, and clears what this side
 confirms.
 
-Two commands, for the Supervisor user only (the App reaches Core through
-the Supervisor, which signs in as that user):
+Two commands, for an admin that is a system user (the App reaches Core
+through the Supervisor, which signs in as its own system user, an admin):
 
   smart_sniffer/app/import         {items}: starts a job, answers {job_id}
                                    at once; the work runs in the background
@@ -47,10 +47,8 @@ The rules:
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
-from pathlib import Path
 from typing import Any
 
 import aiohttp
@@ -219,36 +217,14 @@ def app_import(hass: HomeAssistant) -> AppImport:
     return found
 
 
-# ── Who may ask: the Supervisor user only ────────────────────────────────────
+# ── Who may ask: a system user that is an admin ──────────────────────────────
 
 
-def _supervisor_id_from_store(config_dir: str) -> str | None:
-    """The Supervisor user's id as the hassio integration keeps it before
-    Home Assistant 2026.10 (.storage/hassio, "hassio_user")."""
-    try:
-        raw = json.loads((Path(config_dir) / ".storage" / "hassio").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    data = raw.get("data") if isinstance(raw, dict) else None
-    found = data.get("hassio_user") if isinstance(data, dict) else None
-    return found if isinstance(found, str) and found else None
-
-
-async def async_is_supervisor(hass: HomeAssistant, user: Any) -> bool:
-    """Whether this websocket user is the Supervisor's own user: a system
-    user named Supervisor, admin, and the one the hassio integration made
-    (its id in hass.data from 2026.10, in the hassio Store before). A
-    person named "Supervisor" is not it; nothing is without hassio."""
-    if user is None or not getattr(user, "system_generated", False) \
-            or getattr(user, "name", None) != "Supervisor" or not getattr(user, "is_admin", False):
-        return False
-    known = hass.data.get("hassio_supervisor_user")
-    if known is not None:
-        return getattr(known, "id", None) == user.id
-    if "hassio" not in hass.config.components:
-        return False
-    stored = await hass.async_add_executor_job(_supervisor_id_from_store, hass.config.config_dir)
-    return stored is not None and stored == user.id
+def is_system_user(user: Any) -> bool:
+    """The App's calls come through the Supervisor, as its own system user
+    (an admin: require_admin checks that on each command). A person's login,
+    admin or not, is never one."""
+    return user is not None and bool(getattr(user, "system_generated", False))
 
 
 # ── Machines ─────────────────────────────────────────────────────────────────
@@ -762,10 +738,11 @@ def _new_job_id() -> str:
     vol.Required("type"): "smart_sniffer/app/import",
     vol.Required("items"): vol.All([ITEM], vol.Length(min=1, max=300)),
 })
+@websocket_api.require_admin
 @websocket_api.async_response
 async def ws_app_import(hass: HomeAssistant, connection: Any, msg: dict[str, Any]) -> None:
     """Start a handover job; its id at once."""
-    if not await async_is_supervisor(hass, connection.user):
+    if not is_system_user(connection.user):
         connection.send_error(msg["id"], "unauthorized", "Only the SMART Sniffer App, through "
                                                          "the Supervisor")
         return
@@ -796,9 +773,10 @@ async def ws_app_import(hass: HomeAssistant, connection: Any, msg: dict[str, Any
     vol.Required("type"): "smart_sniffer/app/import/result",
     vol.Required("job_id"): vol.All(cv.string, vol.Length(min=1, max=32)),
 })
+@websocket_api.require_admin
 @websocket_api.async_response
 async def ws_app_import_result(hass: HomeAssistant, connection: Any, msg: dict[str, Any]) -> None:
-    if not await async_is_supervisor(hass, connection.user):
+    if not is_system_user(connection.user):
         connection.send_error(msg["id"], "unauthorized", "Only the SMART Sniffer App, through "
                                                          "the Supervisor")
         return

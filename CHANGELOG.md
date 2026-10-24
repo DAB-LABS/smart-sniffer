@@ -2,6 +2,13 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.9.2 -- 2026-10-24
+
+Integration only: update from HACS and restart.
+
+### Changed
+- **The App's handover commands are for admins.** They now use Home Assistant's own admin check and accept only a system user (the SMART Sniffer App reaches Home Assistant through the Supervisor as one). The integration no longer reads the Supervisor user from the hassio integration's data or files.
+
 ## v0.9.1 -- 2026-10-23
 
 Integration only: update from HACS and restart.

@@ -446,14 +446,14 @@ def test_this_boxs_settings_wait_for_its_machine(tmp_path, monkeypatch):
 # ── Who may ask, and what never leaves ───────────────────────────────────
 
 
-def test_only_the_supervisor_user(tmp_path, monkeypatch):
+def test_only_an_admin_system_user(tmp_path, monkeypatch):
+    """The App's two commands: require_admin, then a system user. Nothing
+    reads the hassio integration's own data or files (HACS review)."""
     async def body(hass, board, net):
         items = [field("10.0.10.250", item_id="x")]
         refused = [
             H.FakeConnection(hass),  # a browser admin
             supervisor_conn(hass, system_generated=False),  # a person named Supervisor
-            supervisor_conn(hass, id="another-system-user"),
-            supervisor_conn(hass, name="Home Assistant Cloud"),
         ]
         for conn in refused:
             with pytest.raises(H.WsError) as err:
@@ -462,6 +462,11 @@ def test_only_the_supervisor_user(tmp_path, monkeypatch):
             with pytest.raises(H.WsError) as err:
                 await ws(hass, conn, panel_import.ws_app_import_result, job_id="x")
             assert err.value.code == "unauthorized"
+        # A system user that is not an admin: refused by require_admin.
+        for handler, fields in ((panel_import.ws_app_import, {"items": items}),
+                                (panel_import.ws_app_import_result, {"job_id": "x"})):
+            with pytest.raises(Exception):
+                await ws(hass, supervisor_conn(hass, is_admin=False), handler, **fields)
         assert net.created == []
         # The panel's own commands are for admins, not for the App's job.
         viewer = H.FakeConnection(hass, admin=False)
@@ -472,19 +477,10 @@ def test_only_the_supervisor_user(tmp_path, monkeypatch):
     run(tmp_path, body, monkeypatch, specs=H.BOARD[:1])
 
 
-def test_supervisor_user_from_the_hassio_store_before_2026_10(tmp_path, monkeypatch):
-    async def body(hass, board, net):
-        user = SimpleNamespace(is_admin=True, name="Supervisor", id="old-sup",
-                               system_generated=True)
-        assert await panel_import.async_is_supervisor(hass, user) is False  # no hassio
-        hass.config.components.add("hassio")
-        storage = Path(hass.config.config_dir) / ".storage"
-        storage.mkdir(exist_ok=True)
-        (storage / "hassio").write_text(json.dumps({"version": 1, "data": {"hassio_user": "old-sup"}}))
-        assert await panel_import.async_is_supervisor(hass, user) is True
-        assert await panel_import.async_is_supervisor(
-            hass, SimpleNamespace(**{**vars(user), "id": "someone"})) is False
-    run(tmp_path, body, monkeypatch, specs=[], supervisor=False)
+def test_no_hassio_internals_are_read():
+    src = (Path(panel_import.__file__)).read_text()
+    assert "hassio_supervisor_user" not in src
+    assert '".storage"' not in src and "'.storage'" not in src
 
 
 def test_no_password_in_any_answer_store_or_document(tmp_path, monkeypatch):
