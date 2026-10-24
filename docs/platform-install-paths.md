@@ -29,9 +29,13 @@ ZimaOS (built on CasaOS by IceWhale) uses a RAUC A/B partition scheme with an im
 
 The installer detects this by attempting to `mkdir -p /usr/local/bin`. When that fails and `/DATA` exists and is writable, it installs everything under `/DATA/smartha-agent/`.
 
-### TrueNAS SCALE / Unraid (untested)
+### TrueNAS SCALE
 
-These NAS distros may have similar restrictions. The `/opt` fallback exists as a generic safety net. If you encounter issues on these platforms, please open a GitHub issue.
+The system dataset is read-only. The installer detects TrueNAS and installs to `/root/smartha-agent/`. A major TrueNAS upgrade replaces `/root`, so to keep the agent across upgrades install it onto a pool dataset with `--install-dir=/mnt/<pool>/<dataset>`. See [#46](https://github.com/DAB-LABS/smart-sniffer/issues/46) and the [TrueNAS SCALE guide](guides/truenas-scale.md).
+
+### Unraid (untested)
+
+Unraid may have similar restrictions. The `/opt` fallback exists as a generic safety net, and `--install-dir` works here too. If you run into issues, please open a GitHub issue.
 
 ## How the Agent Finds Its Config
 

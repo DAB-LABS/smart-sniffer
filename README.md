@@ -684,7 +684,7 @@ Step-by-step setup for NAS devices, hypervisors, and containerized environments.
 | [Proxmox + HA](docs/guides/proxmox.md) | Agent on host, integration in VM, mDNS, firewall |
 | [Synology DSM](docs/guides/synology.md) | SynoCli smartmontools, `/dev/sataX` paths, `--discover` |
 | [QNAP QTS](docs/guides/qnap.md) | SAT fallback, lxcbr0 exclusion, interface selection |
-| [TrueNAS SCALE](docs/guides/truenas-scale.md) | ZFS context, btrfs-progs, filesystem monitoring |
+| [TrueNAS SCALE](docs/guides/truenas-scale.md) | ZFS pool health and usage, install path that survives upgrades |
 | [Unraid](docs/guides/unraid.md) | br0 bridge, Docker deployment *(community -- in progress)* |
 | [Docker](docs/guides/docker.md) | Build your own container: what it needs, plus a ready prompt for AI coding assistants |
 | [Virtual Machines](docs/guides/virtual-machines.md) | ESXi, Hyper-V, VirtualBox -- why SMART needs the host |

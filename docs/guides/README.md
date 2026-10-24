@@ -15,7 +15,7 @@ These guides walk through each platform step by step.
 | [Proxmox + HA OS](proxmox.md) | Agent on the Proxmox host, integration in the HA VM. mDNS discovery, firewall rules, manual fallback. |
 | [Synology DSM](synology.md) | SynoCli for smartmontools 7.x, `/dev/sataX` device paths, `--discover` setup. |
 | [QNAP QTS](qnap.md) | SAT protocol fallback, mDNS interface selection, LXC bridge exclusion. |
-| [TrueNAS SCALE](truenas-scale.md) | ZFS context, btrfs-progs for filesystem monitoring, immutable rootfs notes. |
+| [TrueNAS SCALE](truenas-scale.md) | ZFS pool health and usage, read-only system dataset, `--install-dir` so the agent survives upgrades. |
 | [Unraid](unraid.md) | Community guide -- br0 bridge, Docker-based deployment. *(In progress)* |
 | [OpenWrt](openwrt.md) | Community supported -- manual install only, procd service, x86-64 and ARM64. The installer does not support OpenWrt. |
 | [Docker](docker.md) | Build your own container: what it needs, permissions, disk usage, plus a prompt for AI coding assistants. |
