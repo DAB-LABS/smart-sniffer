@@ -124,12 +124,18 @@
         :host { display: flex; flex-direction: column; box-sizing: border-box;
           height: 100vh; height: 100dvh; min-height: 0; overflow: hidden;
           background: #000; }
-        .bar { display: flex; align-items: center; height: var(--header-height, 56px); flex: none;
+        /* The bar is the header's height plus the phone's top inset (the
+           notch and status bar in the iPhone app), as Home Assistant's own
+           header is: the inset is padding on top of the 56 px, not taken
+           out of them. */
+        .bar { display: flex; align-items: center; flex: none;
+          --ss-inset: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+          height: calc(var(--header-height, 56px) + var(--ss-inset));
           padding: 0 4px; box-sizing: border-box; gap: 8px;
           background: var(--app-header-background-color, var(--primary-color, #03a9f4));
           color: var(--app-header-text-color, #fff);
           border-bottom: var(--app-header-border-bottom, none);
-          padding-top: env(safe-area-inset-top, 0); }
+          padding-top: var(--ss-inset); }
         .bar[hidden] { display: none; }
         .menu { width: 48px; height: 48px; border: 0; background: transparent; color: inherit;
           cursor: pointer; display: grid; place-items: center; border-radius: 50%; }

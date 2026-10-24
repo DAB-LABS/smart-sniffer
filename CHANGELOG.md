@@ -2,6 +2,14 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v0.9.1 -- 2026-10-23
+
+Integration only: update from HACS and restart.
+
+### Fixed
+- **Opening a card's Details no longer freezes the Control Center.** On a page short enough to need no scrollbar, in a browser whose scrollbars take room (Chrome with scroll bars always shown), the scrollbar that came with the taller page set the page measuring its cards without end.
+- **The menu bar keeps room for a phone's notch.** In the iPhone app the menu button and the title were cut off at the top of the Control Center.
+
 ## v0.9.0 -- 2026-10-21
 
 SMART Sniffer is evolving, for the better: everything now lives in one place. The integration has its own Control Center in the sidebar for every machine you monitor, replicas included. Update from HACS and restart, then update your agents (run the install command again) to pick up the security fixes. Using the SMART Sniffer App? Update this integration first, then the App to 0.4.0. Your App machines move over by themselves. Old App replicas are removed, so create them again from + > Replica.

@@ -175,7 +175,8 @@ def test_every_machine_in_any_state_shows(page):
     assert "3 h ago, not answering" in mac.locator(".seen").inner_text()
     pi = p.card("BACKUP-PI")
     assert "This agent wants a password." in pi.inner_text()
-    assert p.frame.locator("header .versions").inner_text().strip() == "integration 0.9.0-dev"
+    version = json.loads((ROOT / "custom_components/smart_sniffer/manifest.json").read_text())["version"]
+    assert p.frame.locator("header .versions").inner_text().strip() == f"integration {version}"
     assert not p.errors, p.errors
     p.shot("board-1280")
 
@@ -1077,7 +1078,7 @@ def test_device_statistics_table_takes_the_stand_in_rows(page):
     attrs = card.locator("table.attrs").first
     attrs.wait_for()
     # The page 4 count no longer sits in the attribute table...
-    assert attrs.locator("tr", has_text="Reported uncorrectable").count() == 0
+    assert "from device statistics" not in attrs.inner_text().lower()
     # ...but in Device Statistics, marked, with its note.
     ds = card.locator("table.devstat-t")
     row = ds.locator("tr", has_text="Reported uncorrectable")
@@ -1416,3 +1417,57 @@ def test_device_statistics_trim_is_a_fixed_page_offset_list():
     assert m, "DEVSTAT_IN_STATS not found"
     keys = re.findall(r"'(\d+:\d+)'", m.group(1))
     assert sorted(keys) == sorted(["5:8", "1:16", "1:24", "1:40", "7:8"]), keys
+
+
+# ── v0.9.1 ──────────────────────────────────────────────────────────────────
+
+
+def test_details_open_on_a_page_that_just_fits(browser_, backend):
+    """Test box, 2026-10-23: on a page short enough to need no scrollbar,
+    opening a card's Details froze the tab. The taller page brought a
+    scrollbar, the cards narrowed, the row aligner measured again with the
+    card closed (no scrollbar, wider), opened it (scrollbar, narrower), and
+    went round without end. Every card's Details open and close here, in a
+    Chromium with real scrollbars that take width (headless Chromium hides
+    them by default, which hid the freeze)."""
+    kwargs = {"ignore_default_args": ["--hide-scrollbars"]}
+    if os.environ.get("PW_CHROMIUM"):
+        kwargs["executable_path"] = os.environ["PW_CHROMIUM"]
+    browser = browser_.browser_type.launch(**kwargs)
+    p = Page(browser, backend, height=1600)
+    try:
+        p.frame.locator("article.card").first.wait_for()
+        time.sleep(1)
+        assert p.doc.evaluate("document.documentElement.scrollHeight") <= 1600
+        cards = p.frame.locator("article.card")
+        for i in range(cards.count()):
+            chev = cards.nth(i).locator("button.chev")
+            if not chev.count():
+                continue
+            chev.click(timeout=4000)
+            # A frozen page answers nothing; this times out there.
+            assert p.doc.evaluate("() => new Promise((r) => setTimeout(() => r(true), 200))")
+            chev.click(timeout=4000)
+        assert not p.errors, p.errors
+    finally:
+        p.close()
+        browser.close()
+
+
+def test_the_menu_bar_makes_room_for_a_top_inset(page):
+    """iPhone app, 2026-10-22: the notch's inset was taken out of the bar's
+    56 px, so the menu button and the title were cut off. The bar now grows
+    by the inset."""
+    p = page(width=390)
+    p.frame.locator("article.card").first.wait_for()
+    p.page.evaluate("document.querySelector('smart-sniffer-panel').style.setProperty("
+                    "'--safe-area-inset-top', '47px')")
+    bar = p.page.locator("smart-sniffer-panel .bar")
+    box = bar.bounding_box()
+    assert round(box["height"]) == 56 + 47
+    for part in ("button.menu", ".title"):
+        r = bar.locator(part).bounding_box()
+        assert r["y"] >= box["y"] + 47 - 1
+        assert r["y"] + r["height"] <= box["y"] + box["height"] + 1
+    frame = p.page.locator("smart-sniffer-panel iframe").bounding_box()
+    assert frame["y"] >= box["y"] + box["height"] - 1

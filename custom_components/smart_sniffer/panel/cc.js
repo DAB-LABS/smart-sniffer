@@ -756,6 +756,16 @@ function cc() {
       } finally {
         ids.forEach((k) => { this.ui.open[k] = true; });
         await flush(); await flush();
+        // Its closed height belongs to the width it has now, open: a width
+        // that moves when the card opens (a scrollbar that comes with the
+        // taller page) must not send it round again. Measuring on every
+        // pass froze the page: close, no scrollbar, wider; open, scrollbar,
+        // narrower; never the same width, never a frame in between.
+        const grid = document.querySelector('.grid');
+        ids.forEach((k) => {
+          const e = grid && grid.querySelector(`[data-card="${CSS.escape(k)}"]`);
+          if (e && rows.closedH[k]) rows.closedH[k].w = this.cardW(e);
+        });
         rows.busy = false;
       }
       if (actKey) {
