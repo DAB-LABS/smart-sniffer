@@ -39,8 +39,8 @@ curl http://localhost:9099/api/health
 
 If Home Assistant runs on a separate machine or VM:
 
-1. **HACS** > Custom repositories > `https://github.com/DAB-LABS/smart-sniffer` (Integration)
-2. Download **SMART Sniffer**, then restart Home Assistant
+1. **HACS** > search for **SMART Sniffer** > Download
+2. Restart Home Assistant
 3. Home Assistant discovers the agent over mDNS. If it does not, add it from the SMART Sniffer Control Center in the sidebar (+ > Network), or set it up by hand with the TrueNAS IP and port 9099
 
 If Home Assistant runs as a VM on TrueNAS SCALE, see the [Virtual Machines guide](virtual-machines.md). The same pattern applies: the agent on the host, the integration in the VM.

@@ -57,9 +57,8 @@ The integration connects to the agent over the network and creates HA entities f
 **Via HACS (recommended):**
 
 1. Open HACS in your HA instance
-2. Three-dot menu --> **Custom repositories**
-3. Add `https://github.com/DAB-LABS/smart-sniffer` with category **Integration**
-4. Download **SMART Sniffer** --> Restart HA
+2. Search for **SMART Sniffer**
+3. Download it --> Restart HA
 
 **Manual:** Copy `custom_components/smart_sniffer/` into your HA `custom_components/` directory and restart.
 

@@ -76,8 +76,8 @@ If `--discover` finds drives and offers to write config, accept it. Otherwise, t
 
 ## Step 3: Add the integration to Home Assistant
 
-1. **HACS** --> Custom repositories --> `https://github.com/DAB-LABS/smart-sniffer` (Integration)
-2. Download **SMART Sniffer** --> Restart HA
+1. **HACS** --> search for **SMART Sniffer** --> Download
+2. Restart HA
 3. The agent advertises via mDNS -- HA should discover it automatically
 
 ## Troubleshooting

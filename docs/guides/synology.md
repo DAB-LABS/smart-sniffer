@@ -91,8 +91,8 @@ sudo systemctl restart smartha-agent
 
 Same as any other setup:
 
-1. **HACS** --> Custom repositories --> `https://github.com/DAB-LABS/smart-sniffer` (Integration)
-2. Download **SMART Sniffer** --> Restart HA
+1. **HACS** --> search for **SMART Sniffer** --> Download
+2. Restart HA
 3. The agent advertises via mDNS -- HA should discover it automatically
 
 If your Synology and HA are on different VLANs, use manual setup: **Settings --> Devices & Services --> Add Integration --> SMART Sniffer** with the NAS IP and port.

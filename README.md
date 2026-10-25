@@ -9,6 +9,7 @@
 ![Beta](https://img.shields.io/badge/status-beta-orange?style=flat-square)
 [![Build](https://img.shields.io/github/actions/workflow/status/DAB-LABS/smart-sniffer/release.yml?style=flat-square&label=build)](https://github.com/DAB-LABS/smart-sniffer/actions/workflows/release.yml)
 [![License](https://img.shields.io/github/license/DAB-LABS/smart-sniffer?style=flat-square)](LICENSE)
+[![HACS](https://img.shields.io/badge/HACS-Default-41BDF5?style=flat-square)](https://hacs.xyz)
 
 ---
 
@@ -460,11 +461,7 @@ Requires Home Assistant 2024.4 or newer.
 
 Click the button above, then **Download**, then restart Home Assistant.
 
-Or add it by hand:
-
-1. Open HACS → three-dot menu → **Custom repositories**
-2. Add `https://github.com/DAB-LABS/smart-sniffer` · Category: **Integration**
-3. Download **SMART Sniffer** → Restart HA
+Or open HACS, search for **SMART Sniffer**, then **Download** and restart Home Assistant.
 
 **Manual:** Copy `custom_components/smart_sniffer/` into your HA `custom_components/` directory and restart.
 
@@ -752,7 +749,7 @@ Drive-specific `smartctl -a --json` output samples are especially welcome — th
 - [x] Mock agent: replica files (drives and pools in JSON, with scenarios and your own replica folder) and filesystems, for testing without real drives -- shipped v0.8.2
 - [x] HAOS App: the Control Center -- this machine's drives, your other agents and replicas on one page, judged by the integration's rules -- shipped in App v0.3.0
 - [x] Integration: the Control Center in the Home Assistant sidebar, every machine on one page, replicas in the integration, Agentic access as JSON for scripts -- v0.9.0
-- [ ] Listed in the HACS default store (submitted, awaiting review)
+- [x] Listed in the HACS default store -- October 2026
 - [ ] Integration: optional area-on-setup (choose an area once and apply it to all of an agent's drives)
 - [x] Integration: split consolidated wear-leveling / uncorrectable / pending-sector sensors into separate diagnostic entities when a drive reports multiple variants -- shipped v0.5.14
 - [x] Integration: `smart_sniffer.get_drive_data` service call for AI/automation access to full SMART data -- shipped v0.5.15, community PR by @nsleigh
