@@ -470,6 +470,18 @@ function Format-SmartctlPathYaml {
     return "smartctl_path: '" + ($Path -replace "'", "''") + "'"
 }
 
+# ConvertTo-ScanInterval turns what the user typed into a duration the agent
+# can parse (60s, 30m, 24h, 1h30m). A bare number is seconds, as in
+# install.sh: the agent itself rejects "3600" and the service will not start
+# (GH #69). Returns $null for anything else, so the caller can ask again.
+function ConvertTo-ScanInterval {
+    param([string]$Value)
+    $v = "$Value".Trim().Trim('"', "'")
+    if ($v -match '^\d+$') { return "${v}s" }
+    if ($v -match '^(\d+(\.\d+)?(ns|us|ms|s|m|h))+$') { return $v }
+    return $null
+}
+
 # Protect-ConfigFile lets only Administrators and SYSTEM (the service's
 # account) read the config: it can hold the agent's token, and a file under
 # Program Files inherits read access for every user. SIDs, not names, so it
@@ -694,6 +706,14 @@ try {
         $Token        = $ExistingToken
         $ScanInterval = $ExistingInterval
 
+        # --- Upgrade path: a bare number the agent cannot parse (GH #69) ---
+        if ($ExistingInterval -match '^\d+$') {
+            $ScanInterval = "${ExistingInterval}s"
+            (Get-Content -Path $ConfigFile) -replace '^scan_interval:.*$', "scan_interval: $ScanInterval" |
+                Set-Content -Path $ConfigFile -Encoding UTF8
+            Write-Ok "Scan interval $ExistingInterval read as $ScanInterval (the agent needs a unit)."
+        }
+
         # --- Upgrade path: pin smartctl the service cannot see (GH #60) ---
         $ExistingSmartctl = Read-YamlScalar -Path $ConfigFile -Key 'smartctl_path'
         if ($ExistingSmartctl) {
@@ -773,8 +793,13 @@ try {
 
         $Token = Read-Host "  Bearer token for API auth (leave blank to disable)"
 
-        $ScanInterval = Read-Host "  Scan interval [60s]"
-        if (-not $ScanInterval) { $ScanInterval = "60s" }
+        while ($true) {
+            $RawInterval = Read-Host "  Scan interval (e.g. 60s, 30m, 24h) [60s]"
+            if (-not $RawInterval) { $ScanInterval = "60s"; break }
+            $ScanInterval = ConvertTo-ScanInterval $RawInterval
+            if ($ScanInterval) { break }
+            Write-Warn "'$RawInterval' is not a duration. Use a number with s, m or h, such as 60s, 30m or 24h."
+        }
 
         # --- Fresh install: interface picker ---
         $PickedIface = Pick-Interface
@@ -901,7 +926,10 @@ try {
         Write-Ok "Event Log source already registered."
     } else {
         try {
-            New-EventLog -LogName Application -Source $ServiceName -ErrorAction Stop
+            # The .NET call, not New-EventLog: that cmdlet exists only in
+            # Windows PowerShell 5.1, and PowerShell 7 reports it as unknown
+            # (GH #69). SourceExists above is the same class.
+            [System.Diagnostics.EventLog]::CreateEventSource($ServiceName, 'Application')
             Write-Ok "Event Log source registered."
         } catch {
             Write-Warn "Could not register Event Log source: $($_.Exception.Message)"
