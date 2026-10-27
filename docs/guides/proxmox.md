@@ -12,7 +12,7 @@ Proxmox VE is one of the most common ways to run Home Assistant OS as a virtual 
 2. Install the **integration** in the **HA VM** (via HACS)
 3. The agent advertises over mDNS, the integration discovers it, done
 
-You do **not** need the SMART Sniffer App (the HA add-on) in this setup. The App is for bare metal HA installs where HA has direct hardware access. In a Proxmox VM, the App can only see the virtual disk -- which isn't useful.
+You do **not** need the SMART Sniffer App (the Home Assistant App) in this setup. The App is for bare metal HA installs where HA has direct hardware access. In a Proxmox VM, the App can only see the virtual disk -- which isn't useful.
 
 ## Why VMs can't see SMART data
 
@@ -134,7 +134,7 @@ sudo systemctl restart smartha-agent
 
 ### Agent health check works locally but HA can't connect
 
-Test network connectivity from the HA VM. In your HA terminal (or SSH add-on):
+Test network connectivity from the HA VM. In your HA terminal (or the SSH App):
 
 ```bash
 curl http://<proxmox-host-ip>:9099/api/health
@@ -144,7 +144,7 @@ If this times out, it's a network or firewall issue between the host and VM. If 
 
 ### I installed the App and only see a virtual disk
 
-That's expected. The App (SMART Sniffer App from the HA add-on store) runs smartctl inside the VM, where it can only see virtual disks. You don't need the App in a Proxmox setup. Remove it and use the integration + agent-on-host pattern described above.
+That's expected. The App (SMART Sniffer App from the Home Assistant App Store) runs smartctl inside the VM, where it can only see virtual disks. You don't need the App in a Proxmox setup. Remove it and use the integration + agent-on-host pattern described above.
 
 ### Can I use PCI passthrough instead?
 

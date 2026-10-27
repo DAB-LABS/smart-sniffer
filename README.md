@@ -33,6 +33,10 @@ The SMART Sniffer App keeps doing what only it can do: it watches the drives of 
 
 Two parts, one place to look. Better together.
 
+<p align="center">
+  <img src="images/control-center-v09.png" alt="The SMART Sniffer Control Center in the Home Assistant sidebar: one card per drive, filesystem and machine" width="800">
+</p>
+
 <br>
 
 ## Features

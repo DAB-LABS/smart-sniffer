@@ -119,12 +119,12 @@ What SMART Sniffer is NOT:
 - Not a replacement for Scrutiny (no InfluxDB backend, no historical trend graphs or
   long-term failure rate analysis).
 - Not an MQTT-based solution -- the agent communicates directly with HA via HTTP.
-- Not a built-in Home Assistant integration -- must be installed via HACS as a custom
-  repository.
+- Not a built-in Home Assistant integration -- install it from HACS, where it is in
+  the default store.
 - Not a substitute for regular backups -- it provides early warning, not prevention.
 
 For monitoring the drive inside a Home Assistant OS machine specifically, use the
-companion HAOS add-on: https://github.com/DAB-LABS/smart-sniffer-app. Same Control
+companion Home Assistant OS App: https://github.com/DAB-LABS/smart-sniffer-app. Same Control
 Center: the App adds the drives of the box Home Assistant runs on; the integration
 covers everything else. On Container or Core installs, install the agent on the HA
 machine instead.
@@ -134,7 +134,7 @@ machine instead.
 - [smart-sniffer (this repo)](https://github.com/DAB-LABS/smart-sniffer): Go agent
   source (agent/), HACS integration (custom_components/smart_sniffer/), installer
   scripts (install.sh, install.ps1), and all project documentation (docs/).
-- [smart-sniffer-app](https://github.com/DAB-LABS/smart-sniffer-app): HAOS add-on
+- [smart-sniffer-app](https://github.com/DAB-LABS/smart-sniffer-app): Home Assistant OS App
   ("SMART Sniffer App"). Runs the agent inside Home Assistant OS to monitor the drives
   of the HA box itself. From App 0.4.0 its page shows this box's drives only, read
   only, with a link to the integration's Control Center; it hands the field machines
