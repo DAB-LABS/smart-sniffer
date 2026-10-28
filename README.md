@@ -2,8 +2,7 @@
   <img src="images/SMARTsniffer.png" alt="SMART Sniffer" width="100%">
 </p>
 
-**Proactive disk health monitoring for Home Assistant.**<br>
-*Sniff early. Sniff often.* 🕵️‍♂️
+**Proactive disk health monitoring for Home Assistant.**
 
 [![Release](https://img.shields.io/github/v/release/DAB-LABS/smart-sniffer?style=flat-square)](https://github.com/DAB-LABS/smart-sniffer/releases/latest)
 ![Beta](https://img.shields.io/badge/status-beta-orange?style=flat-square)
@@ -13,150 +12,51 @@
 
 ---
 
-Uncorrectable errors. Pending failures quietly piling up. 🙀
-
-SMART drives say "PASSED" right up until the end. 😵
-
-Sniff early. Sniff often. 🕵️‍♂️
-
-SMART Sniffer follows the trail, sniffing out the [early warning signs](https://www.backblaze.com/b2/hard-drive-test-data.html) your drives won't tell you about and reporting them to Home Assistant before it's too late. One agent per machine. Every drive gets a health score. Alerts fire automatically. No automations required.
+SMART drives report "PASSED" right up until the day they fail. SMART Sniffer watches the [early warning signs](https://www.backblaze.com/b2/hard-drive-test-data.html) a pass/fail check misses and reports them to Home Assistant before a drive actually goes. One agent per machine, a health score per drive, and a notification the moment something changes. No automations required.
 
 <br>
 
-## What's new in v0.9
+## What you get
 
-SMART Sniffer is evolving, for the better.
-
-Until now, SMART Sniffer lived in two places: the integration made your sensors and alerts, and the App had the Control Center. With v0.9 everything comes together in one place. The integration now has its own Control Center in the sidebar, with every machine, every drive and your test replicas, on any Home Assistant install.
-
-The SMART Sniffer App keeps doing what only it can do: it watches the drives of the Home Assistant box itself, and shows them on its own page. Install both, and the App's box shows up in the Control Center next to everything else.
-
-Two parts, one place to look. Better together.
+A lightweight Go agent on each machine reads `smartctl` and serves the result over HTTP; the Home Assistant integration polls every agent you add and turns each drive, ZFS pool and filesystem into its own device with sensors and diagnostics.
 
 <p align="center">
-  <img src="images/control-center-v09.png" alt="The SMART Sniffer Control Center in the Home Assistant sidebar: one card per drive, filesystem and machine" width="800">
+  <img src="images/smartsniffer-architecture.png" alt="One smartha-agent per machine (Proxmox host, NAS, Mac, and the SMART Sniffer App inside Home Assistant OS) reporting over JSON/HTTP to the smart_sniffer integration" width="100%">
 </p>
 
-<br>
-
-## Features
-
-**The Control Center** -- A **SMART Sniffer** page in the Home Assistant sidebar (admins only, v0.9) shows every drive, ZFS pool and filesystem of every machine as a card, with its health and the reason behind it. Add machines, rename, hide, reorder and remove cards, and edit alert thresholds from the page. See [The Control Center](#the-control-center).
-
-**Replicas for testing** -- Test drives and pools with the readings you choose, as one Replica machine with real sensors and alerts, so you can try notifications and automations without a failing drive (v0.9).
-
-**Early warning alerts** — The Attention Needed sensor monitors leading indicators of failure across ATA, SATA, NVMe, and SAS drives. Four clear states: `NO` · `MAYBE` · `YES` · `UNSUPPORTED`.
-
-**Zero-config notifications** — Persistent notifications fire automatically when drive health changes. No automations or blueprints to set up. Alerts escalate, de-escalate, and auto-dismiss.
-
-**Disk usage monitoring** — Opt-in filesystem tracking during install. Monitor storage utilization on any mountpoint — the agent reports total, used, available bytes and percentage via a dedicated API endpoint.
-
-**ZFS pool health** -- On a machine with ZFS, each pool appears as its own device with its state, error counts and last scrub. A notification names the pool and the failing disks when a pool degrades, and tells you when a pool disappears. Pool devices are named for their host, "pve-nas ZFS pool rpool", so two machines with the same pool name stay apart.
-
-**Device names start with the host** -- Every device carries the name of the machine it belongs to: "nas1 Samsung 870 EVO (S5Y...)", "nas1 ZFS pool rpool", "nas1 Disk Usage", and "SMART Sniffer (nas1)" for the agent, so drives from several machines are easy to tell apart. The host name comes from the agent (v0.8.3 or later) over HTTP, without mDNS; an older agent keeps the name discovery found for it, or else shows the address you added it with. The SMART Sniffer App's agent is "HAOS", and the integration's test machine is "Replica". Names you give a device yourself are kept, and renaming the machine renames its devices (v0.8.4).
-
-**Data Written** -- Each drive reports how much the host has written to it over its life, in TB, from the drive's own Device Statistics log on SATA and the health log on NVMe, with long-term statistics so you can see the write rate per day or month. Needs the v0.8.0 agent.
-
-**Multi-machine monitoring** — Install a lightweight Go agent on each machine. Each drive appears as its own HA device with full sensor entities and diagnostics.
-
-**Auto-discovery** — Agents advertise themselves on the local network via mDNS/Zeroconf. Home Assistant discovers them automatically — no manual IP entry needed.
-
-**AI-ready drive analysis** -- A service call returns full SMART data, health assessments, and storage metrics for any agent. Pipe it to Google AI, ChatGPT, Claude, or Ollama for automated drive health reports with zero parsing.
-
-**Secure by default** — Optional bearer token authentication between agent and integration. SHA256-verified binary downloads.
-
-<br>
-
-## How It Works
-
-<p align="center">
-  <img src="images/smartsniffer-architecture.png" alt="Architecture diagram" width="100%">
-</p>
-
-Each machine runs a lightweight `smartha-agent` binary that wraps `smartctl` and serves SMART data over HTTP. The HA integration polls each agent and creates devices, sensors, and health alerts for every drive it finds.
+- **Attention Needed**, the proactive health sensor, watches leading indicators of failure across ATA, SATA, NVMe and SAS drives and reports `NO`, `MAYBE`, `YES` or `UNSUPPORTED`. A persistent notification fires the moment a drive's state changes, escalates on worsening readings, and clears itself when the drive recovers. No automations or blueprints needed.
+- **The Control Center**, a SMART Sniffer page in the Home Assistant sidebar (admins only), shows every drive, ZFS pool and filesystem on every machine as a card, with the reason behind its health. See [The Control Center](#the-control-center).
+- **Replicas** let you try notifications and automations against test drives and pools with readings you choose, no failing hardware required.
+- **ZFS pools** show up as their own device with state, error counts and last scrub; a notification names the pool and the failing disks when one degrades.
+- **Data Written** tracks how much each drive has had written to it over its life, with a daily and monthly rate, read from the drive's own statistics log (needs agent v0.8.0+).
+- **Disk usage** monitoring is opt-in per mountpoint: total, used, available and percentage.
+- Agents find themselves and Home Assistant automatically over mDNS, no manual IP entry.
+- A service call hands any AI assistant the full SMART picture for a health report, with zero parsing. See [AI & Automation](#ai--automation).
+- An optional bearer token authenticates each agent, and every binary download is SHA256-verified.
 
 <details>
-<summary><strong>Entities per drive</strong></summary>
+<summary><strong>Entities per drive and per agent</strong></summary>
 
 <br>
 
-Each drive gets its own HA device. Entities are created dynamically — if a drive doesn't report an attribute, the sensor is simply not created. A drive that was asleep at setup, a pool created later or a newly configured mountpoint is added when the agent first reports it; no reload needed (v0.8.0).
+Each drive gets its own HA device, and entities are created only for what that drive actually reports, so nothing claims a feature a drive does not have. A drive that was asleep at setup, a pool created later, or a newly configured mountpoint is picked up the next time the agent reports it; no reload needed.
 
-**Disk Usage** (per agent host, requires agent v0.5.0+ with filesystems configured):
+**Sensors:** Attention Needed, Health (OK / Problem / Unknown), Standby, Temperature, Power-On Hours, SMART Status, Data Written, Data Read (disabled by default).
 
-| Entity | Description |
-|--------|-------------|
-| Disk Usage — Root (/) | Percentage used for the monitored mountpoint |
+**Diagnostic sensors** (conditional on what the drive reports): Reallocated Sector Count, Reported Uncorrectable Errors, Wear Leveling / Percentage Used, Power Cycle Count, Reallocated Event Count, Spin Retry Count, Command Timeout, Available Spare, Available Spare Threshold, Current Pending Sector Count.
 
-Attributes: `mountpoint`, `device`, `fstype`, `total_gb`, `used_gb`, `available_gb`. One sensor per mountpoint configured during agent install. Grouped under a "{host} Disk Usage" device alongside the drive devices.
+**Vendor-specific attributes** for any drive smartctl's database recognizes: every named SMART attribute not already covered above, created disabled by default. Enable what you need from the device page.
 
-**Sensors:**
+**Disk usage** (per agent host, needs filesystems configured): one percentage-used sensor per mountpoint, with `mountpoint`, `device`, `fstype` and the raw byte counts as attributes.
 
-| Entity | Description |
-|--------|-------------|
-| Attention Needed | Proactive health alert — `NO` / `MAYBE` / `YES` / `UNSUPPORTED` |
-| Health | SMART pass/fail — OK, Problem, or Unknown |
-| Standby | Whether the drive is currently spun down. When On, exposes a `data_as_of` attribute showing when the cached SMART readings were last refreshed. |
-| Temperature | Current drive temp (°C). On a SATA drive with a Device Statistics log, attributes `lifetime_max` and `lifetime_min` (in your Home Assistant temperature unit) and `time_over_limit_minutes` (v0.8.0). |
-| Power-On Hours | Total hours powered on |
-| SMART Status | Raw SMART verdict (PASSED / FAILED) |
-| Data Written | Total data the host has written to the drive over its life, in TB (v0.8.0, needs the v0.8.0 agent). Read from the drive's Device Statistics log on SATA and the health log on NVMe; on a drive with no Device Statistics log, from a vendor attribute that states its unit, or from `Total_LBAs_Written` when the drive has 512-byte sectors and is in the smartctl database. Not created for a drive with no source (SCSI and SAS views). Attributes: `source`, plus `attribute_id` and `attribute_name` when a vendor attribute is used, and `held: true` when the value is the last Device Statistics reading Home Assistant kept. |
-| Data Read | The same for data read. Disabled by default. |
-
-**Diagnostic sensors** (conditional):
-
-| Entity | Description |
-|--------|-------------|
-| Reallocated Sector Count | Bad sectors remapped to spares (ATA). Attribute `device_statistics_logical_sectors` from the Device Statistics log when the drive keeps one (v0.8.0). |
-| Reported Uncorrectable Errors | Unrecoverable read/write errors (ATA). Attribute `device_statistics_count` from the Device Statistics log when the drive keeps one (v0.8.0); when the attribute table has no such row, that count is what Attention uses. |
-| Wear Leveling / Percentage Used | SSD endurance indicator |
-| Power Cycle Count | Total power on/off cycles |
-| Reallocated Event Count | Individual reallocation events (ATA) |
-| Spin Retry Count | Motor spin-up retries — HDD only |
-| Command Timeout | Internal command timeouts |
-| Available Spare | NVMe reserve block pool (%) |
-| Available Spare Threshold | Manufacturer-set minimum spare (%) |
-| Current Pending Sector Count | Sectors waiting for reallocation (ATA) |
-
-**Vendor-specific SMART attributes** (ATA/SATA drives in smartctl database, disabled by default):
-
-For drives recognized by smartctl's database (`drivedb.h`), every named SMART attribute not already covered by the sensors above is created as a diagnostic entity. These are disabled by default -- enable what you need from the device page. Examples: erase counts, host writes/reads, program/erase fail counts, available reserved space, remaining lifetime percentage. The exact attributes vary by drive manufacturer and model. Data Written and Data Read above are the curated versions of the host write and read attributes; the raw vendor rows stay here, disabled.
+**Per agent:** Agent Status (connectivity, enabled by default), Agent Version, and OS, plus disabled-by-default diagnostics for last-seen time, IP, port, HA poll interval and whether a bearer token is set.
 
 </details>
 
 <details>
-<summary><strong>Entities per agent</strong></summary>
+<summary><strong>Attention Needed: how it classifies drives</strong></summary>
 
 <br>
-
-Each agent host groups under its own HA device alongside the drive devices. These entities describe the agent itself rather than any one drive. Enabled-by-default entities show up as soon as you reload the integration; the rest are visible from the device page's "disabled" section and can be turned on from entity settings.
-
-**Primary (enabled by default):**
-
-| Entity | Type | Description |
-|--------|------|-------------|
-| Agent Status | binary_sensor | Connectivity. On when reachable, Off when disconnected. Stays available across outages so automations can trigger on it. |
-| Agent Version | sensor | Semantic version reported by the agent. Drives the "Agent version outdated" HA repair notification. |
-| OS | sensor | Agent host OS: `linux`, `darwin`, or `windows`. Reports `unknown` for agents older than v0.5.3. |
-
-**Diagnostic (disabled by default):**
-
-| Entity | Type | Description |
-|--------|------|-------------|
-| Agent Last Seen | sensor | Timestamp of the most recent successful poll. |
-| Agent IP | sensor | IP address recorded for the agent in the HA config entry. |
-| Agent Port | sensor | Port the agent is serving on (default 9099). |
-| HA Poll Interval | sensor | How often Home Assistant polls the agent, in seconds. Distinct from the agent's own `scan_interval`. |
-| Auth Active | binary_sensor | On when a bearer token is configured for this agent. |
-
-</details>
-
-<details>
-<summary><strong>Attention Needed — how it classifies drives</strong></summary>
-
-<br>
-
-The Attention Needed sensor evaluates individual SMART attributes every poll cycle:
 
 | State | Meaning | Action |
 |-------|---------|--------|
@@ -165,13 +65,11 @@ The Attention Needed sensor evaluates individual SMART attributes every poll cyc
 | **YES** | Data integrity at risk | **Back up immediately** |
 | **UNSUPPORTED** | No usable SMART data | Common with USB enclosures |
 
-**Critical triggers (→ YES):** Reallocated sectors, pending sectors, uncorrectable errors, NVMe critical_warning, NVMe media_errors, spare depletion below threshold. Where a SATA drive's attribute table has no uncorrectable, reallocated or wear row but its Device Statistics log does, the log's count is used and the reason ends "from device statistics" (v0.8.0). An NVMe media_errors value at or above 2^64 is not a count; it reads as unknown and does not trigger.
+**Triggers YES:** reallocated sectors, pending sectors, uncorrectable errors, NVMe critical_warning or media_errors, spare depletion below threshold.
 
-**Warning triggers (→ MAYBE):** Reallocated events, spin retry count, command timeouts, NVMe spare < 20%, NVMe percentage_used ≥ 90%.
+**Triggers MAYBE:** reallocated events, spin retry count, command timeouts, NVMe spare under 20%, NVMe percentage_used at 90% or above.
 
-When a drive's state changes, a persistent notification fires in HA automatically. Notifications escalate on worsening conditions and dismiss when resolved. See [attention-severity-logic.md](docs/attention-severity-logic.md) for the full specification.
-
-**Adjusting thresholds (v0.6.3+):** If a drive has old, stable damage you have decided to live with, raise its limit instead of ignoring the alert: Settings → Devices & Services → SMART Sniffer → **Configure** → **Alert thresholds**, then pick the drive. Each field shows what the drive reads now and the built-in default. Attention is raised only when a reading passes your limit, so new damage still gets reported. Type the default back in to clear a threshold.
+If a drive carries old, stable damage you have decided to live with, raise its limit instead of ignoring the alert: **Settings > Devices & Services > SMART Sniffer > Configure > Alert thresholds**, then pick the drive. Each field shows its current reading and the built-in default; type the default back in to clear your override. Full specification: [attention-severity-logic.md](docs/attention-severity-logic.md).
 
 </details>
 
@@ -180,11 +78,7 @@ When a drive's state changes, a persistent notification fires in HA automaticall
 
 <br>
 
-A drive you have taken out, or a leftover device from before v0.6.2, can be removed with **Remove device** on its device page. SMART Sniffer allows this only while the agent is online and no longer reports that drive; otherwise it says why. To stop monitoring a drive that is still installed, add it to `exclude_devices` in the agent's config instead.
-
-ZFS pool devices work the same way: once the agent no longer reports a pool (for example after you export it on purpose), remove its device to stop tracking it.
-
-To remove an agent and everything under it, delete its entry under Settings → Devices & Services → SMART Sniffer.
+A drive you have taken out can be removed with **Remove device** on its device page, once the agent is online and no longer reports it. To stop monitoring a drive that is still installed, add it to `exclude_devices` in the agent's config instead. ZFS pool devices work the same way once the agent no longer reports the pool. To remove an agent and everything under it, delete its entry under **Settings > Devices & Services > SMART Sniffer**.
 
 </details>
 
@@ -201,98 +95,48 @@ token: "your-secret-token"    # optional -- omit to disable auth
 scan_interval: 60s
 standby_mode: standby          # optional -- never, standby, sleep, or idle
 advertise_interface: eth0      # optional -- restrict mDNS to this interface
-agent_id: my-nas-01            # optional -- pin the agent ID (default: random, saved in agent_id.json)
 exclude_devices:               # optional -- set by installer's drive picker
   - /dev/sdb
-smartctl_path: /usr/local/bin/smartctl  # optional -- only when smartctl is not on PATH or the usual install locations
-zfs_pool_status: true          # optional -- report ZFS pool health when zpool is found
-device_statistics: true        # optional -- read each SATA drive's Device Statistics log (always off on macOS)
 filesystems:                   # optional -- set by installer's disk usage picker
   - path: /
-    uuid: a1b2c3d4-5678-90ab-cdef-1234567890ab
     device: /dev/sda1
-    fstype: ext4
 ```
+
+| Option | Default | What it does |
+|---|---|---|
+| `port` | 9099 | Port the agent serves on. |
+| `token` | none | Bearer token required on every request. Leave unset to serve openly. |
+| `scan_interval` | 60s | How often the agent reads `smartctl` (Go duration syntax: `30s`, `5m`, `1h`). |
+| `standby_mode` | never | `standby` / `sleep` / `idle` skip waking a spun-down drive during a poll and serve its last cached reading instead; `never` wakes every drive on every poll. The very first poll after startup always wakes everything once, to collect a baseline. |
+| `advertise_interface` | auto | Restricts mDNS to one interface. Set this if auto-discovery picks the wrong address on a machine with Docker, a VPN, or several NICs. |
+| `agent_id` | random | Pins the agent's identity (8-64 characters, a-z/0-9/-) instead of the random one generated on first start. |
+| `exclude_devices` | none | Device paths skipped on every scan; symlinks resolve at startup, so `/dev/disk/by-id/...` and `/dev/sdX` both match. |
+| `smartctl_path` | auto | Full path to `smartctl`, when it is not on PATH or in the usual install locations. |
+| `zfs_pool_status` | true | Reports ZFS pool health when `zpool` is found. Set false to turn it off. |
+| `device_statistics` | true | Reads each SATA drive's Device Statistics log for Data Written and some error counts. Always off on macOS. |
+| `filesystems` | none | Mountpoints to report disk usage for; set by the installer's picker. |
+| `mount_prefix` | none | For an agent running in a container: where the host root is mounted, so disk usage reflects the host rather than the container. |
+| `verbose` | false | Restores per-cycle logging. By default a repeated message logs once, then at most hourly. |
 
 All options can also be set via CLI flags: `--port`, `--token`, `--scan-interval`, `--interface`, `--config`, `--verbose`, `--no-device-statistics`.
 
-**Verbose logging:** By default the agent logs a repeated message once, again if its text changes, and otherwise at most hourly, so a drive with a persistent condition does not fill the log with identical lines every poll. Pass `--verbose` (or set `verbose: true` in `config.yaml`) to restore per-cycle logging while diagnosing something. The flag can only enable verbose mode; it never disables a setting from the config file.
-
-**Running in a container:** If the agent runs in a container and you want it to report the *host's* disk usage rather than the container's own filesystem, mount the host root read-only and tell the agent where it is:
+**Running in a container**, to report the host's disk usage rather than the container's own filesystem:
 
 ```bash
 docker run -v /:/host:ro -e SMARTHA_MOUNT_PREFIX=/host ...
 ```
 
-The equivalent config file setting is `mount_prefix: /host`. Configured mountpoints are then read through that prefix, while the paths reported to Home Assistant stay as the host sees them. This affects disk usage reporting only; reading SMART data from host drives additionally requires passing the devices through to the container.
+**smartctl location:** the agent checks PATH, then the usual install locations for the platform (Synology, QNAP, Unraid, Homebrew, MacPorts, or on Windows, Program Files, Chocolatey, winget and Scoop). Set `smartctl_path` if yours lives somewhere else, or if the agent needs smartctl 7.0+ and the one on PATH is older.
 
-**Exclude devices:** Device paths listed in `exclude_devices` are skipped during every scan. The agent resolves symlinks at startup, so `/dev/disk/by-id/...` paths and their `/dev/sdX` equivalents both match. The installer's drive picker (Linux) shows all detected drives and lets you choose which ones to monitor -- useful for excluding iSCSI LUNs, USB backup drives, or anything you don't want polled. Drives with remote-storage transports (iSCSI, Fibre Channel) are flagged in yellow and excluded from the default selection. You can also add paths manually and restart the service. If a device appears in both `exclude_devices` and `device_overrides`, the exclusion wins and a warning is logged.
-
-**smartctl location:** The agent looks for `smartctl` on PATH, then in the usual install locations for the platform (Synology and QNAP packages, Entware, Unraid, Homebrew, MacPorts; on Windows, Program Files, Chocolatey, winget and Scoop in every user profile). Set `smartctl_path` to the full path of the binary to use a specific one. If that file is missing, not executable or older than smartctl 7.0, the agent logs `ERROR: smartctl_path "..." in config cannot be used: <reason>` and carries on with its normal search. On Windows, write the path in single quotes (`smartctl_path: 'C:\tools\smartctl.exe'`) or in double quotes with doubled backslashes.
-
-**ZFS pool health:** On a machine with ZFS the agent reads `zpool status` on every scan and reports each pool at `/api/pools`. Nothing to configure; machines without ZFS are unaffected. Set `zfs_pool_status: false` to turn it off, or `zpool_path: /path/to/zpool` if `zpool` is not on the usual paths. Pool level only: the error counts add up every disk in the pool, and the disks with problems are named in the Problem sensor and the notification.
-
-**Device Statistics:** On every poll the agent reads each SATA drive's ATA Device Statistics log in a second, short `smartctl` call, which is where Data Written comes from and where some drives keep an error count their attribute table does not show. A drive without the log is asked once; a drive whose log fails three times running, or times out once, is left alone until the agent restarts. `device_statistics: false` (or `--no-device-statistics`) stops the second call. Data Written then comes only from an allowlisted vendor attribute (one that states its unit, or `Total_LBAs_Written` on a drive with 512-byte sectors that is in the smartctl database), or the sensor is not created, and any Attention reason ending "from device statistics" goes away, which can clear an Attention Needed state and dismiss its notification. Home Assistant keeps the last Device Statistics readings it held and uses them again if the option is turned back on. On macOS the log cannot be read, so Device Statistics is always off there and Data Written comes from the NVMe health log or a vendor attribute only.
-
-**Scan interval:** Uses Go duration syntax -- `30s`, `5m`, `1h`, `24h` are all valid. When `standby_mode` is set, the agent skips sleeping drives and serves cached data, so the interval does not cause unnecessary wake-ups. When `standby_mode` is `never` (the default), each poll wakes any drive that is spun down. This is the *agent-side* read cadence and is separate from the HA Poll Interval entity, which reflects how often Home Assistant pulls fresh data from the agent itself.
-
-**Standby mode:** Controls whether the agent avoids waking sleeping drives during polling. Set to `standby`, `sleep`, or `idle` to match your drives' power management (these correspond to `smartctl -n` modes). When set, the agent passes `-n <mode>` to smartctl on each poll -- if a drive is in that power state, smartctl exits without waking it and the agent serves the last cached SMART data with an `in_standby` flag. The default is `never`, which wakes drives on every poll. On the very first poll after startup, the agent always wakes all drives regardless of this setting to collect a SMART baseline (serial number, model, attributes). This one-time wake ensures every drive is registered with a stable identity from the start. Subsequent polls honor the standby setting normally.
-
-**Network interface:** The `advertise_interface` setting restricts mDNS to a single interface. The installer sets this during setup if you pick a specific interface. When not set, the agent auto-filters known virtual interfaces (Docker, ZeroTier, Tailscale, WireGuard, etc.) and advertises on all remaining physical interfaces. To change the interface after install, edit `config.yaml` and restart the service — no reinstall needed.
-
-**Preferred address (`ip=` in the mDNS record):** Home Assistant connects to the address the agent puts in its mDNS TXT record. The agent picks it in this order (v0.8.3):
-
-1. `advertise_interface`, when set, always wins.
-2. Otherwise the best address on the non-skipped interfaces (192.168.x first, then 10.x, 172.x, 100.x, anything else). Whenever this is a private (RFC 1918) address, it is used, exactly as before v0.8.3.
-3. If that gives a public, CGNAT (100.64.0.0/10) or link-local address, or nothing, and a LAN bridge named `br-lan` (OpenWrt) or `vmbr0` (Proxmox) has a private address, the bridge is used. The bare bridge wins; otherwise its VLAN subinterface (`br-lan.N`, `vmbr0.N`) with the lowest N.
-4. If the non-skipped interfaces have no IPv4 address at all, a skipped bridge that is not Docker's (`vmbr*`, `ovs_*` on Synology, `br-<name>`) supplies it, preferring the one that carries the default route. A link-local address is never used.
-
-The chosen bridge is added to the interfaces the agent advertises on; the other skipped interfaces stay skipped. The agent announces the addresses of every interface it advertises on, on each of them: on OpenWrt, the LAN address is also announced on the WAN, as the WAN address already was on the LAN. One startup line says which rule chose the address, for example `mDNS: preferred IP: 192.168.1.1 (rule 1: LAN bridge br-lan; default scoring gave 203.0.113.7 on eth3)`. If the pick is wrong for your network, set `advertise_interface`.
-
-**Agent ID:** On first start the agent creates a random ID (32 hex characters) and saves it as `agent_id.json` next to `config.yaml`. If that directory is read-only it uses `/var/lib/smartha-agent` (Linux), `%ProgramData%\SmartHA-Agent` (Windows) or `/Library/Application Support/SmartHA-Agent` (macOS), and `/data` in the Home Assistant app. Set `agent_id:` in `config.yaml` to pin it (8 to 64 characters of a-z, 0-9 and `-`); nothing is written then. If the ID cannot be saved anywhere, the agent reports none and logs one warning. The ID is random, not derived from any serial or MAC address; deleting the file gives the agent a new one.
-
-**Authentication:** When a `token` is set, every request to the agent must include an `Authorization: Bearer <token>` header — requests without it receive a `401 Unauthorized` response. When adding the agent in Home Assistant, enter the same token in the integration's config flow. If no token is set, the agent serves data openly without auth.
-
-**Disk usage monitoring:** The installer's Disk Usage Monitoring picker lets you select which mountpoints to track. Each configured mountpoint is polled on the same interval as SMART data and served via `/api/filesystems`. Mountpoints are identified by UUID (via `blkid`) for stable entity identity across reboots. If no filesystems are configured, the endpoint simply isn't registered and callers receive a 404. To add or change monitored mountpoints after install, re-run the installer or edit `config.yaml` directly and restart the service.
-
-**Auto-discovery:** The agent advertises itself on the local network via mDNS (Zeroconf) by default. HA automatically detects running agents and prompts you to set them up — no manual IP entry needed. Disable with `mdns: false` in config or `--no-mdns` flag. Note: mDNS is link-local, so agents on different VLANs won't be discovered without an mDNS reflector.
-
-**Multi-homed hosts:** Machines running Docker, VPNs (ZeroTier, Tailscale, WireGuard), or virtual bridges have multiple network interfaces. If the agent advertises on a VPN or container interface, HA may discover it at an unreachable IP and fail to connect. The installer's interface picker and the `advertise_interface` config option solve this — see [Platform Install Paths](docs/platform-install-paths.md) for details.
-
-**API endpoints:**
+**API endpoints**, served over HTTP on the configured port:
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /api/health` | Agent status, version, agent ID, available endpoints, drive/filesystem/pool counts |
+| `GET /api/health` | Agent status, version, agent ID, drive/filesystem/pool counts |
 | `GET /api/drives` | Summary list of all discovered drives |
 | `GET /api/drives/{id}` | Full SMART data for a single drive |
-| `GET /api/filesystems` | Disk usage for all configured mountpoints (only registered when filesystems are configured) |
-| `GET /api/pools` | ZFS pool health: state, error counts, problem disks, last scrub (only registered when `zpool` is found and `zfs_pool_status` is not false) |
-
-`/api/drives/{id}` carries two fields added in v0.8.0 beside the unchanged `smart_data`: `device_statistics` says whether the drive's ATA Device Statistics log was read this poll (`present` with the raw pages, `absent`, `unavailable` with a reason, `not_applicable` for NVMe and SCSI, or `off` with `config` or `os`), and `derived` holds `host_writes` and `host_reads` in bytes with their `source`, or `host_writes_omitted` / `host_reads_omitted` with the reason. `unavailable` reasons are `failed`, `timeout`, `standby`, `mismatch` and `stopped`; `source` is `ata_device_statistics`, `ata_attribute` (with `attribute_id` and `attribute_name`) or `nvme`. `/api/health` reports `pools_status` (`pending`, `ok` or `failed`) when pool status is on.
-
-`/api/health` also reports, since v0.8.3, `hostname` (the machine's short host name, the same value as the mDNS TXT record; inside a container it is the container's name, and `mdns_name` never changes it), `os_name` (a friendly name with version, such as `Ubuntu 24.04.1 LTS`, `macOS 15.1` or `Windows 11 Pro 24H2`) and `os_version` (`24.04`, `15.1`, `24H2`). The OS name comes from `/etc/os-release` on Linux (the host's copy under `mount_prefix` when one is set), `sw_vers` on macOS and the registry on Windows, read once at startup. A field that cannot be read is left out; `os` is unchanged (`linux`, `darwin`, `windows`). The integration keeps these three on its agent health coordinator for later use; it does not name devices or entries from them yet.
-
-`/api/health` and the mDNS TXT record also carry `agent_id` (v0.8.3), the agent's random ID (see **Agent ID** above). It is left out of both when the agent could not save one, so it never changes from one restart to the next.
-
-On macOS, `/api/filesystems` also says which drive each filesystem lives on (v0.8.3). A filesystem there sits on a device such as `/dev/disk3s5`, an APFS volume in a container disk macOS synthesizes, while the drive is listed under an IOService path, so the two could not be matched. Each filesystem now carries `physical_devices`, the whole physical disks under it (e.g. `["/dev/disk0"]`, found with `diskutil info -plist` through the APFS physical store), and `drive_id`, the `/api/drives` id of that drive, matched by device path, by the serial `smartctl -i` reads from the disk, or by model when only one drive has it. `drive_id` is left out when the filesystem spans two drives (Fusion) or no drive matches. The lookup runs once per filesystem and is cached. Linux and Windows output is unchanged.
-
-`/api/pools` also serves each pool's layout (v0.8.3), healthy vdevs included, beside the unchanged `problem_vdevs`. `vdevs` is the data vdev tree (the children of the pool's root); `logs`, `cache`, `spares`, `special` and `dedup` appear only when the pool has them. Each vdev is `{"name", "type", "state", "read_errors", "write_errors", "checksum_errors"}` plus `children` for mirrors, raidz, spare and replacing vdevs, and `path` for a disk when zpool reports one (`/dev/sdb1`, `/dev/disk/by-id/...-part1`), so a disk can be matched to a drive. Paths come from `zpool status -j` (OpenZFS 2.3 and later); older releases are read from the text form, which gives the same tree without paths. Spares carry no error counters (always 0). A pool is cut at 1024 vdevs or 8 levels, with `layout_truncated: true`; the error totals and `problem_vdevs` always cover the whole pool. Example, with the health fields left out:
-
-```json
-{
-  "name": "tank", "state": "DEGRADED",
-  "vdevs": [
-    {"name": "raidz1-0", "type": "raidz", "state": "DEGRADED", "read_errors": 0, "write_errors": 0, "checksum_errors": 0,
-     "children": [
-       {"name": "sda", "type": "disk", "state": "ONLINE", "read_errors": 0, "write_errors": 0, "checksum_errors": 0, "path": "/dev/sda1"},
-       {"name": "sdb", "type": "disk", "state": "FAULTED", "read_errors": 12, "write_errors": 0, "checksum_errors": 0, "path": "/dev/sdb1"}
-     ]}
-  ],
-  "logs": [{"name": "nvme0n1", "type": "disk", "state": "ONLINE", "read_errors": 0, "write_errors": 0, "checksum_errors": 0, "path": "/dev/nvme0n1p1"}],
-  "spares": [{"name": "sdf", "type": "disk", "state": "AVAIL", "read_errors": 0, "write_errors": 0, "checksum_errors": 0, "path": "/dev/sdf1"}]
-}
-```
+| `GET /api/filesystems` | Disk usage for all configured mountpoints |
+| `GET /api/pools` | ZFS pool health: state, error counts, problem disks, last scrub |
 
 **Service management:**
 
@@ -319,13 +163,7 @@ make release      # build all + generate SHA256 checksums
 make clean        # remove build artifacts
 ```
 
-Binaries output to `agent/build/`.
-
-| Platform | Architecture | Binary | Status |
-|----------|-------------|--------|--------|
-| Linux | amd64, arm64 | `smartha-agent-linux-amd64`, `-arm64` | Tested |
-| macOS | amd64 (Intel), arm64 (Apple Silicon) | `smartha-agent-darwin-amd64`, `-arm64` | Tested |
-| Windows | amd64 | `smartha-agent-windows-amd64.exe` | Tested (v0.5.1+) |
+Binaries output to `agent/build/`, for Linux (amd64, arm64), macOS (amd64, arm64) and Windows (amd64).
 
 </details>
 
@@ -333,26 +171,22 @@ Binaries output to `agent/build/`.
 
 ## App or integration?
 
-Same Control Center. The App adds the drives of the box Home Assistant runs on. Install the integration for everything else.
+Same Control Center either way. The App adds the drives of the box Home Assistant itself runs on; the integration covers everything else.
 
 | Your setup | What to install |
 |---|---|
-| Drives on a NAS, Proxmox host, PC or Mac | The agent on each of those machines, and this integration |
-| Home Assistant OS or Supervised, and you want the drives in that box | This integration, and the [SMART Sniffer App](https://github.com/DAB-LABS/smart-sniffer-app) |
-| Home Assistant Container or Core | This integration. The App needs the Supervisor; for the drives of the Home Assistant machine, install the agent on that machine |
-| You want to try alerts and automations without real failing drives | This integration: + > Replica |
+| Drives on a NAS, Proxmox host, PC or Mac | The agent on each of those machines, plus this integration |
+| Home Assistant OS or Supervised, and you want that box's own drives too | This integration, plus the [SMART Sniffer App](https://github.com/DAB-LABS/smart-sniffer-app) |
+| Home Assistant Container or Core | This integration. For the drives of the HA machine itself, install the agent there directly |
+| You want to try alerts and automations without a failing drive | This integration: **+ > Replica** |
 
-- **The integration** owns every machine. Its **SMART Sniffer** page in the sidebar is the Control Center: the cards, the + card for adding machines, names, thresholds, replicas and Agentic access. Home Assistant loads the integration once it has at least one machine, so add one first (an agent, or the App's agent from the Discovered card).
-- **The App** (**SMART Sniffer App** in the sidebar, HAOS and Supervised only) runs the agent that reads the drives of the Home Assistant box. Its page shows those drives only, read only, with a card that opens the Control Center. The App 0.4.0 needs this integration at v0.9 or later to hand its machines over and to be found for you.
-- On HAOS or Supervised without the App, the Control Center shows a short note offering to install it. Close it if you do not want it; it stays closed for every admin.
+The integration owns every machine and is where the Control Center, thresholds, replicas and Agentic access live; it needs at least one machine added before Home Assistant will load it. The App runs the agent for the HA box itself, shows those drives on its own page, and hands them to the integration automatically once both are installed.
 
 <br>
 
-## Quick Start
+## Quick start
 
-**Requires:** `smartmontools` **7.0+** on each monitored machine (for JSON output support). The installer handles installation automatically (Homebrew on macOS, apt/dnf/yum on Linux), but some older distros ship smartctl 6.x which does not support the `--json` flag the agent relies on. Run `smartctl --version` to check. If you're on 6.x, install a newer version from the [smartmontools releases page](https://www.smartmontools.org/wiki/Download) or from a backports repository.
-
-**Optional:** `btrfs-progs` is recommended on systems with btrfs filesystems. The installer's disk-usage picker and the agent's `/api/filesystems` endpoint both fall back to `btrfs filesystem usage --raw` when `statvfs` returns zero on a btrfs mount (a known quirk on some multi-device or near-full configurations). Without `btrfs-progs`, btrfs entries display as `(unknown size)` in the picker and report zero-byte usage from the API. Most distros include `btrfs-progs` by default if any btrfs filesystems exist on the system.
+**Requires:** `smartmontools` 7.0+ on each monitored machine, for JSON support. The installer handles this on macOS (Homebrew) and most Linux (apt/dnf/yum); run `smartctl --version` to check if you are unsure, and grab a newer build from the [smartmontools releases page](https://www.smartmontools.org/wiki/Download) if yours is older.
 
 ### 1. Install the agent
 
@@ -362,248 +196,127 @@ Run on each machine you want to monitor:
 curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo bash
 ```
 
+The installer detects your OS and architecture, downloads and verifies the right binary, installs `smartmontools` if missing, prompts for configuration, and sets up a system service. Give it up to 90 seconds for the first pass over your drives.
+
 <details>
-<summary>Installer options</summary>
+<summary>Installer options, Windows, macOS Gatekeeper, pinning a version, uninstalling</summary>
 
-The installer picks a sensible location on its own. These options are for systems where that is not possible, or for troubleshooting.
+<br>
 
-| Option | Environment variable | What it does |
-|---|---|---|
-| `--install-dir=PATH` | `SMARTHA_INSTALL_DIR` | Install to an explicit directory instead of the default. Required on platforms with a read-only system area. |
-| `--help` | | Print all options and exit. |
+**Custom install location**, for a read-only system area (TrueNAS and similar appliance OSes fall back to `/root/smartha-agent` automatically, which does not survive a major upgrade; install to a pool dataset instead):
 
 ```bash
-# Install somewhere writable, for example on TrueNAS or another
-# appliance OS where the system dataset is read-only:
 curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo bash -s -- --install-dir=/mnt/tank/apps/smartha-agent
-
-# Same thing via the environment:
-SMARTHA_INSTALL_DIR=/mnt/tank/apps/smartha-agent sudo -E bash install.sh
 ```
 
-**TrueNAS:** the installer detects TrueNAS and falls back to `/root/smartha-agent` automatically. That works, but `/root` does not survive a major TrueNAS upgrade. To keep the agent across upgrades, install onto a pool dataset with `--install-dir=/mnt/<pool>/<dataset>`. See [#46](https://github.com/DAB-LABS/smart-sniffer/issues/46).
-
-</details>
-
-<details>
-<summary>Windows (PowerShell as Admin)</summary>
+**Windows (PowerShell as Admin, v0.5.1+):**
 
 ```powershell
 irm https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.ps1 | iex
 ```
 
-> **Important:** This must be run from **PowerShell**, not Command Prompt (CMD). If you see `'irm' is not recognized`, you're in CMD -- open PowerShell as Administrator instead. Right-click the Start button and select **Terminal (Admin)** or search for "PowerShell" in the Start menu.
+Run this from PowerShell, not Command Prompt. If the agent runs as a service and smartctl was installed via Scoop or winget under your own user account, the installer writes its path into `config.yaml` for you, since the service account cannot see your user PATH. The installer also opens the agent's port (9099 by default) in Windows Firewall.
 
-> **Note:** Requires v0.5.1 or later. Earlier Windows builds had a service startup bug tracked as [#13](https://github.com/DAB-LABS/smart-sniffer/issues/13). Service events appear in Event Viewer under Windows Logs → Application with source `SmartHA-Agent`.
-
-> **Scoop or winget portable smartmontools:** The agent runs as a service under the SYSTEM account, which only sees the system PATH, not your user PATH. Since v0.8.3 the agent also looks in every user's Scoop folder and winget links folder, and the installer writes `smartctl_path` into `config.yaml` when smartctl is only on your user PATH. On older versions the service failed to start with "smartctl not found" (event ID 100, [#60](https://github.com/DAB-LABS/smart-sniffer/issues/60)). Each service start now records the smartctl in use in Event Viewer (event ID 3), and a `smartctl_path` that cannot be used as a warning (event ID 103).
-
-> **Firewall:** The installer adds an inbound Windows Firewall rule for the agent's TCP port (default 9099) so Home Assistant can reach it from another machine. If you run the agent binary manually instead of using the installer, allow inbound TCP 9099 yourself.
-
-</details>
-
-<details>
-<summary>macOS: "unidentified developer" warning</summary>
-
-The agent binary is not code-signed or notarized. macOS Gatekeeper will block it on first run with a "cannot be opened" or "unidentified developer" dialog.
-
-If you installed via the install script, remove the quarantine flag manually:
+**macOS "unidentified developer" warning:** the binary is not notarized, so Gatekeeper blocks it on first run. Remove the quarantine flag and restart the service:
 
 ```bash
 sudo xattr -d com.apple.quarantine /usr/local/bin/smartha-agent
-```
-
-Then restart the service:
-
-```bash
 sudo launchctl kickstart -k system/com.dablabs.smartha-agent
 ```
 
-Alternatively, go to **System Settings > Privacy & Security**, find the blocked app, and click **Open Anyway**.
+Or go to **System Settings > Privacy & Security**, find the blocked app, and click **Open Anyway**.
 
-> **Note:** The right-click > Open workaround was removed in macOS Sequoia (15.0). The `xattr` method above works on all current macOS versions including Sequoia.
-
-</details>
-
-<details>
-<summary>Pin a specific version</summary>
+**Pin a version:**
 
 ```bash
 VERSION=0.1.0 curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo bash
 ```
 
-</details>
-
-The installer detects your OS and architecture, downloads the correct binary from [GitHub Releases](https://github.com/DAB-LABS/smart-sniffer/releases), verifies the SHA256 checksum, installs `smartmontools` if missing, prompts for configuration (port, token, scan interval, disk usage monitoring, mDNS interface), and sets up a system service. It then waits up to 90 s for the agent's first pass over the drives before reporting the health check; hosts with many or sleeping disks take longer, and a progress line appears at 10 s.
-
-Disk usage monitoring is opt-in. During a fresh install or upgrade to v0.5.0+, the installer asks which mountpoints to monitor. Select the mountpoints you care about. The agent will report usage percentage, total/used/available bytes for each.
-
-On machines with multiple network interfaces (Docker, ZeroTier, Tailscale, etc.), the installer presents an interface picker so mDNS discovery advertises on the right network. Pick your LAN interface — not "All interfaces" — if you run VPNs or containers, otherwise HA may discover the agent at an unreachable IP.
-
-<p align="center">
-  <img src="images/agent_install_uninstall_screenshot.png" alt="Agent install on Linux" width="520">
-</p>
-
-<details>
-<summary>Uninstall the agent</summary>
+**Uninstall** (stops the service, removes the binary, config and service files):
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo UNINSTALL=1 bash
 ```
 
-Stops the service, removes the binary, config, and service files.
-
 </details>
+
+During install, say which mountpoints to track for disk usage (optional), and pick your LAN interface if the installer offers a choice of several, so mDNS advertises on the right network.
+
+<p align="center">
+  <img src="images/agent_install_uninstall_screenshot.png" alt="Agent install on Linux" width="520">
+</p>
 
 ### 2. Add the integration to Home Assistant
 
 Requires Home Assistant 2024.4 or newer.
 
-**Via HACS (recommended):**
-
 [![Open your Home Assistant instance and open the SMART Sniffer repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=DAB-LABS&repository=smart-sniffer&category=integration)
 
-Click the button above, then **Download**, then restart Home Assistant.
+Click the button above, then **Download**, then restart Home Assistant. Or open HACS, search for **SMART Sniffer**, then **Download** and restart.
 
-Or open HACS, search for **SMART Sniffer**, then **Download** and restart Home Assistant.
-
-**Manual:** Copy `custom_components/smart_sniffer/` into your HA `custom_components/` directory and restart.
+**Manual:** copy `custom_components/smart_sniffer/` into your HA `custom_components/` directory and restart.
 
 ### 3. Connect to the agent
 
-**Auto-discovery (recommended):** The agent advertises itself via mDNS. After a few seconds Home Assistant will show a discovery notification — just click **Add** and you're done. If the agent has a bearer token, you'll be prompted for it.
+**Auto-discovery:** after a few seconds Home Assistant shows a discovery notification. Click **Add**, enter the bearer token if the agent has one, and you are done. From v0.9 you can also add an agent from the **+** card in the Control Center.
 
-<p align="center">
-  <img src="images/discovery-screenshot-mock.svg" alt="Auto-discovery prompt" width="400">
-</p>
-
-**Manual:** **Settings → Devices & Services → Add Integration → SMART Sniffer** -- enter the agent's host, port, optional token, and polling interval. From v0.9 you can also add it from the **+** card in the Control Center.
-
-**Passwords:** from v0.9 the token is checked when you add the agent, and a wrong one is refused at once. If an agent later refuses the saved token (it was changed on that machine), Home Assistant asks for it again under **Settings → Devices & Services**, and the machine's card in the Control Center asks too.
+**Manual:** **Settings > Devices & Services > Add Integration > SMART Sniffer**, then enter the agent's host, port, optional token, and polling interval.
 
 Every drive on the machine appears as its own HA device.
 
 ## The Control Center
 
-<p align="center"><em>Sidebar → SMART Sniffer</em> (admins only, v0.9)</p>
+<p align="center">
+  <img src="images/control-center-v09.png" alt="The SMART Sniffer Control Center in the Home Assistant sidebar: one card per drive, filesystem and machine" width="800">
+</p>
 
-One grid of cards: one per drive, one per ZFS pool, and one for each filesystem that belongs to no drive or pool. The label at the top right of a card names its machine (`HAOS` for the App's agent, `Replica` for test drives). A card shows where the drive is, its temperature, power-on hours and data written, its disk space and its health word: **Attention**, **Maybe**, **Health OK** or **Health not known**, with the rows that caused it underneath. The chevron opens **Details** with every counter and attribute. Large counts read as sizes (28.8 TB) and power-on hours as days (887 d); click one for the exact number and a copy button. The verdicts are the integration's own, the same ones behind the Attention Needed sensor.
+<p align="center"><em>Sidebar > SMART Sniffer</em> (admins only)</p>
 
-- **Arrange** cards by dragging the dots beside the title (or with the arrow keys), **hide** one with the eye, and **remove** one with the trash (click twice). A drive or pool still reported by its agent then offers **Remove here** (the page only) or **Remove here + disable entities**; one its agent no longer reports offers **Remove here + delete entities**.
-- **Rename** a card by clicking its title. A drive or pool takes the name as its device name in Home Assistant. A machine's label is renamed the same way and is a page name only.
-- **Thresholds**: the sliders icon in Details edits the drive's alert thresholds, the same ones as **Configure → Alert thresholds**.
-- **A machine that stops answering** keeps its last readings, and its cards say when it was last seen. One that wants its password shows a password field.
-- The page is shared by every admin: names, hidden cards and the order are kept by the integration, not the browser.
+One grid of cards: one per drive, one per ZFS pool, one for each filesystem that belongs to no drive or pool. A card shows where the drive is, its temperature, power-on hours, data written, disk space, and its health word (**Attention**, **Maybe**, **Health OK** or **Health not known**) with the reason underneath. The chevron opens **Details** with every counter and attribute.
 
-With the SMART Sniffer App running, the line at the top gives this box's agent address and mDNS name, with copy buttons.
+- **Arrange** cards by dragging, **hide** one with the eye, **remove** one with the trash.
+- **Rename** a card by clicking its title; a drive or pool takes the new name in Home Assistant too.
+- The sliders icon in Details edits a drive's alert thresholds, same as **Configure > Alert thresholds**.
+- The page is shared by every admin: names, hidden cards and order are kept by the integration, not the browser.
 
 ### Adding machines
 
-The last card, **+**, has three parts and one **Add** button for everything ticked:
-
-- **Network** lists the SMART Sniffer agents Home Assistant has found (the ones already added are marked), and can **Scan** an IP block for more: the block around Home Assistant is filled in, a /22 is the largest it takes, and each address is asked only for its health and drive count, never a password. The App's own agent is never listed here; it comes from the Discovered card.
-- **Add by hand** checks one host name or address and port, for a machine the scan cannot reach.
-- **Replica** adds test drives (below).
-
-Machines added here go through the same checks as **Add Integration**, password included.
+The last card, **+**, adds a machine three ways: **Network** lists agents already found on your LAN and can scan an IP block for more (never asking for a password just to scan); **Add by hand** checks one host and port directly; **Replica** adds test drives.
 
 ### Replicas
 
-Replicas are test drives and pools with readings you choose. They belong to one **Replica** machine, with the same sensors, notifications and automations as a real one, so you can see how Home Assistant reacts to a failing drive without having one. A failing replica alerts as soon as you add it. Nothing a replica does touches a real drive, and it needs no App: replicas work on every install type.
-
-- **+ > Replica** lists the replica files. Tick the ones you want and press **Add**; each becomes one card. The Replica holds up to 12 drives and 4 pools. To change one, remove its card and pick another file.
-- **The library** has three sources: a set that ships with SMART Sniffer (healthy, worn and failing SATA and NVMe drives, a USB drive that blocks SMART, a healthy and a degraded ZFS pool); your own files in `/config/smart_sniffer/replicas`; and on HAOS and Supervised, files you drop into `/share/smart-sniffer/replicas` (over Samba, for example), read only.
-- **Save as replica**: the icon at the foot of any real drive or pool card saves it into your own folder, with its serial number and other identifiers replaced. **Upload a replica** takes a `.json` replica file (1 MB at most).
-- **Your own files** can be deleted from the + > Replica list with the trash, unless a Replica card is showing them.
-- **Edit readings**: a Replica drive's thresholds editor also edits its readings (SMART attribute raw values; NVMe temperature, available spare, percentage used and media errors). A shipped or `/share` file is first saved as your own copy, `<name>, edited`.
-
-The file format is described in the [Mock Agent](docs/mock-agent.md) guide.
+Replicas are test drives and pools with readings you choose, behaving exactly like real ones for sensors, notifications and automations, so you can see how Home Assistant reacts to a failing drive without having one. **+ > Replica** lists the available files (a set that ships with SMART Sniffer, plus your own saved ones) and adds whichever you tick. The save icon on any real drive or pool card saves a replica of it, with identifying details replaced. Full format: [Mock Agent](docs/mock-agent.md).
 
 ### Agentic access
 
-**Agentic access**, in the page footer, opens everything the Control Center knows as one JSON document for an AI assistant or a script: every machine with its health, each drive's SMART data and verdict, the pools, the filesystems, and a guide to the fields at the end. **Copy** and **Download** are at the top, and **Raw JSON** opens the plain file.
-
-Scripts can fetch the same document with a long-lived access token of an admin user (your profile → **Security** → **Long-lived access tokens**):
+**Agentic access**, in the page footer, opens everything the Control Center knows (every machine, drive, pool and filesystem, with a field guide at the end) as one JSON document, ready to copy, download, or hand to an AI assistant. Scripts can fetch the same document with a long-lived access token:
 
 ```bash
 curl -H "Authorization: Bearer YOUR_LONG_LIVED_TOKEN" \
   "http://homeassistant.local:8123/api/smart_sniffer/agentic.json"
 ```
 
-Add `?fresh=1` to ask every agent before answering, and `?download=1` to get it as a dated file. A token of a user who is not an admin gets `403`. The document has serial numbers, host names and addresses, so share it only with people and tools you trust. Agent passwords are never in it.
+The document includes serial numbers, host names and addresses, so share it only with people and tools you trust. It never includes agent passwords.
 
-### This box: found through the App
+## NAS & RAID setup
 
-With the SMART Sniffer App 0.4.0 or later running, the App tells Home Assistant where its agent is (host and port only), and **Settings → Devices & Services** offers it as **Discovered: SMART Sniffer (HAOS)**. **Add** asks "Create sensors and alerts for HAOS?". The App's own page has the same line under DRIVES. It is not offered when this box is already a machine here (recognised by its agent ID, as the App's machine, or by address), so it is never added twice.
+Most Linux, macOS and Windows machines work out of the box. NAS devices and RAID controllers sometimes need an extra step, since their storage controllers present drives differently than plain SATA or NVMe. See the [platform guides](docs/guides/) for Synology, QNAP, TrueNAS SCALE, Unraid, Proxmox, Docker, virtual machines and hardware RAID.
 
-If you delete the HAOS machine on purpose, the Discovered card comes back; choose **Ignore** to stop it. Removing the App leaves the HAOS machine in place, offline, until you delete it.
-
-### Upgrading to v0.9
-
-- **A new SMART Sniffer entry** appears in the sidebar for admins.
-- **From the SMART Sniffer App 0.3.x**: update this integration first and restart, then update the App to 0.4.0. The App hands over the machines its Control Center kept (address, port and password), their names, hidden cards, card order and thresholds, once. A machine already here is matched and never added twice, and what you set here wins. A line on the page says what moved, for example "Moved 2 machines from the SMART Sniffer App.", with **Show** for any machine that could not be moved and **Discard** to let it go. A machine you delete afterwards is not brought back.
-- **App replicas are removed.** The App's old Replica machine and its sensors are removed when Home Assistant starts, with a one-time note: "Replicas moved into the integration. Create them again from + > Replica." Files you kept in `/share/smart-sniffer/replicas` stay where they are and show in the + > Replica list.
-- **Passwords**: adding an agent checks its password, and an agent that refuses the saved one asks for it again (see Quick Start, step 3).
-- **Home Assistant 2024.4 or later**, as before.
-- **Going back to v0.8.5**: the Replica machine shows as not ready (v0.8.5 cannot read it) until you delete it or update again. Other machines are not affected.
-
-## NAS & RAID Setup
-
-Most Linux, macOS and Windows machines work out of the box. NAS devices and RAID controllers sometimes need extra steps because their storage controllers present drives differently than standard SATA/NVMe.
-
-**Platform guides:** For step-by-step walkthroughs on specific platforms, see the [Platform Installation Guides](docs/guides/) -- covering Synology, QNAP, TrueNAS SCALE, Unraid, Proxmox, Docker, virtual machines, and hardware RAID controllers.
-
-### Diagnosing drive detection
-
-If the agent starts but reports no drives (or fewer than expected), run:
-
-```bash
-smartha-agent --discover
-```
-
-This probes every drive the OS exposes, tests protocol detection, and tells you exactly what the agent will see at runtime. If any drives need manual configuration, it offers to write the config for you. See the [Drive Discovery guide](docs/discover.md) for full details and example output.
-
-Paste the `--discover` output into a GitHub issue if you need help -- it gives us everything we need to diagnose remotely.
+If the agent starts but reports no drives, or fewer than you expect, run `smartha-agent --discover`. It probes every drive the OS exposes, tests protocol detection, and offers to write the config for you. Paste its output into a GitHub issue if you need help. Full details: [Drive Discovery guide](docs/discover.md).
 
 ### Raw SMART data
 
-Need the full SMART dump for a drive? The integration includes everything smartctl returns in the diagnostics download. Go to **Settings > Devices & Services > SMART Sniffer > three-dot menu > Download Diagnostics**. The downloaded JSON file contains the complete raw SMART data for every drive on that agent, along with the attention evaluation and agent metadata and, from a v0.8.0 agent, each drive's `device_statistics` and `derived` blocks. Useful for debugging unexpected sensor values, sharing in bug reports, or passing to an AI for deeper analysis.
-
-The agent also exposes raw data via its REST API at `http://<agent-ip>:9099/api/drives` (summary) and `http://<agent-ip>:9099/api/drives/{id}` (full SMART JSON for a single drive).
-
-### NAS devices
-
-NAS platforms have platform-specific quirks -- proprietary device paths (Synology), SCSI-to-ATA protocol mismatches (QNAP), outdated smartmontools versions, and LXC bridge interfaces that confuse mDNS. The agent handles most of this automatically since v0.5.5, but some platforms need `device_overrides` or a newer smartmontools. See the platform-specific guides: [Synology](docs/guides/synology.md), [QNAP](docs/guides/qnap.md), [TrueNAS SCALE](docs/guides/truenas-scale.md), [Unraid](docs/guides/unraid.md).
-
-### Hardware RAID controllers
-
-Drives behind hardware RAID controllers (MegaRAID, HP SmartArray, 3ware, Areca) are hidden from the OS behind the RAID layer. `smartctl` needs a RAID-specific device type flag to reach each physical drive. `--discover` does not probe RAID controllers yet, so these require manual `device_overrides`. See the [RAID Controllers guide](docs/guides/raid-controllers.md) for controller identification, drive enumeration, and config examples.
-
-### smartmontools version
-
-The agent requires smartmontools **7.0+** for JSON output support. Most current Linux distros ship 7.x. Older or embedded systems (Synology DSM, QNAP QTS, some RHEL/CentOS 7 installs) may ship 6.x or older. Run `smartctl --version` to check. The agent logs a clear error on startup if the version is too old.
+For the full SMART dump of every drive on an agent: **Settings > Devices & Services > SMART Sniffer > three-dot menu > Download Diagnostics**. Useful for debugging, bug reports, or pasting into an AI chat. The agent also serves this directly at `http://<agent-ip>:9099/api/drives/{id}`.
 
 <br>
 
-## AI & Automation
+## AI & automation
 
-SMART Sniffer includes a `smart_sniffer.get_drive_data` service call that returns the complete cached SMART dataset for any agent. The response includes raw SMART attributes, our attention evaluation (state, severity, and reasons), filesystem usage, and agent metadata -- everything an LLM needs to produce a meaningful health assessment.
+The `smart_sniffer.get_drive_data` service call returns the full cached SMART dataset for one agent: raw attributes, the Attention evaluation with its reasons, filesystem usage and agent metadata, everything an LLM needs for a real assessment.
 
-**What's in the response:**
+One example: run it weekly, call `smart_sniffer.get_drive_data` for each agent, pass the result to a conversation agent (Google AI, OpenAI, Claude, Ollama) with a prompt like "analyze these SMART readings and flag anything concerning," and email yourself the answer. An AI can catch patterns, like a rising reallocated-sector count, that the raw numbers alone do not make obvious.
 
-| Key | Content |
-|-----|---------|
-| `agent` | Name, host, OS, uptime, version |
-| `drives` | Per-drive: model, serial, protocol, device path, attention state/severity/reasons/accepted, full SMART JSON, and from a v0.8.0 agent the `device_statistics` and `derived` blocks |
-| `filesystems` | Per-mount: mountpoint, total bytes, used bytes, percentage |
-
-**Example use case: automated weekly health report.** Create an HA automation that runs every Monday morning, calls `smart_sniffer.get_drive_data` for each agent, passes the JSON to a conversation agent (Google AI, OpenAI, Claude, Ollama) with a prompt like "Analyze these SMART readings and flag anything concerning," then emails you the AI's response. The AI can catch patterns like rising reallocated sector counts, aging drives approaching end-of-life, or storage filling up -- things the raw sensor values alone don't always make obvious.
-
-The service uses `supports_response: only`, so it also works from **Developer Tools > Services** for manual inspection of the full response payload.
-
-For every machine at once, use [Agentic access](#agentic-access) in the Control Center, or fetch `/api/smart_sniffer/agentic.json` with a long-lived access token.
-
-For one-off analysis without automation, use **Download Diagnostics** (Settings > Devices & Services > SMART Sniffer > three-dot menu). The downloaded JSON contains the same raw SMART data and can be pasted directly into any AI chat interface. See [Raw SMART data](#raw-smart-data) above.
+For every machine at once, use [Agentic access](#agentic-access) in the Control Center. For one-off analysis, use **Download Diagnostics** (see [Raw SMART data](#raw-smart-data) above) and paste the file into any AI chat.
 
 <br>
 
@@ -611,51 +324,33 @@ For one-off analysis without automation, use **Download Diagnostics** (Settings 
 
 <table>
   <tr>
-    <td align="center"><strong>NVMe SSD — Sensors</strong></td>
-    <td align="center"><strong>NVMe SSD — Diagnostics</strong></td>
+    <td align="center"><strong>NVMe SSD -- Sensors</strong></td>
+    <td align="center"><strong>NVMe SSD -- Diagnostics</strong></td>
   </tr>
   <tr>
     <td><img src="images/nvme-sensors.png" width="300"></td>
     <td><img src="images/nvme-diagnostics.png" width="300"></td>
   </tr>
   <tr>
-    <td align="center"><strong>SATA SSD — Sensors</strong></td>
-    <td align="center"><strong>SATA SSD — Diagnostics</strong></td>
-  </tr>
-  <tr>
-    <td><img src="images/sata-ssd-sensors.png" width="300"></td>
-    <td><img src="images/sata-ssd-diagnostics.png" width="300"></td>
-  </tr>
-  <tr>
     <td align="center"><strong>Attention: YES (Critical)</strong></td>
-    <td align="center"><strong>Trigger Reason in Diagnostics</strong></td>
+    <td align="center"><strong>Trigger reason in Diagnostics</strong></td>
   </tr>
   <tr>
     <td><img src="images/attention-yes-sensors.png" width="300"></td>
     <td><img src="images/attention-yes-diagnostics.png" width="300"></td>
   </tr>
-  <tr>
-    <td align="center"><strong>Attention: MAYBE (Warning)</strong></td>
-    <td align="center"><strong>Warning Reason in Diagnostics</strong></td>
-  </tr>
-  <tr>
-    <td><img src="images/attention-maybe-sensors.png" width="300"></td>
-    <td><img src="images/attention-maybe-diagnostics.png" width="300"></td>
-  </tr>
 </table>
 
 <details>
-<summary><strong>🔌 What about USB drives?</strong></summary>
+<summary><strong>What about USB drives?</strong></summary>
 
 <br>
 
-External drives connected via USB enclosures typically block SMART passthrough. SMART Sniffer detects this and marks the drive as `UNSUPPORTED` with `Health: Unknown`.
+External drives behind a USB enclosure typically block SMART passthrough entirely. SMART Sniffer marks these `UNSUPPORTED` with Health: Unknown; this is the most common "why isn't my drive showing data" case, and it is a limitation of the USB bridge chip, not a bug.
 
 <img src="images/unsupported-screenshot.png" width="280">
 
-This is the most common "why isn't my drive showing data?" scenario. It's a hardware limitation of the USB bridge chip, not a bug.
-
-If a USB drive gave SMART data before and stops, it is not marked `UNSUPPORTED`: Attention Needed shows unknown and Attention Reasons says "SMART data not available right now" until the data comes back. On macOS, USB drives only give SMART data through a third-party SAT driver; if it stops working, reinstalling it and allowing it when macOS asks has brought the data back. The agent's `/api/drives` shows `smart_available: false` for such a drive.
+If a USB drive gave SMART data before and stops, Attention Needed shows unknown with the reason "SMART data not available right now" rather than `UNSUPPORTED`, since the drive has proven it can report. On macOS, USB drives only report SMART through a third-party SAT driver; reinstalling and re-authorizing it has restored data when this happens.
 
 </details>
 
@@ -666,19 +361,15 @@ If a USB drive gave SMART data before and stops, it is not marked `UNSUPPORTED`:
 | Doc | Description |
 |-----|-------------|
 | [Attention Severity Logic](docs/attention-severity-logic.md) | State machine, classification rules, notification lifecycle |
-| [Trigger → Entity Map](docs/attention-trigger-entity-map.md) | Every attention trigger mapped to its sensor entity and icon |
+| [Trigger to Entity Map](docs/attention-trigger-entity-map.md) | Every attention trigger mapped to its sensor entity and icon |
 | [Early Warning Attributes](docs/early-warning-attributes.md) | Which SMART attributes predict failure and why |
 | [Attribute Name Variants](docs/smart-attribute-name-variants.md) | Manufacturer-specific `smartctl` name mapping research |
-| [Drive Discovery (`--discover`)](docs/discover.md) | Probe drives, detect protocols, auto-generate config |
-| [Mock Agent](docs/mock-agent.md) | Testing tool -- fake agent with controllable drives |
+| [Drive Discovery](docs/discover.md) | Probe drives, detect protocols, auto-generate config |
+| [Mock Agent](docs/mock-agent.md) | Testing tool: a fake agent with controllable drives |
 | [Platform Install Paths](docs/platform-install-paths.md) | Install locations, immutable rootfs support, network interface filtering |
-| [Agent Version Repair](docs/agent-version-repair.md) | Design doc for agent version checking and HA repair notifications |
-| [Build Journal](docs/build-journal.md) | Design decisions, iteration history, known issues |
-| [Examples](examples/) | Community-contributed automations -- copy, paste, adapt |
+| [Examples](examples/) | Community-contributed automations: copy, paste, adapt |
 
-### Platform Installation Guides
-
-Step-by-step setup for NAS devices, hypervisors, and containerized environments. See the [guides hub](docs/guides/) for the full index.
+### Platform guides
 
 | Platform | What's covered |
 |----------|---------------|
@@ -686,77 +377,35 @@ Step-by-step setup for NAS devices, hypervisors, and containerized environments.
 | [Synology DSM](docs/guides/synology.md) | SynoCli smartmontools, `/dev/sataX` paths, `--discover` |
 | [QNAP QTS](docs/guides/qnap.md) | SAT fallback, lxcbr0 exclusion, interface selection |
 | [TrueNAS SCALE](docs/guides/truenas-scale.md) | ZFS pool health and usage, install path that survives upgrades |
-| [Unraid](docs/guides/unraid.md) | br0 bridge, Docker deployment *(community -- in progress)* |
-| [Docker](docs/guides/docker.md) | Build your own container: what it needs, plus a ready prompt for AI coding assistants |
-| [Virtual Machines](docs/guides/virtual-machines.md) | ESXi, Hyper-V, VirtualBox -- why SMART needs the host |
-| [Hardware RAID Controllers](docs/guides/raid-controllers.md) | MegaRAID, HP SmartArray, 3ware, Areca -- manual `device_overrides` |
+| [Unraid](docs/guides/unraid.md) | br0 bridge, Docker deployment |
+| [Docker](docs/guides/docker.md) | Build your own container, plus a ready prompt for AI coding assistants |
+| [Virtual Machines](docs/guides/virtual-machines.md) | ESXi, Hyper-V, VirtualBox: why SMART needs the host |
+| [Hardware RAID Controllers](docs/guides/raid-controllers.md) | MegaRAID, HP SmartArray, 3ware, Areca: manual `device_overrides` |
 
 ## Testing
 
-Unit tests: `pip install -r requirements_test.txt && pytest tests/` for the integration (no Home Assistant needed; the attention rules, the Device Statistics merge and gap-fill, the entity plan and pool health run against captured drive payloads), and `cd agent && go test ./...` for the agent. CI runs both, plus the suite against the declared Home Assistant floor.
-
-The integration has been tested against the included [Mock Agent](docs/mock-agent.md) — a standalone Python tool that simulates a `smartha-agent` with fully controllable fake drives. It serves the same API as the real agent, with a web dashboard for changing SMART attributes in real time. Useful for validating attention state transitions, notification behavior, and new drive types without waiting for real hardware to degrade.
+`pip install -r requirements_test.txt && pytest tests/` for the integration (no Home Assistant needed), and `cd agent && go test ./...` for the agent. Both also run against the included [Mock Agent](docs/mock-agent.md), a standalone Python tool that simulates `smartha-agent` with fully controllable fake drives and a web dashboard for changing SMART attributes in real time:
 
 ```bash
 python3 tools/mock-agent.py --port 9100 --preload sata_hdd,nvme,usb_blocked
 ```
 
-Point the HA integration at `localhost:9100` and you're testing.
+Point the HA integration at `localhost:9100` and you are testing.
 
 ## Contributing
 
-Found a bug? Have a drive that isn't mapping correctly? See [CONTRIBUTING.md](CONTRIBUTING.md) for how to help.
-
-Drive-specific `smartctl -a --json` output samples are especially welcome — they help us catch manufacturer name variants we haven't seen yet.
+Found a bug, or a drive that is not mapping correctly? See [CONTRIBUTING.md](CONTRIBUTING.md). Drive-specific `smartctl -a --json` output samples are especially welcome; they help catch manufacturer name variants nobody has seen yet.
 
 ## Roadmap
 
-- [x] HAOS App -- [SMART Sniffer App](https://github.com/DAB-LABS/smart-sniffer-app) for Home Assistant OS
-- [x] Integration icons for HA integrations page
-- [x] Disk usage monitoring (agent-side) -- `/api/filesystems` endpoint with installer picker
-- [x] Disk usage monitoring (integration-side) -- filesystem sensor entities in HA
-- [x] Standby-aware polling (`smartctl -n standby`) -- shipped v0.5.3
-- [x] Integration: agent connectivity sensor + diagnostic entities (version, last seen, IP, port, auth) -- shipped v0.5.3
-- [x] Agent: smartctl minimum version check (fail early with clear message if < 7.0) -- shipped v0.5.3
-- [x] Integration: dedicated Drive Standby binary sensor with `data_as_of` attribute -- shipped v0.5.4
-- [x] Integration: Agent OS diagnostic sensor (linux / darwin / windows) -- shipped v0.5.4
-- [x] NAS protocol detection (SAT fallback, `--discover`, `device_overrides`) -- shipped v0.5.5
-- [x] Agent: smartctl path auto-resolution (finds newer smartctl when PATH version is outdated) -- shipped v0.5.5.1
-- [x] Agent: broadened SAT fallback to all smartctl execution failure bits -- shipped v0.5.5.2
-- [x] Agent: first-poll wake (collects SMART baseline from sleeping drives on startup) -- shipped v0.5.5.3
-- [x] Agent: expanded mDNS interface filter (51 prefixes) + IP scoring improvement -- shipped v0.5.5.4
-- [x] Installer: macOS quarantine removal + expanded interface picker labels -- shipped v0.5.5.5
-- [x] Unified ATA/NVMe wear level scale + btrfs filesystem fallback + installer bind mount dedup -- shipped v0.5.6
-- [x] Custom Lovelace card -- [SMART Sniffer Card](frontend/smart-sniffer-card/) v1.0.19
-- [x] Platform installation guides -- Proxmox, Synology, QNAP, TrueNAS SCALE, Unraid, OpenWrt, hardware RAID, VMs, and a build-your-own Docker guide
-- [x] Drive Discovery (`--discover`) documentation
 - [ ] MQTT agent mode
-- [x] Configurable alert thresholds via options flow (per-drive, current reading and default shown under each field) -- shipped v0.6.3
 - [ ] Per-drive scan intervals
 - [ ] YAML-based SMART attribute definitions (vendor field mapping, transforms, units)
-- [x] SAS/SCSI basic monitoring (health, temperature, power-on hours, power cycles) -- shipped v0.5.7
-- [x] Vendor-specific SMART diagnostic entities (disabled-by-default, all named ATA attributes) -- shipped v0.5.7
 - [ ] SAS/SCSI full attribute parsing (grown defect list, error counters, endurance indicators)
-- [x] Agent: container-aware filesystem reporting (`mount_prefix` / `SMARTHA_MOUNT_PREFIX` path mapping for Docker deployments) -- shipped v0.6.0
-- [x] Agent: ZFS pool usage reporting (pool paths report real usage instead of near-zero dataset figures) -- shipped v0.6.0
-- [x] Agent: log hygiene -- repeated lines log once then hourly at most, with `--verbose` to restore per-cycle output -- shipped v0.6.0
-- [x] Integration: opt-in `force_update` so InfluxDB, Prometheus and Grafana get a datapoint every poll -- shipped v0.6.0
-- [ ] Agent: runtime interface detection (replace static prefix list with OS-level physical NIC detection)
-- [x] Integration: parent-agent device hierarchy (drives and filesystems nest under their agent via `via_device`) -- shipped v0.6.1
-- [x] Agent: unreadable drives are skipped instead of published under a made-up name, so a blocked or hung drive no longer creates ghost devices or blanks the whole agent -- shipped v0.6.2
-- [x] Agent and integration: ZFS pool health -- each pool's state, error counts, problem disks and last scrub, with alerts when a pool degrades or disappears -- shipped v0.7.0
-- [x] Integration and agent: Data Written and Data Read per drive from the ATA Device Statistics log and the NVMe health log, with Device Statistics filling Attention gaps -- shipped v0.8.0 (GH #49, drive captures by @Mad-Hat)
-- [x] Integration: new drives, pools and filesystems appear without a reload -- shipped v0.8.0
-- [x] Installers: wait up to 90 s for the agent's first drive pass -- shipped v0.8.0 (GH #50)
-- [x] Integration: ZFS pool devices named for their host -- shipped v0.8.1 (GH #50)
-- [x] Integration: every device name starts with its host, and drive notifications name the host -- shipped v0.8.4 (GH #50)
-- [x] Mock agent: replica files (drives and pools in JSON, with scenarios and your own replica folder) and filesystems, for testing without real drives -- shipped v0.8.2
-- [x] HAOS App: the Control Center -- this machine's drives, your other agents and replicas on one page, judged by the integration's rules -- shipped in App v0.3.0
-- [x] Integration: the Control Center in the Home Assistant sidebar, every machine on one page, replicas in the integration, Agentic access as JSON for scripts -- v0.9.0
-- [x] Listed in the HACS default store -- October 2026
-- [ ] Integration: optional area-on-setup (choose an area once and apply it to all of an agent's drives)
-- [x] Integration: split consolidated wear-leveling / uncorrectable / pending-sector sensors into separate diagnostic entities when a drive reports multiple variants -- shipped v0.5.14
-- [x] Integration: `smart_sniffer.get_drive_data` service call for AI/automation access to full SMART data -- shipped v0.5.15, community PR by @nsleigh
+- [ ] Agent: runtime interface detection, replacing the static prefix list with OS-level physical NIC detection
+- [ ] Optional area-on-setup: choose an area once and apply it to all of an agent's drives
+
+Shipped work lives in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
