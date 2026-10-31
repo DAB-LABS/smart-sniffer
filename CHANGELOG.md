@@ -2,6 +2,29 @@
 
 All notable changes to SMART Sniffer are documented here.
 
+## v1.0.0 -- DRAFT (date set at tag time)
+
+SMART Sniffer 1.0: config files, entity IDs and the agent API now change only with a major version. Update the integration from HACS and restart, then update each agent (run the install command again). Each agent now shows an update entity under its device with the exact command for that machine. Using the SMART Sniffer App? Update it to 1.0.0 after this.
+
+### Added
+- **Agent updates show in Home Assistant** (#68). An update entity under each agent's device says when a newer agent is out, what is new, and the install command for that machine (curl on Linux and macOS, irm on Windows, the docs for Docker). Home Assistant never installs anything. Not for the App's own agent, which the App updates.
+- **The App's page judges this box's drives by the integration's thresholds** (#11), when the integration has the box's entry.
+
+### Changed
+- **Serial numbers are masked on the cards**, keeping the last 4 characters, so screenshots and videos are safe to share. Click or tap a serial for the full value and Copy. Agentic access and Home Assistant's own device pages still show full serials.
+- **The App's password reaches only the App's own entry.** With App 1.0.0, Home Assistant picks up the App's agent password by itself. Other Home Assistants that find the agent on the network ask for it: copy it from the App page.
+- **An agent below the minimum version is now an error repair;** an agent that is only behind the newest release gets a lighter warning.
+
+### Fixed
+- **No more impossible NVMe numbers** (#12). A counter that cannot be real (wider than 64 bits, as some laptops report Media Errors) shows as unknown or "not readable", never as a 34-digit number, and never raises Attention. Details no longer list smartctl's `_s` and `_le` helper fields.
+
+### Security
+- **The agent slows down repeated wrong passwords.** After 5 wrong tries in a minute from one address it answers "wait" (429), for up to a minute at a time. A correct password is never slowed. The integration says "try again in a minute" instead of "password refused".
+
+### Upgrade notes
+- The "Beta" label is gone. Home Assistant 2024.4 or later, unchanged.
+- Agents older than 1.0.0 get an "agent update available" repair. It clears once the agent reports 1.0.0.
+
 ## v0.9.2 -- 2026-10-24
 
 Integration only: update from HACS and restart.

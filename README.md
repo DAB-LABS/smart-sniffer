@@ -5,7 +5,6 @@
 **Proactive disk health monitoring for Home Assistant.**
 
 [![Release](https://img.shields.io/github/v/release/DAB-LABS/smart-sniffer?style=flat-square)](https://github.com/DAB-LABS/smart-sniffer/releases/latest)
-![Beta](https://img.shields.io/badge/status-beta-orange?style=flat-square)
 [![Build](https://img.shields.io/github/actions/workflow/status/DAB-LABS/smart-sniffer/release.yml?style=flat-square&label=build)](https://github.com/DAB-LABS/smart-sniffer/actions/workflows/release.yml)
 [![License](https://img.shields.io/github/license/DAB-LABS/smart-sniffer?style=flat-square)](LICENSE)
 [![HACS](https://img.shields.io/badge/HACS-Default-41BDF5?style=flat-square)](https://hacs.xyz)
@@ -181,6 +180,8 @@ Same Control Center either way. The App adds the drives of the box Home Assistan
 | You want to try alerts and automations without a failing drive | This integration: **+ > Replica** |
 
 The integration owns every machine and is where the Control Center, thresholds, replicas and Agentic access live; it needs at least one machine added before Home Assistant will load it. The App runs the agent for the HA box itself, shows those drives on its own page, and hands them to the integration automatically once both are installed.
+
+With App 1.0 the App's agent can have a password (new installs get one). The Home Assistant the App runs on picks it up by itself. Another Home Assistant that finds the same agent on your network asks for it: copy it from the App page, under **Connect by hand**.
 
 <br>
 
