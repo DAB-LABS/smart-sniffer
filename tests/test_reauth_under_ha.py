@@ -74,6 +74,8 @@ class _Session:
 
 @pytest.mark.parametrize(("status", "error"), [(401, ConfigEntryAuthFailed),
                                                (403, ConfigEntryAuthFailed),
+                                               # v1.0: slowed after wrong passwords, try later
+                                               (429, UpdateFailed),
                                                (500, UpdateFailed)])
 def test_refused_password_asks_for_it(tmp_path, monkeypatch, status, error):
     monkeypatch.setattr(coordinator_mod, "async_get_clientsession", lambda hass: _Session(status))
@@ -298,3 +300,54 @@ def test_panel_add_gives_the_import_step_the_rows_drive_count():
     # A row without a count sends none.
     asyncio.run(panel_net._add_one(hass, {"address": WAN, "port": 9099, "drives": None}))
     assert inits[-1] == ("import", {"host": WAN, "port": 9099, "token": ""})
+
+
+# --- v1.0 agents slow down repeated wrong passwords (429) -----------------------------
+
+
+@pytest.mark.parametrize(("status", "answer"), [(200, "ok"), (401, "invalid_auth"),
+                                                (403, "invalid_auth"), (429, "too_many_attempts"),
+                                                (500, "cannot_connect")])
+def test_the_password_check_reads_429(monkeypatch, status, answer):
+    monkeypatch.setattr(config_flow, "async_get_clientsession", lambda hass: _Session(status))
+    flow = _flow([], "user", {})
+    check = config_flow.SmartSnifferConfigFlow._drives_status
+    assert _run(check(flow, LAN, 9099, "pw")) == answer
+
+
+def test_a_slowed_down_agent_makes_no_entry_and_says_wait():
+    flow = _flow([], "user", {f"{LAN}:9099": SECRET})
+    flow._test_connection = _health_open(flow)
+
+    async def slowed(host, port, token):
+        return "too_many_attempts"
+
+    flow._drives_status = slowed
+    result = _run(flow.async_step_user({"host": LAN, "port": 9099, "token": "letmein",
+                                        "scan_interval": 60}))
+    assert result["type"] == "form" and result["errors"] == {"base": "too_many_attempts"}
+
+
+def test_reauth_while_slowed_down_keeps_the_old_password():
+    entry = _entry("E1", f"{LAN}:9099", LAN, token="old")
+    flow = _flow([entry], "reauth", {f"{LAN}:9099": SECRET})
+    flow.context["entry_id"] = "E1"
+    _Reloads(flow, entry)
+
+    async def slowed(host, port, token):
+        return "too_many_attempts"
+
+    flow._drives_status = slowed
+    result = _run(flow.async_step_reauth_confirm({"token": "letmein"}))
+    assert result["errors"] == {"base": "too_many_attempts"}
+    assert entry.data["token"] == "old"
+
+
+def test_the_wait_message_is_in_every_error_table():
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1] / "custom_components" / "smart_sniffer"
+    for name in ("strings.json", "translations/en.json"):
+        errors = json.loads((root / name).read_text())["config"]["error"]
+        assert "minute" in errors["too_many_attempts"]

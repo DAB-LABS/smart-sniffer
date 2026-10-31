@@ -279,6 +279,11 @@ def test_the_probe_asks_health_and_drives_only_without_a_password(tmp_path, monk
     async def locked_drives(request):
         return web.json_response({"error": "unauthorized"}, status=401)
 
+    async def slowed_drives(request):
+        # v1.0 agents answer 429 to an address after repeated wrong passwords.
+        return web.json_response({"error": "too_many_attempts"}, status=429,
+                                 headers={"Retry-After": "30"})
+
     async def not_agent(request):
         return web.Response(text="<html>router</html>")
 
@@ -297,6 +302,7 @@ def test_the_probe_asks_health_and_drives_only_without_a_password(tmp_path, monk
         open_, p1 = await serve([("/api/health", health), ("/api/drives", drives)])
         locked, p2 = await serve([("/api/health", health), ("/api/drives", locked_drives)])
         other, p3 = await serve([("/api/health", not_agent)])
+        slowed, p4 = await serve([("/api/health", health), ("/api/drives", slowed_drives)])
         # Home Assistant's shared session, as a plain one (no network
         # component in this core).
         import aiohttp  # noqa: PLC0415
@@ -309,6 +315,8 @@ def test_the_probe_asks_health_and_drives_only_without_a_password(tmp_path, monk
             outcome, row = await net.async_probe(hass, "127.0.0.1", p2)
             assert outcome == "ok" and row["auth"] == "password"
             assert (await net.async_probe(hass, "127.0.0.1", p3))[0] == "not_an_agent"
+            outcome, row = await net.async_probe(hass, "127.0.0.1", p4)
+            assert outcome == "ok" and row["auth"] == "password"
             with socket.socket() as s:
                 s.bind(("127.0.0.1", 0))
                 closed = s.getsockname()[1]
@@ -323,6 +331,6 @@ def test_the_probe_asks_health_and_drives_only_without_a_password(tmp_path, monk
             assert [r["hostname"] for r in snap["found"]] == ["bench-agent"]
         finally:
             await session.close()
-            for runner in (open_, locked, other):
+            for runner in (open_, locked, other, slowed):
                 await runner.cleanup()
     run(tmp_path, body, monkeypatch)

@@ -78,7 +78,7 @@ const WS = 'smart_sniffer/panel/';
 // Websocket error codes as the HTTP statuses the page's messages expect.
 const WS_STATUS = { not_found: 404, not_an_agent: 404, unauthorized: 403, invalid_format: 400, bad_request: 400,
   panel_state_newer: 409, fixed_name: 409, cannot_remove: 409, nothing_flagged: 409, home_assistant_error: 502,
-  not_answering: 504, password_refused: 422, replica_cap: 409, invalid_replica: 422, too_large: 413,
+  not_answering: 504, password_refused: 422, too_many_attempts: 429, replica_cap: 409, invalid_replica: 422, too_large: 413,
   replica_folder_unavailable: 503, replica_folder_full: 507, replica_file_in_use: 409, not_deletable: 403 };
 // The Replica's messages, by the integration's error codes.
 const REPLICA_MSG = {
@@ -2052,6 +2052,7 @@ function cc() {
     pwMessage(h) {
       const s = this.ui.pwState[h.id];
       if (s === 'noanswer') return 'That agent is not answering. Try again in a moment.';
+      if (s === 'wait') return 'Too many wrong passwords. The agent is making this Home Assistant wait; try again in a minute.';
       if (s === 'error') return 'The password was not saved. Try again.';
       return '';
     },
@@ -2069,7 +2070,8 @@ function cc() {
         return;
       }
       const code = r.data && r.data.error;
-      this.ui.pwState[h.id] = code === 'password_refused' ? 'refused' : code === 'not_answering' ? 'noanswer' : 'error';
+      this.ui.pwState[h.id] = code === 'password_refused' ? 'refused' : code === 'not_answering' ? 'noanswer'
+        : code === 'too_many_attempts' ? 'wait' : 'error';
     },
 
     // ── Drag to reorder ─────────────────────────────────────────────

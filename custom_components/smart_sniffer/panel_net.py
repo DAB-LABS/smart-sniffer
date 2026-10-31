@@ -129,7 +129,9 @@ async def async_check(hass: HomeAssistant, host: str, port: int) -> dict[str, An
     drives = health.get("drives") if isinstance(health.get("drives"), int) else None
     try:
         async with session.get(f"{base}/api/drives", timeout=timeout) as resp:
-            if resp.status in (401, 403):
+            # 429: the agent wants a password and is slowing this address
+            # down after wrong ones (v1.0).
+            if resp.status in (401, 403, 429):
                 auth = "password"
             elif resp.status == 200 and drives is None:
                 listing = await resp.json(content_type=None)
@@ -174,7 +176,7 @@ def _outcome(result: dict[str, Any]) -> tuple[str, str | None]:
         return "error", None
     if kind == "form":
         base = (result.get("errors") or {}).get("base")
-        if base == "invalid_auth":
+        if base in ("invalid_auth", "too_many_attempts"):
             return "password_needed", None
         if base == "cannot_connect":
             return "cannot_connect", None
@@ -463,7 +465,7 @@ async def async_probe(hass: HomeAssistant, address: str, port: int) -> tuple[str
         dstatus, listing = await _get(session, f"{base}/api/drives", timeout)
         if dstatus is None:
             return "not_answering", None
-        auth = "password" if dstatus in (401, 403) else "none"
+        auth = "password" if dstatus in (401, 403, 429) else "none"
         count = len(listing) if dstatus == 200 and isinstance(listing, list) else None
     elif _wants_password(status, body):
         body, auth, count = {}, "password", None

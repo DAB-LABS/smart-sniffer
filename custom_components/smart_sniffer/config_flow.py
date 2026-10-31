@@ -16,6 +16,8 @@ try:
 except ImportError:  # HA < 2025.x compat
     from homeassistant.components.zeroconf import ZeroconfServiceInfo
 from homeassistant.config_entries import (
+    SOURCE_HASSIO,
+    SOURCE_REAUTH,
     SOURCE_ZEROCONF,
     ConfigEntryState,
     ConfigEntry,
@@ -140,8 +142,9 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
                 # The agent answers; does it take this password? (v0.9: a
                 # wrong or missing password no longer makes an entry that
                 # only fails later.)
-                if await self._drives_status(host, port, token) == "invalid_auth":
-                    errors["base"] = "invalid_auth"
+                status = await self._drives_status(host, port, token)
+                if status in PASSWORD_ERRORS:
+                    errors["base"] = status
                     return self.async_show_form(
                         step_id="user",
                         data_schema=self.add_suggested_values_to_schema(
@@ -511,8 +514,8 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
                 password = await self._drives_status(
                     self._discovery_host, self._discovery_port, token
                 )
-                if password == "invalid_auth":
-                    errors["base"] = "invalid_auth"
+                if password in PASSWORD_ERRORS:
+                    errors["base"] = password
                 elif await self._added_since_discovery(token):
                     return self.async_abort(reason="already_configured")
                 else:
@@ -520,7 +523,7 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
 
         # Auth enabled — show form with token field.
         # No auth — show confirmation with no input fields (just Submit).
-        if self._discovery_auth or errors.get("base") == "invalid_auth":
+        if self._discovery_auth or errors.get("base") in PASSWORD_ERRORS:
             schema = vol.Schema({vol.Optional(CONF_TOKEN, default=""): TOKEN_SELECTOR})
         else:
             schema = vol.Schema({})
@@ -670,8 +673,10 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def _drives_status(self, host: str, port: int, token: str) -> str:
         """Whether the agent gives its drives with this password: "ok",
-        "invalid_auth" (401 or 403), or "cannot_connect" (anything else). The
-        health check needs no password, so this is the password check."""
+        "invalid_auth" (401 or 403), "too_many_attempts" (429: the agent is
+        slowing down this address after repeated wrong passwords, v1.0), or
+        "cannot_connect" (anything else). The health check needs no password,
+        so this is the password check."""
         session = async_get_clientsession(self.hass)
         headers = {"Authorization": f"Bearer {token}"} if token else {}
         try:
@@ -682,6 +687,8 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
             ) as resp:
                 if resp.status in (401, 403):
                     return "invalid_auth"
+                if resp.status == 429:
+                    return "too_many_attempts"
                 resp.raise_for_status()
                 return "ok"
         except (aiohttp.ClientError, asyncio.TimeoutError, TimeoutError):
@@ -724,6 +731,9 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
         except (TypeError, ValueError):
             return self.async_abort(reason="cannot_connect")
         token = str(config.get(CONF_TOKEN) or "")
+        # The App's password as it stands: "" when the App has none, None
+        # when the App does not send one (App 0.4.x sends host and port only).
+        sent_token = token if CONF_TOKEN in config else None
         if not host:
             return self.async_abort(reason="cannot_connect")
         try:
@@ -737,16 +747,21 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
         _record_app_facts(self.hass, discovery_info, host, port, agent_id)
 
         # Already an entry? agent_id first, then the App's own entry, then
-        # the address (plan v5 3.5). A token the App sends is kept current.
+        # the address (plan v5 3.5). The password the App sends is kept
+        # current on the App's own entry only (_update_token).
         existing = self._hassio_known_entry(agent_id, hostname, host)
         if existing is not None:
-            self._update_token(existing, token)
+            self._update_token(existing, sent_token)
             return self.async_abort(reason="already_configured")
         await self.async_set_unique_id(f"{host}:{port}")
-        self._abort_if_unique_id_configured(updates={CONF_TOKEN: token} if token else None)
+        same_id = next((entry for entry in self._async_current_entries(include_ignore=False)
+                        if entry.unique_id == self.unique_id), None)
+        if same_id is not None:
+            self._update_token(same_id, sent_token)
+        self._abort_if_unique_id_configured()
         existing = await self._entry_at(host, port)
         if existing is not None:
-            self._update_token(existing, token)
+            self._update_token(existing, sent_token)
             return self.async_abort(reason="already_configured")
 
         label = _hassio_label(hostname, host)
@@ -755,7 +770,7 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
             "app": str(getattr(discovery_info, "name", "") or "SMART Sniffer App"),
             "agent_id": agent_id, "hostname": hostname,
             "slug": str(getattr(discovery_info, "slug", "") or ""),
-            "auth": await self._drives_status(host, port, token) == "invalid_auth",
+            "auth": await self._drives_status(host, port, token) in PASSWORD_ERRORS,
         }
         self.context["title_placeholders"] = {"hostname": label}
         return await self.async_step_hassio_confirm()
@@ -778,8 +793,8 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "unknown"
             else:
                 status = await self._drives_status(info["host"], info["port"], token)
-                if status == "invalid_auth":
-                    errors["base"] = "invalid_auth"
+                if status in PASSWORD_ERRORS:
+                    errors["base"] = status
                     info["auth"] = True
                 else:
                     # The card may have waited while the agent was added
@@ -853,11 +868,31 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
                 return entry
         return None
 
-    def _update_token(self, entry: ConfigEntry, token: str) -> None:
-        """Keep an entry's password as the App sends it, when it sends one."""
-        if token and entry.data.get(CONF_TOKEN) != token:
-            self.hass.config_entries.async_update_entry(
-                entry, data={**entry.data, CONF_TOKEN: token})
+    def _update_token(self, entry: ConfigEntry, token: str | None) -> None:
+        """Keep the App's own entry's password as the App sends it (v1.0).
+
+        Only an entry the Supervisor's discovery made (is_app_own_entry):
+        never one found by zeroconf or added by hand, even for the same
+        agent, so the App's password never goes to an address the App did
+        not name. ``None`` (an App that sends no password) changes nothing;
+        "" (the App's password was cleared) clears it here too.
+
+        The entry recovers by itself: a loaded entry reloads from its update
+        listener (the token is a setting), one whose setup was refused is
+        reloaded here, and a reauth the old password started is ended.
+        """
+        if token is None or not is_app_own_entry(entry):
+            return
+        if str(entry.data.get(CONF_TOKEN) or "") == token:
+            return
+        self.hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_TOKEN: token})
+        flows = self.hass.config_entries.flow
+        for flow in flows.async_progress_by_handler(
+                DOMAIN, match_context={"source": SOURCE_REAUTH, "entry_id": entry.entry_id}):
+            flows.async_abort(flow["flow_id"])
+        if entry.state is not ConfigEntryState.LOADED and getattr(entry, "disabled_by", None) is None:
+            self.hass.config_entries.async_schedule_reload(entry.entry_id)
 
     # ------------------------------------------------------------------
     # The SMART Sniffer panel's Add (v0.9)
@@ -1224,6 +1259,21 @@ def _record_app_facts(
                        "name": str(getattr(discovery_info, "name", "") or "")}
     except Exception:  # noqa: BLE001 - facts are a convenience only
         _LOGGER.debug("SMART Sniffer: could not record the App's discovery facts")
+
+
+# What _drives_status answers when the password is the problem: refused, or
+# refused so often that the agent is making this address wait (v1.0).
+PASSWORD_ERRORS = ("invalid_auth", "too_many_attempts")
+
+
+def is_app_own_entry(entry: Any) -> bool:
+    """Whether an entry is the one the SMART Sniffer App's discovery made
+    (source hassio, or the App slug it keeps): the only entry the App's
+    password is applied to. Never the Replica or the App's old replica."""
+    data = getattr(entry, "data", None) or {}
+    if is_replica_data(data) or data.get(ENTRY_AGENT_MOCK) is True:
+        return False
+    return getattr(entry, "source", None) == SOURCE_HASSIO or bool(data.get(ENTRY_APP_SLUG))
 
 
 def _hassio_label(hostname: str, host: str) -> str:

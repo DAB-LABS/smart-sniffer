@@ -524,6 +524,8 @@ async def ws_machine_password(hass: HomeAssistant, msg: dict[str, Any]) -> dict[
         return {"host": host_object(hass, entry)}
     if result == "invalid_auth":
         raise _Refused("password_refused", "That password was refused.")
+    if result == "too_many_attempts":
+        raise _Refused("too_many_attempts", "Too many wrong passwords. Try again in a minute.")
     if result == "cannot_connect":
         raise _Refused("not_answering", "That agent is not answering.")
     raise _Refused("error", "The password was not saved.")
@@ -531,7 +533,8 @@ async def ws_machine_password(hass: HomeAssistant, msg: dict[str, Any]) -> dict[
 
 async def _reauth(hass: HomeAssistant, entry: ConfigEntry, password: str) -> str:
     """The entry's reauth flow (Home Assistant's own, or one started here)
-    given this password: ok, invalid_auth, cannot_connect or error."""
+    given this password: ok, invalid_auth, too_many_attempts, cannot_connect
+    or error."""
     flows = hass.config_entries.flow
     active = list(entry.async_get_active_flows(hass, {SOURCE_REAUTH}))
     if active:

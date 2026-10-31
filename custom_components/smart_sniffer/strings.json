@@ -51,7 +51,8 @@
     "error": {
       "cannot_connect": "Unable to connect to the SMART Sniffer agent. Check the host, port, and token.",
       "unknown": "An unexpected error occurred.",
-      "invalid_auth": "The agent refused the password. Enter the token from the agent's config file on that machine."
+      "invalid_auth": "The agent refused the password. Enter the token from the agent's config file on that machine.",
+      "too_many_attempts": "Too many wrong passwords: the agent is making Home Assistant wait. Try again in a minute."
     },
     "abort": {
       "already_configured": "This SMART Sniffer agent is already configured.",

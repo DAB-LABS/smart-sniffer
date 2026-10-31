@@ -17,7 +17,9 @@ import pytest
 
 pytest.importorskip("homeassistant")
 
-from homeassistant.config_entries import SOURCE_HASSIO  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
+
+from homeassistant.config_entries import SOURCE_HASSIO, ConfigEntryState  # noqa: E402
 
 try:  # noqa: E402
     from homeassistant.helpers.service_info.hassio import HassioServiceInfo
@@ -58,6 +60,47 @@ def _discover(entries, agents, info=None):
 
 def _app_entry(host=APP, port=9099, unique_id=None, **data):
     return _entry("e-app", unique_id or f"{host}:{port}", host, port, **data)
+
+
+def _own_entry(host=APP, port=9099, state=ConfigEntryState.LOADED, **data):
+    """The entry the App's discovery made: source hassio, with the App slug."""
+    entry = _entry("e-app", f"{host}:{port}", host, port, title="SMART Sniffer (HAOS)",
+                   source=SOURCE_HASSIO, app_slug="0449a086_smart_sniffer_agent", **data)
+    entry.state = state
+    entry.disabled_by = None
+    return entry
+
+
+class _Flows:
+    """The flow manager's reauth flows and reloads, as _update_token uses them."""
+
+    def __init__(self, flow, reauth_of=()):
+        self.aborted: list[str] = []
+        self.reloads: list[str] = []
+        self.progress = [{"flow_id": f"reauth-{e}", "context": {"source": "reauth", "entry_id": e}}
+                         for e in reauth_of]
+        flow.hass.config_entries.flow = SimpleNamespace(
+            async_progress_by_handler=self.by_handler, async_abort=self.aborted.append)
+        flow.hass.config_entries.async_schedule_reload = self.reloads.append
+
+    def by_handler(self, handler, include_uninitialized=False, match_context=None):
+        match_context = match_context or {}
+        return [f for f in self.progress
+                if all(f["context"].get(k) == v for k, v in match_context.items())]
+
+
+def _rediscover(entries, agents, info, reauth_of=()):
+    """The App posts its discovery again (it does after a password Save)."""
+    flow = _flow(entries, SOURCE_HASSIO, agents)
+    net = flow.net
+
+    async def health(host, port, token):
+        agent = net.agents.get(f"{host}:{port}")
+        return await net.test_connection(host, port, agent[2] if agent else token)
+
+    flow._test_connection = health
+    flows = _Flows(flow, reauth_of)
+    return flow, flows, _run(flow.async_step_hassio(info))
 
 
 # --- offered --------------------------------------------------------------------
@@ -116,7 +159,7 @@ def test_same_agent_id_at_a_lan_address_aborts():
 
 
 def test_same_agent_id_takes_the_apps_new_token():
-    entry = _app_entry(LAN, 9099, agent_id=APP_ID, token="old")
+    entry = _own_entry(agent_id=APP_ID, token="old")
     agents = {f"{APP}:9099": (APP, ["SER-H1"], "new", {"agent_id": APP_ID})}
     flow, result = _discover([entry], agents, _info(token="new"))
     assert result["reason"] == "already_configured"
@@ -151,7 +194,7 @@ def test_the_replica_machine_is_never_a_match():
 
 
 def test_same_address_aborts_and_takes_the_token():
-    entry = _app_entry(APP, 9099, token="old")
+    entry = _own_entry(token="old")
     agents = {f"{APP}:9099": (APP, ["SER-H1"], "new")}
     flow, result = _discover([entry], agents, _info(token="new"))
     assert result["reason"] == "already_configured"
@@ -232,3 +275,111 @@ def test_strings_have_the_confirm_step():
     for slot in ("{label}", "{app}", "{host}", "{port}"):
         assert slot in step["description"]
     assert strings["config"]["flow_title"].format(hostname="HAOS") == "SMART Sniffer (HAOS)"
+
+
+# --- the App's password (v1.0, plan A4) ---------------------------------------------
+#
+# What an older integration (0.9.x) does with the same discovery, for the
+# record (read from its code at v0.9.2): a new App entry is made with the
+# token and no prompt, as here. A token that changes is written into ANY
+# entry the discovery matched (by agent_id, as the App's entry, or by
+# address), including one added by hand or by zeroconf for the same agent;
+# an empty token is ignored. A loaded entry reloads from its update listener
+# and recovers. One whose setup was refused stays down until Home Assistant
+# restarts or the user enters the password, and its reauth notice stays.
+
+
+def test_a_new_app_entry_is_made_with_the_apps_password_and_no_prompt():
+    agents = {f"{APP}:9099": (APP, ["SER-H1"], "spy-cipher-otter-0042", {"agent_id": APP_ID})}
+    flow, result = _discover([], agents, _info(token="spy-cipher-otter-0042", agent_id=APP_ID))
+    assert result["type"] == "form" and result["data_schema"].schema == {}
+    created = _run(flow.async_step_hassio_confirm({}))
+    assert created["type"] == "create_entry"
+    assert created["data"]["token"] == "spy-cipher-otter-0042"
+    assert created["data"]["app_slug"] == "0449a086_smart_sniffer_agent"
+
+
+@pytest.mark.parametrize("state", [ConfigEntryState.LOADED, ConfigEntryState.SETUP_ERROR])
+def test_a_changed_password_updates_the_apps_entry_and_it_recovers(state):
+    entry = _own_entry(agent_id=APP_ID, token="old-pass", state=state)
+    agents = {f"{APP}:9099": (APP, ["SER-H1"], "new-pass", {"agent_id": APP_ID})}
+    flow, flows, result = _rediscover([entry], agents, _info(token="new-pass", agent_id=APP_ID),
+                                      reauth_of=["e-app", "e-other"])
+    assert result["reason"] == "already_configured"
+    assert entry.data["token"] == "new-pass"
+    # The reauth the old password started ends; another entry's stays.
+    assert flows.aborted == ["reauth-e-app"]
+    # Loaded: its update listener reloads it. Refused at setup: reloaded here.
+    assert flows.reloads == ([] if state is ConfigEntryState.LOADED else ["e-app"])
+
+
+def test_a_cleared_password_clears_the_apps_entry():
+    entry = _own_entry(agent_id=APP_ID, token="old-pass")
+    flow, flows, result = _rediscover([entry], {f"{APP}:9099": APP_AGENT},
+                                      _info(token="", agent_id=APP_ID))
+    assert result["reason"] == "already_configured"
+    assert entry.data["token"] == ""
+
+
+def test_an_app_that_sends_no_password_changes_nothing():
+    """App 0.4.x posts host and port only."""
+    entry = _own_entry(agent_id=APP_ID, token="typed-by-hand")
+    flow, flows, result = _rediscover([entry], {f"{APP}:9099": APP_AGENT}, _info(agent_id=APP_ID))
+    assert result["reason"] == "already_configured"
+    assert entry.data["token"] == "typed-by-hand"
+    assert flow.hass.config_entries.updates == [] and flows.reloads == []
+
+
+def test_the_same_password_again_changes_nothing():
+    entry = _own_entry(agent_id=APP_ID, token="same-pass")
+    agents = {f"{APP}:9099": (APP, ["SER-H1"], "same-pass", {"agent_id": APP_ID})}
+    flow, flows, _ = _rediscover([entry], agents, _info(token="same-pass", agent_id=APP_ID),
+                                 reauth_of=["e-app"])
+    assert flow.hass.config_entries.updates == [] and flows.aborted == [] and flows.reloads == []
+
+
+@pytest.mark.parametrize("source", ["zeroconf", "user", "import"])
+def test_never_applied_to_an_entry_found_by_zeroconf_or_added_by_hand(source):
+    """The same agent at the box's LAN address (zeroconf, the user step, the
+    panel's Add), matched by agent_id: its password stays its own."""
+    entry = _entry("e-lan", f"{LAN}:9099", LAN, 9099, source=source, agent_id=APP_ID,
+                   agent_hostname=APP, token="lan-pass")
+    agents = {f"{APP}:9099": (APP, ["SER-H1"], "", {"agent_id": APP_ID})}
+    flow, flows, result = _rediscover([entry], agents, _info(token="app-pass", agent_id=APP_ID))
+    assert result["reason"] == "already_configured"
+    assert entry.data["token"] == "lan-pass"
+    assert flow.hass.config_entries.updates == [] and flows.reloads == []
+
+
+@pytest.mark.parametrize("source", ["zeroconf", "user"])
+def test_never_applied_by_address_to_an_entry_added_by_hand(source):
+    """Added by hand at the App's own container address: still not the
+    App's discovery entry, so it keeps its own password (and asks for a new
+    one through reauth, like any other entry)."""
+    entry = _entry("e-hand", f"{APP}:9099", APP, 9099, source=source, token="typed")
+    flow, flows, result = _rediscover([entry], {f"{APP}:9099": (APP, ["SER-H1"], "")},
+                                      _info(token="app-pass"))
+    assert result["reason"] == "already_configured"
+    assert entry.data["token"] == "typed"
+
+
+def test_the_apps_old_replica_never_takes_the_password():
+    replica = _entry("e-rep", f"{APP}:9100", APP, 9100, source=SOURCE_HASSIO, agent_mock=True,
+                     app_slug="0449a086_smart_sniffer_agent", token="")
+    flow, flows, result = _rediscover([replica], {f"{APP}:9100": (APP, ["MOCK-1"], "")},
+                                      _info(port=9100, token="app-pass"))
+    assert replica.data["token"] == ""
+
+
+def test_is_app_own_entry():
+    from tests.test_config_flow_under_ha import config_flow
+
+    own = _own_entry()
+    assert config_flow.is_app_own_entry(own)
+    slug_only = _entry("e", "x", APP, source="user", app_slug="0449a086_smart_sniffer_agent")
+    assert config_flow.is_app_own_entry(slug_only)
+    assert not config_flow.is_app_own_entry(_entry("e", "x", APP, source="user"))
+    assert not config_flow.is_app_own_entry(_entry("e", "x", LAN, source="zeroconf",
+                                                   agent_hostname=APP))
+    assert not config_flow.is_app_own_entry(
+        _entry("r", "replica", "replica.invalid", source=SOURCE_HASSIO, kind="replica"))
