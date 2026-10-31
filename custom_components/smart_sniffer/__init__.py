@@ -49,7 +49,7 @@ from .source import agent_address, is_replica_data
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.UPDATE]
 
 # Set up only from config entries; no YAML.
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)

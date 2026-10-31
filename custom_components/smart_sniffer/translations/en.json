@@ -153,6 +153,10 @@
     "agent_outdated": {
       "title": "SMART Sniffer: Update agent on {hostname} (v{current_version} → v{min_version})",
       "description": "The agent on **{hostname}** is running version **{current_version}**, but this integration requires at least **{min_version}**.\n\nTo update, SSH into the host and run:\n```\ncurl -sSL {install_url} | sudo bash\n```\nThe installer will detect the existing installation and upgrade in place. This repair will clear automatically once the agent reports a compatible version."
+    },
+    "agent_update_available": {
+      "title": "SMART Sniffer: agent update available on {hostname} (v{current_version} to v{latest_version})",
+      "description": "The agent on **{hostname}** runs version **{current_version}**. Version **{latest_version}** is available.\n\nThis agent still works with the integration. To update, open the agent's **Agent Update** entity under its device: it shows the install command for that machine. Home Assistant does not install agents. This notice clears by itself once the agent reports the new version."
     }
   },
   "exceptions": {
@@ -173,6 +177,11 @@
     }
   },
   "entity": {
+    "update": {
+      "agent": {
+        "name": "Agent Update"
+      }
+    },
     "sensor": {
       "data_written": {
         "name": "Data Written"

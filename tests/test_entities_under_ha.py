@@ -732,7 +732,7 @@ def _identity_coordinator(monkeypatch, health, data=None):
     )
     coord._other_agent_logged = False
     coord.registered_pool_names = lambda: []
-    coord._check_agent_version = lambda version: None
+    coord._check_agent_version = lambda version, health=None: None
     return coord
 
 

@@ -18,11 +18,25 @@ DEFAULT_FORCE_UPDATE = False
 # agent-side changes.  The coordinator checks this every poll cycle and raises
 # a HA repair notification when the running agent is older.
 MIN_AGENT_VERSION = "0.4.28"
+# The newest agent release (v1.0, #68). Each agent's update entity offers it,
+# and an agent behind it gets a gentle repair notice. Not the integration's
+# own version: an integration-only release must not ask everyone to
+# reinstall every agent. BUMP THIS (and LATEST_AGENT_NOTES) IN ANY RELEASE
+# THAT CHANGES THE AGENT, and only then.
+LATEST_AGENT_VERSION = "1.0.0"
+# What that release brings, in one short line: the start of the update
+# entity's summary (Home Assistant keeps 255 characters of it in all).
+LATEST_AGENT_NOTES = "Slows down repeated wrong passwords and reports when it runs in a container."
 AGENT_RELEASES_URL = "https://github.com/DAB-LABS/smart-sniffer/releases"
 # Supplied to the agent_outdated repair notice as a translation placeholder.
 # Home Assistant's validator rejects a URL written into a translation string,
 # so the text carries {install_url} and this is what fills it.
 AGENT_INSTALL_URL = "https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh"
+AGENT_INSTALL_PS1_URL = "https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.ps1"
+# Where an agent that is neither a plain Linux, macOS nor Windows install
+# (Docker, an unknown OS) is told to look.
+AGENT_INSTALL_DOCS_URL = "https://github.com/DAB-LABS/smart-sniffer#quick-start"
+AGENT_DOCKER_DOCS_URL = "https://github.com/DAB-LABS/smart-sniffer/blob/main/docs/guides/docker.md"
 
 # Key under hass.data[DOMAIN][entry_id] holding the agent device's registry
 # id, which drive and filesystem devices point at with via_device_id.

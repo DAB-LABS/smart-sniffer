@@ -72,6 +72,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .agent_identity import ENTRY_AGENT_HOSTNAME, identity_changes, norm_host
+from .agent_update import agent_behind
 from .agent_version import agent_is_outdated, display_version
 from .attention import (
     SEVERITY_CRITICAL,
@@ -89,6 +90,7 @@ from .const import (
     CONF_TOKEN,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    LATEST_AGENT_VERSION,
     MIN_AGENT_VERSION,
     POOLS_KEY,
     POOLS_MISSING_KEY,
@@ -103,7 +105,7 @@ from .devstat import (
     merge_devstat,
     normalize_store,
 )
-from .host_name import app_kind_change, entry_host, legacy_host
+from .host_name import app_kind_change, entry_host, is_app_entry, legacy_host
 from .entity_plan import DriveClass, EntitySpec, forget_device as forget_created
 from .smart_presence import EVENT_BACK, EVENT_LOST, SmartPresence
 from .source import REPLICA_LABEL, agent_address, agent_port, is_replica_data
@@ -263,20 +265,32 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return {"Authorization": f"Bearer {self.token}"}
         return {}
 
-    def _check_agent_version(self, agent_version: str) -> None:
-        """Create or clear a HA repair issue based on agent version. Never
-        for the Replica, which is no agent to update."""
+    def _check_agent_version(self, agent_version: str,
+                             health: dict[str, Any] | None = None) -> None:
+        """Create or clear the repair issues about the agent's version. Never
+        for the Replica, which is no agent to update.
+
+        - agent_outdated (an error): below MIN_AGENT_VERSION, or no version
+          read; the integration may not work with it.
+        - agent_update_available (a warning, v1.0, #68): at or above the
+          minimum but behind LATEST_AGENT_VERSION. Not for the SMART Sniffer
+          App's agent, which the Supervisor updates with the App. The
+          agent's update entity (update.py) gives that machine's command.
+        Only one of the two at a time.
+        """
         if getattr(self, "_replica", None) is not None:
             return
         issue_id = f"agent_outdated_{self.host}"
+        update_id = f"agent_update_available_{self.host}"
 
         if not agent_version or agent_is_outdated(agent_version, MIN_AGENT_VERSION):
+            async_delete_issue(self.hass, DOMAIN, update_id)
             async_create_issue(
                 self.hass,
                 domain=DOMAIN,
                 issue_id=issue_id,
                 is_fixable=False,
-                severity=IssueSeverity.WARNING,
+                severity=IssueSeverity.ERROR,
                 translation_key="agent_outdated",
                 translation_placeholders={
                     "hostname": self._hostname,
@@ -286,8 +300,28 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 },
                 learn_more_url=AGENT_RELEASES_URL,
             )
+            return
+        async_delete_issue(self.hass, DOMAIN, issue_id)
+        entry = self.config_entry
+        app_agent = is_app_entry(entry.data, entry.title, (health or {}).get("hostname"),
+                                 source=getattr(entry, "source", None))
+        if agent_behind(agent_version) and not app_agent:
+            async_create_issue(
+                self.hass,
+                domain=DOMAIN,
+                issue_id=update_id,
+                is_fixable=False,
+                severity=IssueSeverity.WARNING,
+                translation_key="agent_update_available",
+                translation_placeholders={
+                    "hostname": self.notice_host,
+                    "current_version": display_version(agent_version),
+                    "latest_version": LATEST_AGENT_VERSION,
+                },
+                learn_more_url=AGENT_RELEASES_URL,
+            )
         else:
-            async_delete_issue(self.hass, DOMAIN, issue_id)
+            async_delete_issue(self.hass, DOMAIN, update_id)
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch drive list, then full details per drive.
@@ -347,7 +381,7 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 agent_version = ""
                 health = None
 
-            self._check_agent_version(agent_version)
+            self._check_agent_version(agent_version, health)
 
             # Fetch filesystem usage data when the agent supports it.
             # Older agents (pre-0.5.0) won't advertise filesystems in
@@ -742,6 +776,9 @@ class AgentHealthCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_hostname: str = ""
         self._last_os_name: str = ""
         self._last_os_version: str = ""
+        # Whether the agent runs in a container (v1.0 agents; False from
+        # older ones): its update notice points to the docs, not a command.
+        self._last_container: bool = False
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Ping the agent health endpoint. Never raises UpdateFailed."""
@@ -770,6 +807,7 @@ class AgentHealthCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._last_hostname = _text(data.get("hostname"))
             self._last_os_name = _text(data.get("os_name"))
             self._last_os_version = _text(data.get("os_version"))
+            self._last_container = data.get("container") is True
             return {
                 "connected": True,
                 "version": self._last_version,
@@ -788,12 +826,13 @@ class AgentHealthCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 **self._identity(),
             }
 
-    def _identity(self) -> dict[str, str]:
+    def _identity(self) -> dict[str, Any]:
         """The agent's host name and OS name, last known."""
         return {
             "hostname": self._last_hostname,
             "os_name": self._last_os_name,
             "os_version": self._last_os_version,
+            "container": self._last_container,
         }
 
 
