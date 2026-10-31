@@ -829,7 +829,88 @@ async def ws_import_discard(hass: HomeAssistant, connection: Any, msg: dict[str,
     connection.send_result(msg["id"], {"discarded": msg["item_id"]})
 
 
-APP_COMMANDS = (ws_app_import, ws_app_import_result)
+# ── The App reads this box's thresholds (v1.0, #11) ──────────────────────────
+#
+# smart_sniffer/app/thresholds {agent_id?, host?, port?}: the per-drive
+# thresholds of this App's own entry (matched as smart_sniffer/info matches
+# it: the agent_id the App reports, the App's agent entry, the address), so
+# the App's page judges its drives by the same numbers as the integration.
+# Read only, and for the App only (an admin that is a system user), exactly
+# like app/import.
+#
+# Answer: {"entry_id", "thresholds", "drives"}, entry_id None when no entry
+# here is this box's agent (both maps empty then):
+#   thresholds  {card id: {label: int}}, the shape the App keeps its own
+#               options in: card id "self|<card key>", the card key being the
+#               drive's serial, else "id:<drive id>" (proxy.drive_card_key).
+#   drives      the same {label: int} by the agent's drive id.
+# Only overrides are listed (values that differ from the defaults, as stored);
+# a drive with none is left out. No secrets.
+
+APP_SELF = "self"  # the App's key for its own box in a card id
+
+
+def _drive_serials(hass: HomeAssistant, entry) -> dict[str, str]:
+    """Drive id -> serial, from the last poll, else from the drive devices."""
+    found: dict[str, str] = {}
+    coordinator = ((hass.data.get(DOMAIN) or {}).get(entry.entry_id) or {}).get("coordinator")
+    for drive_id, drive in (getattr(coordinator, "data", None) or {}).items():
+        serial = drive.get("serial") if isinstance(drive, dict) else None
+        if not str(drive_id).startswith("_") and isinstance(serial, str) and serial.strip():
+            found[str(drive_id)] = serial.strip()
+    registry = dr.async_get(hass)
+    for device in dr.async_entries_for_config_entry(registry, entry.entry_id):
+        serial = device.serial_number
+        if not (isinstance(serial, str) and serial.strip()):
+            continue
+        for domain, ident in device.identifiers:
+            if domain == DOMAIN and ident not in found:
+                found[ident] = serial.strip()
+    return found
+
+
+def app_thresholds(hass: HomeAssistant, agent_id: Any = None, host: Any = None,
+                   port: Any = None) -> dict[str, Any]:
+    from .attention import get_thresholds  # noqa: PLC0415
+    from .panel_view import card_id, clean_overrides  # noqa: PLC0415
+    from .panel_ws import haos_entry  # noqa: PLC0415
+
+    entry = haos_entry(hass, agent_id, host, port)
+    if entry is None:
+        return {"entry_id": None, "thresholds": {}, "drives": {}}
+    stored = entry.data.get("thresholds") or {}
+    serials = _drive_serials(hass, entry)
+    by_card: dict[str, dict[str, int]] = {}
+    by_drive: dict[str, dict[str, int]] = {}
+    for drive_id in stored if isinstance(stored, dict) else {}:
+        overrides = clean_overrides(get_thresholds(entry, drive_id))
+        if not overrides:
+            continue
+        by_drive[str(drive_id)] = overrides
+        key = serials.get(str(drive_id)) or f"id:{drive_id}"
+        by_card[card_id(APP_SELF, key)] = dict(overrides)
+    return {"entry_id": entry.entry_id, "thresholds": by_card, "drives": by_drive}
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "smart_sniffer/app/thresholds",
+    vol.Optional("agent_id"): vol.All(cv.string, vol.Length(max=64)),
+    vol.Optional("host"): vol.All(cv.string, vol.Length(max=253)),
+    vol.Optional("port"): cv.port,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_app_thresholds(hass: HomeAssistant, connection: Any, msg: dict[str, Any]) -> None:
+    """This box's thresholds, for the App's page."""
+    if not is_system_user(connection.user):
+        connection.send_error(msg["id"], "unauthorized", "Only the SMART Sniffer App, through "
+                                                         "the Supervisor")
+        return
+    connection.send_result(msg["id"], app_thresholds(
+        hass, msg.get("agent_id"), msg.get("host"), msg.get("port")))
+
+
+APP_COMMANDS = (ws_app_import, ws_app_import_result, ws_app_thresholds)
 PANEL_COMMANDS = (ws_import_dismiss, ws_import_discard)
 
 

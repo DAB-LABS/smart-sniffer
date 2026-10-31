@@ -632,6 +632,8 @@ def ws_smart_sniffer_info(hass: HomeAssistant, connection: Any, msg: dict[str, A
         # The App's field machines can be handed over (panel_import.py),
         # version 1 of that exchange.
         "app_import": 1,
+        # smart_sniffer/app/thresholds answers (v1.0, panel_import.py).
+        "app_thresholds": 1,
     })
 
 
