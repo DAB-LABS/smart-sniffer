@@ -108,4 +108,4 @@ def test_long_notes_are_shortened_never_the_command():
 def test_public_text_rules():
     for text in (const.LATEST_AGENT_NOTES, release_summary("linux"), release_summary("windows"),
                  release_summary("linux", True), release_summary(None)):
-        assert "—" not in text and "–" not in text
+        assert "\u2014" not in text and "\u2013" not in text  # no em or en dashes
