@@ -191,6 +191,8 @@ class Backend:
             return out
 
         async def reauth(_hass, entry, password):
+            if password == "slow":  # a v1.0 agent slowing this address down
+                return "too_many_attempts"
             if password != "fieldpass":
                 return "invalid_auth"
             backend.board.reauth.discard(entry.entry_id)

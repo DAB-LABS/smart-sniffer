@@ -65,6 +65,15 @@ const WEAR_NAMES = ['Wear_Leveling_Count', 'Media_Wearout_Indicator', 'SSD_Life_
 const NVME_FIELDS = { critical_warning: 'critical_warning', media_errors: 'media_errors',
   available_spare: 'available_spare', wear: 'percentage_used' };
 const NONE = { kind: 'none', href: null };
+// A serial or WWN as a card shows it (v1.0): every character but the last 4
+// as a dot, all of them when there are 4 or fewer. A mask, never a blur
+// (a blur stays readable in a video). The popover shows the whole value.
+const MASK_DOT = '\u2022';
+const maskId = (value) => {
+  const chars = [...String(value ?? '')];
+  const keep = chars.length > 4 ? 4 : 0;
+  return MASK_DOT.repeat(chars.length - keep) + chars.slice(chars.length - keep).join('');
+};
 // NVMe health log helpers (v1.0, #12). smartctl adds "<key>_s" (the digits)
 // and, at or above 2^64, "<key>_le" (the bytes) beside a 128-bit counter.
 const NVME_LIMIT = 2n ** 64n;
@@ -1051,6 +1060,9 @@ function cc() {
       const e = this.devEntry(it, 7, 8);
       return e && typeof e.value === 'number' ? e.value : null;
     },
+    maskId(value) {
+      return maskId(value);
+    },
     smartOf(it) {
       return (it && it.drive && it.drive.smart_data) || {};
     },
@@ -1159,6 +1171,7 @@ function cc() {
     // The top of a drive's Details: what it is and how it is attached. A
     // field the drive's data does not have is left out. Model, serial and
     // firmware (t) open the exact-number popover with the full text and Copy.
+    // The serial shows masked (m) until then.
     ident(c) {
       const it = c.it || {};
       const d = it.drive || {};
@@ -1167,7 +1180,7 @@ function cc() {
       const model = d.model || sd.model_name;
       if (model) out.push({ k: 'Model', v: String(model), t: true });
       const serial = d.serial || sd.serial_number;
-      if (serial) out.push({ k: 'Serial', v: String(serial), t: true });
+      if (serial) out.push({ k: 'Serial', v: String(serial), t: true, m: maskId(serial) });
       if (sd.firmware_version) out.push({ k: 'Firmware', v: String(sd.firmware_version), t: true });
       const cap = (sd.user_capacity && sd.user_capacity.bytes) || sd.nvme_total_capacity;
       if (typeof cap === 'number' && cap > 0) out.push({ k: 'Capacity', v: this.bytes(cap), x: `${this.num(cap)} bytes` });

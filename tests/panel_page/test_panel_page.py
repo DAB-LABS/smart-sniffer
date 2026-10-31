@@ -369,6 +369,17 @@ def test_password_on_the_card_runs_reauth(page):
                   .filter(has_text="Health OK").count() == 1)
 
 
+def test_a_slowed_down_agent_says_wait_not_refused(page):
+    """v1.0 agents answer 429 after repeated wrong passwords."""
+    p = page()
+    card = p.card("BACKUP-PI")
+    card.locator("input[type=password]").fill("slow")
+    card.get_by_role("button", name="Authenticate").click()
+    assert p.wait(lambda: "try again in a minute" in card.inner_text())
+    assert "That password was refused." not in card.inner_text()
+    assert not p.errors, p.errors
+
+
 def test_plus_card_lists_discovered_agents_and_adds_them(page):
     p = page()
     p.frame.locator("button.card.ghost").click()
@@ -1168,11 +1179,16 @@ def _text_card(page, which, **kwargs):
 
 def _text_fields(card):
     """(label, value, trigger) for Model, Serial, Firmware, Host and Port,
-    the value as written (a model can hold two spaces)."""
+    the value as written (a model can hold two spaces). The serial shows
+    masked (v1.0); its whole value is the card key in the card's id."""
     out = []
     for row in card.locator("dl.kv.ident > div").all():
         label = row.locator("dt").inner_text()
-        if label in ("Model", "Serial", "Firmware"):
+        if label == "Serial":
+            serial = card.get_attribute("data-card").split("|", 1)[1]
+            assert row.locator("dd").text_content().strip() == _mask(serial)
+            out.append((label, serial, row.locator(".bign.txt")))
+        elif label in ("Model", "Firmware"):
             out.append((label, row.locator("dd").text_content().strip(), row.locator(".bign.txt")))
     for cp in card.locator(".conn .cp").all():
         out.append((cp.locator(".cp-k").inner_text(), cp.locator(".cp-v").text_content(), cp.locator(".bign.txt")))
@@ -1283,7 +1299,10 @@ def test_text_values_open_and_close_from_the_keyboard(page, which):
     pop = p.frame.locator(".numpop")
     for label, value, trigger in fields:
         assert trigger.get_attribute("role") == "button" and trigger.get_attribute("tabindex") == "0", label
-        assert trigger.get_attribute("aria-label") == f"{label} {value}"
+        # The serial is masked for screen readers too (v1.0): a screen
+        # recording can carry the spoken label.
+        assert trigger.get_attribute("aria-label") == (
+            f"Serial, masked: {_mask(value)}. Show" if label == "Serial" else f"{label} {value}")
         trigger.focus()
         assert trigger.evaluate("e => e === document.activeElement"), label
         for key in ("Enter", " "):
@@ -1519,4 +1538,84 @@ def test_the_laptop_drive_reads_healthy_on_its_card(page):
     card.locator(".h-ok").wait_for()
     assert card.locator(".h-att, .h-maybe").count() == 0
     assert "1449400005035951791936293027446784" not in card.inner_text()
+    assert not p.errors, p.errors
+
+
+# ── v1.0: serial numbers masked on the cards ──────────────────────────────
+# People share screenshots and videos of the Control Center. A card shows a
+# serial masked to its last 4 characters (a mask, not a blur); a click or
+# tap opens the popover with the whole value and Copy. No hover reveal.
+
+
+def _mask(value):
+    keep = 4 if len(value) > 4 else 0
+    return "\u2022" * (len(value) - keep) + value[len(value) - keep:]
+
+
+def _page_mask(p, value):
+    return p.doc.evaluate("v => Alpine.$data(document.querySelector('main.page')).maskId(v)", value)
+
+
+@pytest.mark.parametrize(("value", "shown"), [
+    ("S12R00000000042A", "\u2022" * 12 + "042A"),
+    ("S12R0000042A", "\u2022" * 8 + "042A"),
+    ("12345", "\u2022" + "2345"),
+    ("ABCD", "\u2022" * 4),
+    ("ABC", "\u2022" * 3),
+    ("", ""),
+])
+def test_the_mask_function(page, value, shown):
+    p = page()
+    assert _page_mask(p, value) == shown == _mask(value)
+
+
+@pytest.mark.parametrize("touch", [False, True])
+def test_the_card_shows_the_serial_masked_and_the_popover_the_whole(page, touch):
+    p = page(width=390 if touch else 1280, touch=touch)
+    _post(p.base, "/fake/control", {"action": "drive", "entry_id": "01NAS00000000000000000000B",
+                                    "fixture": "v100/hp_laptop_nvme_drive.json"})
+    _clip(p)
+    card = p.card(HP_MODEL)
+    _open(card)
+    row = card.locator("dl.kv.ident > div", has=p.frame.locator("dt", has_text="Serial"))
+    trigger = row.locator(".bign.txt")
+    assert trigger.inner_text() == "\u2022" * 16 + "0001"
+    assert "FIXTURE" not in card.inner_text() and "FIXTURE" not in (trigger.get_attribute("aria-label") or "")
+    # No hover reveal.
+    if not touch:
+        trigger.hover()
+        assert trigger.inner_text() == "\u2022" * 16 + "0001"
+        assert p.frame.locator(".numpop").count() == 0
+    # A click or tap: the whole value, and Copy copies the whole value.
+    if touch:
+        trigger.tap()
+    else:
+        trigger.click()
+    pop = p.frame.locator(".numpop")
+    pop.wait_for()
+    assert pop.locator(".cp-v").text_content() == "FIXTURE-HP-NVME-0001"
+    pop.locator("button.copy").click()
+    assert p.wait(lambda: pop.locator(".copied").is_visible())
+    assert p.page.evaluate("navigator.clipboard.readText()") == "FIXTURE-HP-NVME-0001"
+    # Closed again, the card still shows the mask.
+    trigger.click()
+    assert p.wait(lambda: pop.count() == 0)
+    assert trigger.inner_text() == "\u2022" * 16 + "0001"
+    assert not p.errors, p.errors
+
+
+def test_no_serial_shows_whole_on_any_card(page):
+    p = page()
+    p.frame.locator("article.card").first.wait_for()
+    cards = p.frame.locator("article.card")
+    for i in range(cards.count()):
+        card = cards.nth(i)
+        if card.locator("button.chev").count():
+            _open(card)
+    text = p.frame.locator("main.page").first.inner_text()
+    serials = re.findall(r'\|([A-Z0-9-]{6,})"', p.frame.locator("main.page").first.inner_html())
+    assert len(serials) >= 5, serials
+    for serial in serials:
+        assert serial not in text, serial
+        assert serial[-4:] in text, serial
     assert not p.errors, p.errors

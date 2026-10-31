@@ -65,7 +65,8 @@ Key behaviors:
   verdict, pool and filesystem, with a field guide. Also served at
   GET /api/smart_sniffer/agentic.json for admin users (long-lived access token as a
   Bearer header); ?fresh=1 polls every agent first, ?download=1 sets a file name.
-  Never contains agent tokens.
+  Never contains agent tokens. Keeps full serial numbers on purpose; the cards show
+  serials masked to their last 4 characters (v1.0).
 - Passwords (v0.9+): the token is checked when an agent is added; a 401 later starts
   HA's re-authentication flow instead of failing every poll.
 - Supervisor discovery (v0.9+): the SMART Sniffer App 0.4.0 posts a "smart_sniffer"

@@ -296,7 +296,7 @@ curl -H "Authorization: Bearer YOUR_LONG_LIVED_TOKEN" \
   "http://homeassistant.local:8123/api/smart_sniffer/agentic.json"
 ```
 
-The document includes serial numbers, host names and addresses, so share it only with people and tools you trust. It never includes agent passwords.
+The document includes full serial numbers, host names and addresses, on purpose (the cards show serials masked to their last 4 characters, so screenshots are safe to share), so share the document only with people and tools you trust. It never includes agent passwords.
 
 ## NAS & RAID setup
 
