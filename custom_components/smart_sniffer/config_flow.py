@@ -754,9 +754,9 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
             self._update_token(existing, sent_token)
             return self.async_abort(reason="already_configured")
         await self.async_set_unique_id(f"{host}:{port}")
-        same_id = next((entry for entry in self._async_current_entries(include_ignore=False)
-                        if entry.unique_id == self.unique_id), None)
-        if same_id is not None:
+        same_id = self.hass.config_entries.async_entry_for_domain_unique_id(
+            DOMAIN, self.unique_id)
+        if same_id is not None and same_id.source != "ignore":
             self._update_token(same_id, sent_token)
         self._abort_if_unique_id_configured()
         existing = await self._entry_at(host, port)

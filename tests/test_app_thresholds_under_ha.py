@@ -50,7 +50,7 @@ def _drive_ids(board, entry_id):
 
 def _set(hass, entry_id, thresholds):
     entry = hass.config_entries.async_get_entry(entry_id)
-    entry.data = {**entry.data, "thresholds": thresholds}
+    hass.config_entries.async_update_entry(entry, data={**entry.data, "thresholds": thresholds})
 
 
 async def ask(hass, conn=None, **fields):

@@ -295,7 +295,7 @@ def test_smart_sniffer_info_for_the_app(tmp_path, monkeypatch):
         result = await call_info(hass, conn)
         assert result == {"version": H.panel_data.VERSION, "panel": False,
                           "panel_path": "/smart-sniffer", "haos_entry": True,
-                          "app_import": 1}
+                          "app_import": 1, "app_thresholds": 1}
         hass.data["smart_sniffer_panel_setup"] = True
         assert (await call_info(hass, H.FakeConnection(hass)))["panel"] is True
         viewer = H.FakeConnection(hass, admin=False)
@@ -542,9 +542,10 @@ def test_panel_registered_once_per_run(tmp_path, monkeypatch, new_api):
         url, path, _cache = hass.http.calls[0][1][0]
         assert url == "/smart_sniffer_static" and path.endswith("smart_sniffer/panel")
         assert commands.count("smart_sniffer/info") == 1
-        # The panel's 30, info, and the App handover's 4 (2 for the App, 2
-        # for the panel's report line).
-        assert len(commands) == 35
+        # The panel's 30, info, and the App's 5 (import, its result and
+        # thresholds for the App, 2 for the panel's report line).
+        assert len(commands) == 36
+        assert commands.count("smart_sniffer/app/thresholds") == 1
         assert commands.count("smart_sniffer/app/import") == 1
         assert hass.http.views == ["/api/smart_sniffer/replica/upload",
                                    "/api/smart_sniffer/agentic.json"]
