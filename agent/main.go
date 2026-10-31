@@ -142,6 +142,7 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 
 	// --- Host OS name for /api/health, read once ---
 	agentSystem = loadSystemInfo(cfg.MountPrefix)
+	agentInContainer = inContainer(cfg.MountPrefix, fileExists)
 	if agentSystem.Name != "" {
 		log.Printf("OS: %s", agentSystem.Name)
 	}
@@ -547,6 +548,7 @@ type healthResponse struct {
 	Pools       *int     `json:"pools,omitempty"`        // present only when ZFS pool status is on and the last read succeeded
 	PoolsStatus string   `json:"pools_status,omitempty"` // pending, ok or failed; present only when ZFS pool status is on
 	AgentID     string   `json:"agent_id,omitempty"`     // random ID saved next to the config; omitted when it could not be saved
+	Container   bool     `json:"container,omitempty"`    // v1.0: true when the agent runs in a container (Docker, Podman); omitted otherwise
 }
 
 // handleHealth serves GET /api/health — includes available endpoints and counts.
@@ -589,6 +591,7 @@ func handleHealth(cache *DriveCache) http.HandlerFunc {
 			Pools:       poolCount,
 			PoolsStatus: poolsStatus,
 			AgentID:     agentID,
+			Container:   agentInContainer,
 		}
 
 		w.Header().Set("Content-Type", "application/json")

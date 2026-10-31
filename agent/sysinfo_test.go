@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -134,4 +135,40 @@ func healthJSON(t *testing.T, dc *DriveCache) map[string]json.RawMessage {
 		t.Fatal(err)
 	}
 	return out
+}
+
+func TestInContainer(t *testing.T) {
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		t.Skip("never a container on macOS or Windows")
+	}
+	none := func(string) bool { return false }
+	if inContainer("", none) {
+		t.Error("no prefix, no marker: not a container")
+	}
+	if !inContainer("/host", none) {
+		t.Error("a host mount root is the documented Docker setup")
+	}
+	for _, marker := range containerMarkers {
+		only := func(p string) bool { return p == marker }
+		if !inContainer("", only) {
+			t.Errorf("%s marks a container", marker)
+		}
+	}
+}
+
+func TestHealthSaysContainerOnlyWhenTrue(t *testing.T) {
+	saved := agentInContainer
+	t.Cleanup(func() { agentInContainer = saved })
+	dc := NewDriveCache(&Config{ScanInterval: time.Minute})
+
+	agentInContainer = true
+	out := healthJSON(t, dc)
+	var container bool
+	if err := json.Unmarshal(out["container"], &container); err != nil || !container {
+		t.Errorf("container = %s, want true", out["container"])
+	}
+	agentInContainer = false
+	if _, ok := healthJSON(t, dc)["container"]; ok {
+		t.Error("container present when false")
+	}
 }

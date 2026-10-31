@@ -28,6 +28,10 @@ type systemInfo struct {
 // read afterwards.
 var agentSystem systemInfo
 
+// agentInContainer (v1.0) is set with agentSystem: the agent runs in a
+// container, so it is updated by rebuilding it, not by the installer.
+var agentInContainer bool
+
 // cmdRunner runs a command with a timeout and returns its standard output.
 // Injectable so tests never run sw_vers or diskutil.
 type cmdRunner func(name string, args []string, timeout time.Duration) ([]byte, error)
@@ -70,6 +74,34 @@ func loadSystemInfo(mountPrefix string) systemInfo {
 	default:
 		return osReleaseInfo(mountPrefix)
 	}
+}
+
+// containerMarkers are files a container runtime leaves at the root: Docker's
+// and Podman's.
+var containerMarkers = []string{"/.dockerenv", "/run/.containerenv"}
+
+// inContainer reports whether the agent runs in a container: it was given a
+// host mount root (the documented Docker setup), or a runtime's marker file
+// is there. Home Assistant tells such an agent's users to update it the way
+// it was built, not with the installer.
+func inContainer(mountPrefix string, exists func(string) bool) bool {
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		return false
+	}
+	if mountPrefix != "" {
+		return true
+	}
+	for _, p := range containerMarkers {
+		if exists(p) {
+			return true
+		}
+	}
+	return false
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // osReleaseInfo reads os-release, trying the host's copy under mountPrefix
