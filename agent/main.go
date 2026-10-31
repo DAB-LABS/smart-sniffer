@@ -493,6 +493,12 @@ func newHTTPServer(addr string, handler http.Handler) *http.Server {
 }
 
 func authMiddleware(token string, next http.Handler) http.Handler {
+	return authMiddlewareWith(token, newAuthLimiter(), next)
+}
+
+// authMiddlewareWith checks the password, slowing down an IP that keeps
+// getting it wrong (auth_limit.go).
+func authMiddlewareWith(token string, limiter *authLimiter, next http.Handler) http.Handler {
 	expected := []byte("Bearer " + token)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Health endpoint is always public -- Supervisor watchdog,
@@ -501,13 +507,23 @@ func authMiddleware(token string, next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		ip := clientIP(r)
+		if wait, left := limiter.blocked(ip); wait {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Retry-After", retryAfter(left))
+			w.WriteHeader(http.StatusTooManyRequests)
+			w.Write([]byte(`{"error":"too_many_attempts"}`))
+			return
+		}
 		auth := []byte(r.Header.Get("Authorization"))
 		if subtle.ConstantTimeCompare(auth, expected) != 1 {
+			limiter.fail(ip)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(`{"error":"unauthorized"}`))
 			return
 		}
+		limiter.succeed(ip)
 		next.ServeHTTP(w, r)
 	})
 }
