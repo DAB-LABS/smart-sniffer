@@ -12,9 +12,13 @@ counts toward Attention. No per-model lists.
 from __future__ import annotations
 
 import importlib
+import json
 import logging
+from pathlib import Path
 
-from custom_components.smart_sniffer.attention import NVME_COUNTER_LIMIT, nvme_counter
+import pytest
+
+from custom_components.smart_sniffer.attention import NVME_COUNTER_LIMIT, NVME_COUNTERS, nvme_counter
 
 extract = importlib.import_module("custom_components.smart_sniffer.extract")
 
@@ -134,3 +138,58 @@ def test_the_media_errors_sensor_still_reads_a_count(drive):
     payload = drive("nvme_media_errors")
     assert extract._extract_attribute(payload, "media_errors") == 3
     assert extract._extract_attribute(payload, "reported_uncorrectable_errors") == 3
+
+
+# --- the HP laptop, as its agent sends it (v1.0, #12) ----------------------------
+#
+# fixtures/v100/hp_laptop_nvme_drive.json is the Windows test laptop agent's
+# /api/drives/{id} answer, read 2026-10-31 (agent 0.9.2, smartctl 7.5),
+# whole: serial, drive id and EUI-64 blanked, nothing else changed. Its
+# media_errors carries the 14-byte "_le" form of 18294 << 96 (the next
+# field, num_err_log_entries, bleeding in).
+
+
+HP = Path(__file__).resolve().parent / "fixtures" / "v100" / "hp_laptop_nvme_drive.json"
+
+
+@pytest.fixture
+def hp():
+    return json.loads(HP.read_text())
+
+
+def test_the_fixture_is_the_laptop_pattern_with_no_identifiers(hp):
+    log = hp["smart_data"]["nvme_smart_health_information_log"]
+    assert log["media_errors"] >= NVME_COUNTER_LIMIT
+    assert log["media_errors_le"][12:] == [118, 71] and not any(log["media_errors_le"][:12])
+    assert log["num_err_log_entries"] == 18294 == 71 * 256 + 118
+    assert hp["serial"] == hp["smart_data"]["serial_number"] == "FIXTURE-HP-NVME-0001"
+    assert hp["id"].startswith("fixture-")
+    assert not any(hp["smart_data"]["nvme_namespaces"][0]["eui64"].values())
+
+
+def test_the_laptop_drive_is_healthy_and_media_errors_unknown(att, hp):
+    state, severity, reasons, _ = att.evaluate_attention(hp)
+    assert (state, severity, reasons) == ("NO", "none", [])
+    assert extract._extract_attribute(hp, "media_errors") is None
+    assert extract._extract_attribute(hp, "reported_uncorrectable_errors") is None
+    assert extract._extract_attribute(hp, "power_on_hours") == 10793
+    assert extract._extract_attribute(hp, "power_cycle_count") == 152
+    assert extract._extract_attribute(hp, "available_spare") == 95
+
+
+@pytest.mark.parametrize("key", sorted(NVME_COUNTERS))
+def test_every_128_bit_counter_follows_the_one_rule(key):
+    assert nvme_counter({key: 7}, key) == 7
+    assert nvme_counter({key: 7, f"{key}_le": [7] + [0] * 15}, key) is None
+    assert nvme_counter({key: float(NVME_COUNTER_LIMIT)}, key) is None
+
+
+@pytest.mark.parametrize(("key", "field"), [("power_on_hours", "power_on_hours"),
+                                            ("power_cycle_count", "power_cycles")])
+def test_an_impossible_hours_or_cycles_counter_reads_unknown(hp, key, field):
+    log = hp["smart_data"]["nvme_smart_health_information_log"]
+    log[field] = 1449400005035951791936293027446784
+    log[f"{field}_s"] = "1449400005035951791936293027446784"
+    log[f"{field}_le"] = [0] * 12 + [118, 71]
+    # Not the number, and not smartctl's top-level copy either.
+    assert extract._extract_attribute(hp, key) is None

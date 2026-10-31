@@ -65,6 +65,22 @@ const WEAR_NAMES = ['Wear_Leveling_Count', 'Media_Wearout_Indicator', 'SSD_Life_
 const NVME_FIELDS = { critical_warning: 'critical_warning', media_errors: 'media_errors',
   available_spare: 'available_spare', wear: 'percentage_used' };
 const NONE = { kind: 'none', href: null };
+// NVMe health log helpers (v1.0, #12). smartctl adds "<key>_s" (the digits)
+// and, at or above 2^64, "<key>_le" (the bytes) beside a 128-bit counter.
+const NVME_LIMIT = 2n ** 64n;
+const nvmeHelper = (log, k) => {
+  const m = /^(.+)_(s|le)$/.exec(k);
+  return Boolean(m && Object.prototype.hasOwnProperty.call(log, m[1]));
+};
+// A counter that cannot be real: its "_le" form is there, or it is at or
+// above 2^64 (in its digits, or as the number JSON gave).
+const nvmeUnreadable = (log, k) => {
+  if (Object.prototype.hasOwnProperty.call(log, `${k}_le`)) return true;
+  const digits = log[`${k}_s`];
+  if (typeof digits === 'string' && /^\d+$/.test(digits) && BigInt(digits) >= NVME_LIMIT) return true;
+  const v = log[k];
+  return typeof v === 'number' && v >= 2 ** 64;
+};
 const COMPARE_WORDS = { gt: 'alert above', ge: 'alert at', lt: 'alert below' };
 const LONG_PRESS_MS = 450;
 const ARM_MS = 4000; // how long the trash's Remove? waits for its second click
@@ -1019,7 +1035,7 @@ function cc() {
       const sd = this.smartOf(it);
       const log = sd.nvme_smart_health_information_log;
       const units = log && log[`data_units_${which}`];
-      if (typeof units === 'number' && units >= 0) return units * 512000;
+      if (typeof units === 'number' && units >= 0 && !nvmeUnreadable(log, `data_units_${which}`)) return units * 512000;
       const id = which === 'written' ? 241 : 242;
       const a = ((sd.ata_smart_attributes || {}).table || []).find((x) => x.id === id && /LBA/i.test(String(x.name)));
       const raw = a && a.raw && a.raw.value;
@@ -1235,13 +1251,22 @@ function cc() {
       }
       if (kind === 'nvme') {
         const log = sd.nvme_smart_health_information_log || {};
-        Object.entries(log).forEach(([k, v]) => entries.push({
-          key: `n:${k}`, name: k, value: Array.isArray(v) ? v.join(' ') : String(v), mark: null, note: '',
-          field: k, rawValue: v,
-        }));
+        // smartctl's "<key>_s" (digits) and "<key>_le" (bytes) helpers are
+        // left out; a counter that cannot be real reads "not readable", as
+        // the integration reads it (v1.0, #12).
+        Object.entries(log).forEach(([k, v]) => {
+          if (nvmeHelper(log, k)) return;
+          const bad = nvmeUnreadable(log, k);
+          entries.push({
+            key: `n:${k}`, name: k, value: bad ? 'not readable' : Array.isArray(v) ? v.join(' ') : String(v),
+            mark: null, note: '', field: k, rawValue: bad ? null : v, unreadable: bad,
+          });
+        });
         this.rows(it).forEach((r) => {
-          const hit = r.value === 'not known' ? null : entries.find((e) => e.field === NVME_FIELDS[r.key]);
-          if (hit) place(r, hit); else extra(r, 1000);
+          const hit = entries.find((e) => e.field === NVME_FIELDS[r.key]);
+          if (!(hit && (r.value !== 'not known' || hit.unreadable))) { extra(r, 1000); return; }
+          place(r, hit);
+          if (hit.unreadable && hit.note === hit.value) hit.note = '';
         });
         extras.forEach((x) => entries.push(x));
         return { kind, rows: this.cleanRaw(kind, entries, sd) };

@@ -251,6 +251,16 @@ LABEL_NVME_SPARE_WARN = "NVMe Spare Warn Below"
 # Attention. One rule for every drive, no per-model exceptions.
 NVME_COUNTER_LIMIT = 1 << 64
 
+# The NVMe health log's 128-bit counters (NVMe base spec, SMART / Health
+# Information log): smartctl adds "<key>_s" (the digits) and, at or above
+# 2^64, "<key>_le" (the 16 bytes) to any of them. One rule for all of them
+# (nvme_counter), no per-model lists.
+NVME_COUNTERS = frozenset({
+    "data_units_read", "data_units_written", "host_reads", "host_writes",
+    "controller_busy_time", "power_cycles", "power_on_hours", "unsafe_shutdowns",
+    "media_errors", "num_err_log_entries",
+})
+
 # Drives already logged as unreadable (by id), so the debug line is written
 # once per drive per Home Assistant run rather than every poll.
 _UNREADABLE_LOGGED: set[str] = set()

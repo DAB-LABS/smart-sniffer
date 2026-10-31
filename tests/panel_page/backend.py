@@ -24,7 +24,8 @@ POST /fake/reset {"scenario": ...} starts a board afresh:
                 in the /share drop folder; the replicas-moved note set
 POST /fake/control {"action": ...}: down, up (a machine stops or starts
 answering), poll (a machine's new read pushed), fill (the Replica up to
-its caps).
+its caps), drive (a drive from a fixture file, {"fixture": "<path under
+tests/fixtures>"}, added to a machine's read).
 
 + > Replica is the integration's own: its library folders live in the
 test core's config folder (the drop folder in a temporary one), and the
@@ -359,6 +360,17 @@ class Backend:
             files = ["seed.sata-hdd-healthy"] * (12 - drives) + ["seed.zfs-pool-healthy"] * (4 - pools)
             if files:
                 await H.replica.async_add(self.hass, files)
+        elif action == "drive" and coord is not None:
+            # A drive as an agent sent it, from a fixture file (v1.0: the HP
+            # laptop's NVMe drive, #12), added to the machine's last read.
+            from homeassistant.helpers import device_registry as dr  # noqa: PLC0415
+
+            drive = json.loads((ROOT / "tests" / "fixtures" / body["fixture"]).read_text())
+            drive[H.devstat.DEVSTAT_KEY], _ = H.devstat.merge_devstat(drive, None)
+            coord.data = {**coord.data, drive["id"]: drive}
+            dr.async_get(self.hass).async_get_or_create(
+                config_entry_id=entry_id, identifiers={(H.DOMAIN, drive["id"])},
+                name=drive["model"], model=drive["model"], serial_number=drive["serial"])
         elif action == "up" and coord is not None:
             coord.last_update_success = True
             H.panel_data.panel_data(self.hass).read_at[entry_id] = H.panel_data.utc_text()

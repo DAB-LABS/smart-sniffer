@@ -270,8 +270,10 @@ def _extract_attribute(drive_data: dict[str, Any], key: str) -> Any | None:
     if nvme_log:
         nvme_map = {
             "temperature":                  lambda: nvme_log.get("temperature"),
-            "power_on_hours":               lambda: nvme_log.get("power_on_hours"),
-            "power_cycle_count":            lambda: nvme_log.get("power_cycles"),
+            # 128-bit counters (v1.0, #12): one that cannot be real reads
+            # as unknown, never as a number and never via the top-level copy.
+            "power_on_hours":               lambda: nvme_counter(nvme_log, "power_on_hours"),
+            "power_cycle_count":            lambda: nvme_counter(nvme_log, "power_cycles"),
             "wear_leveling_count":          lambda: nvme_log.get("percentage_used"),
             "reported_uncorrectable_errors":lambda: nvme_counter(nvme_log, "media_errors"),
             "critical_warning":             lambda: nvme_log.get("critical_warning"),

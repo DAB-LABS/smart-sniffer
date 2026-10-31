@@ -1471,3 +1471,52 @@ def test_the_menu_bar_makes_room_for_a_top_inset(page):
         assert r["y"] + r["height"] <= box["y"] + box["height"] + 1
     frame = p.page.locator("smart-sniffer-panel iframe").bounding_box()
     assert frame["y"] >= box["y"] + box["height"] - 1
+
+
+# ── v1.0: impossible NVMe values (#12) ────────────────────────────────────
+# The HP laptop's NVMe drive as its agent sent it (fixtures/v100): its
+# media_errors is the 16-byte "_le" pattern at or above 2^64. The card is
+# healthy, and Details list the health log without smartctl's "_s" and "_le"
+# helper fields, the counter reading "not readable", never as a number.
+
+HP_MODEL = "SAMSUNG MZVLQ512HBLU-00BH1"
+
+
+def _hp_page(page, width=1280):
+    p = page(width=width)
+    _post(p.base, "/fake/control", {"action": "drive", "entry_id": "01NAS00000000000000000000B",
+                                    "fixture": "v100/hp_laptop_nvme_drive.json"})
+    return p
+
+
+@pytest.mark.parametrize("width", [1280, 390])
+def test_nvme_details_hide_the_helper_fields_and_say_not_readable(page, width):
+    p = _hp_page(page, width)
+    card = p.card(HP_MODEL)
+    card.locator(".h-ok").wait_for()
+    _open(card)
+    table = card.locator("table.attrs.nvme")
+    table.wait_for()
+    names = table.locator("td.nm .lb").all_text_contents()
+    assert "media_errors" in names and "num_err_log_entries" in names, names
+    assert not [n for n in names if n.endswith("_s") or n.endswith("_le")], names
+    row = table.locator("tr", has=p.frame.locator("td.nm[title='media_errors']"))
+    assert row.locator("td.c-raw").inner_text().strip() == "not readable"
+    assert "crit" not in (row.get_attribute("class") or "")
+    text = table.inner_text()
+    for digits in ("1449400005035951791936293027446784", "1.449", "e+33", "e33"):
+        assert digits not in text, digits
+    # The counters beside it read as before.
+    hours = table.locator("tr", has=p.frame.locator("td.nm[title='power_on_hours']"))
+    assert hours.locator("td.c-raw").inner_text().strip() == "450 d"
+    assert p.doc.evaluate("document.documentElement.scrollWidth") <= width
+    assert not p.errors, p.errors
+
+
+def test_the_laptop_drive_reads_healthy_on_its_card(page):
+    p = _hp_page(page)
+    card = p.card(HP_MODEL)
+    card.locator(".h-ok").wait_for()
+    assert card.locator(".h-att, .h-maybe").count() == 0
+    assert "1449400005035951791936293027446784" not in card.inner_text()
+    assert not p.errors, p.errors

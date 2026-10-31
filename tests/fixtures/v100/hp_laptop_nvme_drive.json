@@ -1,0 +1,325 @@
+{
+ "id": "fixture-hp-nvme-0001",
+ "device_path": "/dev/sda",
+ "model": "SAMSUNG MZVLQ512HBLU-00BH1",
+ "serial": "FIXTURE-HP-NVME-0001",
+ "protocol": "NVMe",
+ "readable": true,
+ "last_updated": "2026-10-31T23:17:18Z",
+ "smart_data": {
+  "json_format_version": [
+   1,
+   0
+  ],
+  "smartctl": {
+   "version": [
+    7,
+    5
+   ],
+   "pre_release": false,
+   "svn_revision": "5714",
+   "platform_info": "x86_64-w64-mingw32-w11-b26200",
+   "build_info": "(AppVeyor)",
+   "argv": [
+    "smartctl",
+    "--json",
+    "-a",
+    "/dev/sda"
+   ],
+   "uint128_precision_bits": 128,
+   "exit_status": 0
+  },
+  "local_time": {
+   "time_t": 1793488638,
+   "asctime": "Sat Oct 31 16:17:18 2026 PDT"
+  },
+  "device": {
+   "name": "/dev/sda",
+   "info_name": "/dev/sda",
+   "type": "nvme",
+   "protocol": "NVMe"
+  },
+  "model_name": "SAMSUNG MZVLQ512HBLU-00BH1",
+  "serial_number": "FIXTURE-HP-NVME-0001",
+  "firmware_version": "HPS1NFAV",
+  "nvme_pci_vendor": {
+   "id": 5197,
+   "subsystem_id": 5197
+  },
+  "nvme_ieee_oui_identifier": 9528,
+  "nvme_total_capacity": 512110190592,
+  "nvme_unallocated_capacity": 0,
+  "nvme_controller_id": 5,
+  "nvme_version": {
+   "string": "1.4",
+   "value": 66560
+  },
+  "nvme_number_of_namespaces": 1,
+  "nvme_namespaces": [
+   {
+    "id": 1,
+    "size": {
+     "blocks": 1000215216,
+     "bytes": 512110190592
+    },
+    "capacity": {
+     "blocks": 1000215216,
+     "bytes": 512110190592
+    },
+    "utilization": {
+     "blocks": 528368472,
+     "bytes": 270524657664
+    },
+    "formatted_lba_size": 512,
+    "eui64": {
+     "oui": 0,
+     "ext_id": 0
+    },
+    "features": {
+     "value": 16,
+     "thin_provisioning": false,
+     "na_fields": false,
+     "dealloc_or_unwritten_block_error": false,
+     "uid_reuse": false,
+     "np_fields": true,
+     "other": 0
+    },
+    "lba_formats": [
+     {
+      "formatted": true,
+      "data_bytes": 512,
+      "metadata_bytes": 0,
+      "relative_performance": 0
+     },
+     {
+      "formatted": false,
+      "data_bytes": 4096,
+      "metadata_bytes": 0,
+      "relative_performance": 0
+     }
+    ]
+   }
+  ],
+  "user_capacity": {
+   "blocks": 1000215216,
+   "bytes": 512110190592
+  },
+  "logical_block_size": 512,
+  "smart_support": {
+   "available": true,
+   "enabled": true
+  },
+  "nvme_firmware_update_capabilities": {
+   "value": 22,
+   "slots": 3,
+   "first_slot_is_read_only": false,
+   "activiation_without_reset": true,
+   "multiple_update_detection": false,
+   "other": 0
+  },
+  "nvme_optional_admin_commands": {
+   "value": 23,
+   "security_send_receive": true,
+   "format_nvm": true,
+   "firmware_download": true,
+   "namespace_management": false,
+   "self_test": true,
+   "directives": false,
+   "mi_send_receive": false,
+   "virtualization_management": false,
+   "doorbell_buffer_config": false,
+   "get_lba_status": false,
+   "command_and_feature_lockdown": false,
+   "other": 0
+  },
+  "nvme_optional_nvm_commands": {
+   "value": 95,
+   "compare": true,
+   "write_uncorrectable": true,
+   "dataset_management": true,
+   "write_zeroes": true,
+   "save_select_feature_nonzero": true,
+   "reservations": false,
+   "timestamp": true,
+   "verify": false,
+   "copy": false,
+   "other": 0
+  },
+  "nvme_log_page_attributes": {
+   "value": 15,
+   "smart_health_per_namespace": true,
+   "commands_effects_log": true,
+   "extended_get_log_page_cmd": true,
+   "telemetry_log": true,
+   "persistent_event_log": false,
+   "supported_log_pages_log": false,
+   "telemetry_data_area_4": false,
+   "other": 0
+  },
+  "nvme_maximum_data_transfer_pages": 512,
+  "nvme_composite_temperature_threshold": {
+   "warning": 81,
+   "critical": 85
+  },
+  "temperature": {
+   "op_limit_max": 81,
+   "critical_limit_max": 85,
+   "current": 31
+  },
+  "nvme_power_states": [
+   {
+    "non_operational_state": false,
+    "relative_read_latency": 0,
+    "relative_read_throughput": 0,
+    "relative_write_latency": 0,
+    "relative_write_throughput": 0,
+    "entry_latency_us": 0,
+    "exit_latency_us": 0,
+    "max_power": {
+     "value": 536,
+     "scale": 2,
+     "units_per_watt": 100
+    }
+   },
+   {
+    "non_operational_state": false,
+    "relative_read_latency": 1,
+    "relative_read_throughput": 1,
+    "relative_write_latency": 1,
+    "relative_write_throughput": 1,
+    "entry_latency_us": 0,
+    "exit_latency_us": 0,
+    "max_power": {
+     "value": 447,
+     "scale": 2,
+     "units_per_watt": 100
+    }
+   },
+   {
+    "non_operational_state": false,
+    "relative_read_latency": 2,
+    "relative_read_throughput": 2,
+    "relative_write_latency": 2,
+    "relative_write_throughput": 2,
+    "entry_latency_us": 0,
+    "exit_latency_us": 500,
+    "max_power": {
+     "value": 223,
+     "scale": 2,
+     "units_per_watt": 100
+    }
+   },
+   {
+    "non_operational_state": true,
+    "relative_read_latency": 3,
+    "relative_read_throughput": 3,
+    "relative_write_latency": 3,
+    "relative_write_throughput": 3,
+    "entry_latency_us": 210,
+    "exit_latency_us": 1200,
+    "max_power": {
+     "value": 500,
+     "scale": 1,
+     "units_per_watt": 10000
+    }
+   },
+   {
+    "non_operational_state": true,
+    "relative_read_latency": 4,
+    "relative_read_throughput": 4,
+    "relative_write_latency": 4,
+    "relative_write_throughput": 4,
+    "entry_latency_us": 1000,
+    "exit_latency_us": 9000,
+    "max_power": {
+     "value": 50,
+     "scale": 1,
+     "units_per_watt": 10000
+    }
+   }
+  ],
+  "smart_status": {
+   "passed": true,
+   "nvme": {
+    "value": 0
+   }
+  },
+  "nvme_smart_health_information_log": {
+   "nsid": -1,
+   "critical_warning": 0,
+   "temperature": 31,
+   "available_spare": 95,
+   "available_spare_threshold": 5,
+   "percentage_used": 8,
+   "data_units_read": 120822297,
+   "data_units_written": 73183751,
+   "host_reads": 2549195722,
+   "host_writes": 1565132012,
+   "controller_busy_time": 12195,
+   "power_cycles": 152,
+   "power_on_hours": 10793,
+   "unsafe_shutdowns": 76,
+   "media_errors": 1449400005035951791936293027446784,
+   "media_errors_s": "1449400005035951791936293027446784",
+   "media_errors_le": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    118,
+    71
+   ],
+   "num_err_log_entries": 18294,
+   "warning_temp_time": 0,
+   "critical_comp_time": 0,
+   "temperature_sensors": [
+    31
+   ]
+  },
+  "spare_available": {
+   "current_percent": 95,
+   "threshold_percent": 5
+  },
+  "endurance_used": {
+   "current_percent": 8
+  },
+  "power_cycle_count": 152,
+  "power_on_time": {
+   "hours": 10793
+  },
+  "nvme_error_information_log": {
+   "size": 64,
+   "read": 16,
+   "unread": 0
+  },
+  "nvme_self_test_log": {
+   "nsid": -1,
+   "current_self_test_operation": {
+    "value": 0,
+    "string": "No self-test in progress"
+   }
+  }
+ },
+ "smart_available": true,
+ "device_statistics": {
+  "status": "not_applicable"
+ },
+ "derived": {
+  "host_writes": {
+   "bytes": 37470080512000,
+   "source": "nvme"
+  },
+  "host_reads": {
+   "bytes": 61861016064000,
+   "source": "nvme"
+  }
+ }
+}
