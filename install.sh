@@ -35,6 +35,19 @@ success() { echo -e "${GREEN}  ✓ $*${NC}"; }
 warn()    { echo -e "${YELLOW}  ⚠ $*${NC}"; }
 fail()    { echo -e "${RED}  ✗ $*${NC}"; exit 1; }
 
+# ask VAR "prompt": one prompt, read from the terminal (TTY_IN). With --yes
+# nothing is read: the prompt is shown with "(default)" and VAR is left
+# empty, exactly as if Enter was pressed, so each caller's own default
+# applies. Never touches stdin or /dev/tty then, so it cannot hang.
+ask() {
+  if [ "${ASSUME_YES:-false}" = "true" ]; then
+    printf '%s(default)\n' "$2"
+    printf -v "$1" '%s' ""
+    return 0
+  fi
+  read -rp "$2" "$1" < "$TTY_IN"
+}
+
 # ---------------------------------------------------------------------------
 # Disk usage picker — detects real block-device mounts, shows numbered list,
 # user enters comma-separated numbers, "all", or "none".
@@ -540,7 +553,7 @@ pick_filesystems() {
     [ "$groups_with_hidden" -eq 1 ] && part_word="partition"
     local hide_msg="${total_hidden} bind-mount ${entry_word} hidden across ${groups_with_hidden} ${part_word}."
     echo "  ${hide_msg}"
-    read -rp "  Show all entries? (y/N) [N]: " EXPAND_CHOICE < "$TTY_IN"
+    ask EXPAND_CHOICE "  Show all entries? (y/N) [N]: "
     case "${EXPAND_CHOICE:-N}" in
       y|Y|yes|YES)
         expanded=1
@@ -553,7 +566,7 @@ pick_filesystems() {
   local visible_count=${#visible_indices[@]}
   local range_hint="1"
   [ "$visible_count" -gt 1 ] && range_hint="1,2..${visible_count}"
-  read -rp "  Monitor ($range_hint / all / none) [all]: " FS_CHOICE < "$TTY_IN"
+  ask FS_CHOICE "  Monitor ($range_hint / all / none) [all]: "
   FS_CHOICE="${FS_CHOICE:-all}"
 
   # Parse selection. `num` refers to position within visible_indices.
@@ -766,7 +779,7 @@ pick_drives() {
 
   local range_hint="1"
   [ "$count" -gt 1 ] && range_hint="1,2..${count}"
-  read -rp "  Monitor (${range_hint} / all / none) [${default_nums}]: " DRIVE_CHOICE < "$TTY_IN"
+  ask DRIVE_CHOICE "  Monitor (${range_hint} / all / none) [${default_nums}]: "
   DRIVE_CHOICE="${DRIVE_CHOICE:-$default_nums}"
 
   # Parse selection.
@@ -824,7 +837,7 @@ pick_drives() {
     echo ""
     warn "No drives selected for SMART monitoring."
     echo "  The agent will still run (disk usage, mDNS) but won't report drive health."
-    read -rp "  Continue? [Y/n]: " _confirm < "$TTY_IN"
+    ask _confirm "  Continue? [Y/n]: "
     _confirm="${_confirm:-y}"
     if [ "$_confirm" != "y" ] && [ "$_confirm" != "Y" ]; then
       info "Re-run the installer to change drive selection."
@@ -914,7 +927,7 @@ pick_interface() {
   done
   echo ""
 
-  read -rp "  Advertise on (1-${#iface_names[@]} / all) [all]: " IFACE_CHOICE < "$TTY_IN"
+  ask IFACE_CHOICE "  Advertise on (1-${#iface_names[@]} / all) [all]: "
   IFACE_CHOICE="${IFACE_CHOICE:-all}"
 
   case "$IFACE_CHOICE" in
@@ -1145,6 +1158,8 @@ OS=$(uname -s | tr 'A-Z' 'a-z')
 # from the caller's environment (e.g. curl ... | sudo UNINSTALL=1 bash)
 _UNINSTALL_ENV="${UNINSTALL:-}"
 UNINSTALL_REQUESTED=false
+# --yes / -y (or SMARTHA_YES=1): take the default at every prompt (ask).
+ASSUME_YES=false
 usage() {
   cat <<'USAGE'
 SMART Sniffer agent installer
@@ -1157,11 +1172,16 @@ Options:
   --install-dir=PATH   Install to an explicit directory instead of the
                        default. Use this on platforms where the system
                        area is read-only, such as TrueNAS.
+  --yes, -y            Ask nothing: take the default answer at every
+                       prompt, as if you pressed Enter each time. An
+                       update keeps the existing configuration. For
+                       updates over SSH, Ansible and other scripts.
   --uninstall, -u      Remove the agent, its service, and its config.
   --help, -h           Show this message and exit.
 
 Environment variables:
   SMARTHA_INSTALL_DIR  Same as --install-dir.
+  SMARTHA_YES=1        Same as --yes.
   UNINSTALL=1          Same as --uninstall. Useful when piping to bash.
 
 Examples:
@@ -1170,6 +1190,9 @@ Examples:
 
   # Same, via the environment
   SMARTHA_INSTALL_DIR=/mnt/tank/apps/smartha-agent sudo -E bash install.sh
+
+  # Update without any questions (SSH, Ansible): keeps the configuration
+  curl -sSL .../install.sh | sudo bash -s -- --yes
 
   # Uninstall
   sudo bash install.sh --uninstall
@@ -1186,8 +1209,12 @@ for arg in "$@"; do
     # Explicit install location for read-only platforms (TrueNAS, etc.).
     # Consumed by resolve_install_paths. See issue #46.
     --install-dir=*) INSTALL_DIR_OVERRIDE="${arg#*=}" ;;
+    --yes|-y) ASSUME_YES=true ;;
   esac
 done
+case "${SMARTHA_YES:-}" in
+  1|true|TRUE|yes|YES) ASSUME_YES=true ;;
+esac
 if [ "$_UNINSTALL_ENV" = "1" ] || [ "$_UNINSTALL_ENV" = "true" ] || [ "$UNINSTALL_REQUESTED" = "true" ]; then
   if [ "$EUID" -ne 0 ]; then
     fail "Please run as root: sudo bash $0 --uninstall"
@@ -1601,10 +1628,16 @@ success "smartctl found: $(smartctl --version | head -1)"
 
 # When piped through bash (curl | bash), stdin is the script itself, not the
 # terminal. Redirect reads from /dev/tty so interactive prompts still work.
-# If /dev/tty isn't available (e.g. CI), fall back to defaults silently.
-if [ -t 0 ]; then
+# If /dev/tty cannot be opened (CI, ssh without a pty: the device node exists
+# there but opening it fails), fall back to the non-interactive defaults.
+# With --yes nothing is read at all: every prompt takes its default (ask),
+# so TTY_IN only needs to be non-empty.
+if [ "$ASSUME_YES" = "true" ]; then
+  TTY_IN="--yes"
+  info "--yes: taking the default answer at every prompt."
+elif [ -t 0 ]; then
   TTY_IN="/dev/stdin"
-elif [ -e /dev/tty ]; then
+elif ( : </dev/tty ) 2>/dev/null; then
   TTY_IN="/dev/tty"
 else
   TTY_IN=""
@@ -1656,7 +1689,7 @@ if [ -f "$EXISTING_CONFIG" ]; then
     echo ""
 
     if [ -n "$TTY_IN" ]; then
-      read -rp "  Keep current settings? [Y/n]: " KEEP_CHOICE < "$TTY_IN"
+      ask KEEP_CHOICE "  Keep current settings? [Y/n]: "
       case "$KEEP_CHOICE" in
         [nN]|[nN][oO]) KEEP_CONFIG=false ;;
         *)             KEEP_CONFIG=true ;;
@@ -1735,9 +1768,9 @@ if [ "$KEEP_CONFIG" = "false" ] && [ -n "$TTY_IN" ]; then
   echo "  (Press Enter to accept defaults)"
   echo ""
 
-  read -rp "  Port [9099]: " PORT < "$TTY_IN"
-  read -rp "  Bearer token for API auth (leave blank to disable): " TOKEN < "$TTY_IN"
-  read -rp "  Scan interval (e.g. 60s, 30m, 24h) [60s]: " SCAN_INTERVAL < "$TTY_IN"
+  ask PORT "  Port [9099]: "
+  ask TOKEN "  Bearer token for API auth (leave blank to disable): "
+  ask SCAN_INTERVAL "  Scan interval (e.g. 60s, 30m, 24h) [60s]: "
 
   # --- Drive picker (exclude iSCSI/FC/unknown) ---
   pick_drives
@@ -1772,7 +1805,7 @@ if [ "$KEEP_CONFIG" = "false" ] && [ -n "$TTY_IN" ]; then
     echo "  Spinning drives (HDDs) detected. The agent can skip drives in"
     echo "  standby to avoid waking them up. Recommended for NAS setups."
     echo ""
-    read -rp "  Enable standby-aware polling? [Y/n]: " _STANDBY_ANS < "$TTY_IN"
+    ask _STANDBY_ANS "  Enable standby-aware polling? [Y/n]: "
     case "$_STANDBY_ANS" in
       [nN]*) STANDBY_MODE="never" ;;
       *) STANDBY_MODE="standby" ;;

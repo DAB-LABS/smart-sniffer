@@ -43,6 +43,7 @@ def _harness(mountinfo: str, tmp_path: Path) -> str:
             "btrfs_usage_for",
             "is_synology_volume_mp",
             "fs_source_admitted",
+            "ask",  # every prompt reads through it (v1.0, --yes)
             "pick_filesystems",
         )
     )
