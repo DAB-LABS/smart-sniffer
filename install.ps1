@@ -12,9 +12,23 @@
     Or pin a specific version:
       $env:VERSION = "0.1.0"; irm ... | iex
 
+    Update without any questions (SSH, Ansible and other scripts): every
+    prompt takes its default, as if Enter was pressed, so an update keeps
+    the existing configuration:
+      $env:SMARTHA_YES=1; irm https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.ps1 | iex
+
+.PARAMETER Yes
+    Ask nothing: take the default answer at every prompt, as if Enter was
+    pressed each time. Same as $env:SMARTHA_YES=1, which is the form to use
+    with irm ... | iex (a piped script cannot take a switch).
+
+.EXAMPLE
+    .\install.ps1 -Yes
+
 .NOTES
     Requires: Administrator privileges, smartmontools for Windows
 #>
+param([switch]$Yes)
 
 $ErrorActionPreference = "Stop"
 
@@ -45,12 +59,42 @@ function Write-Fail  { param($msg) Write-Host "  [X] $msg" -ForegroundColor Red;
 # session leaves a TTY, but some automation contexts do not. Match
 # install.sh semantics: fall back to "keep existing config" when we
 # cannot prompt, so unattended upgrades don't lose user settings.
-function Test-Interactive {
+#
+# -Yes or $env:SMARTHA_YES=1 (v1.0): every prompt takes its default
+# (Read-Answer) and nothing is read, so the interactive path runs with
+# Enter's answers. Over Windows OpenSSH without a pty, UserInteractive is
+# still true but input is a pipe: treat a redirected input as no console,
+# like install.sh treats a /dev/tty it cannot open. A host that cannot
+# say (IsInputRedirected throws) keeps the old answer.
+$script:AssumeYes = $Yes.IsPresent -or ("$env:SMARTHA_YES" -in @('1', 'true', 'yes'))
+
+function Test-ConsoleReadable {
     try {
-        return [Environment]::UserInteractive -and ($Host.UI.RawUI -ne $null)
+        return -not [Console]::IsInputRedirected
+    } catch {
+        return $true
+    }
+}
+
+function Test-Interactive {
+    if ($script:AssumeYes) { return $true }
+    try {
+        return [Environment]::UserInteractive -and ($Host.UI.RawUI -ne $null) -and (Test-ConsoleReadable)
     } catch {
         return $false
     }
+}
+
+# Read-Answer: one prompt. With -Yes nothing is read: the prompt is shown
+# with "(default)" and the answer is empty, exactly as if Enter was pressed,
+# so each caller's own default applies.
+function Read-Answer {
+    param([string]$Prompt)
+    if ($script:AssumeYes) {
+        Write-Host "${Prompt}: (default)"
+        return ""
+    }
+    return Read-Host $Prompt
 }
 
 # Read-YamlScalar pulls a single top-level scalar value out of a
@@ -175,7 +219,7 @@ function Pick-Interface {
 
     Write-Host ""
     $Range = "1-$($AdapterList.Count)"
-    $Choice = Read-Host "  Advertise on ($Range / all) [all]"
+    $Choice = Read-Answer "  Advertise on ($Range / all) [all]"
     if (-not $Choice) { $Choice = "all" }
 
     switch -Regex ($Choice.Trim().ToLower()) {
@@ -288,7 +332,7 @@ function Pick-Filesystem {
     Write-Host ""
     $RangeHint = "1"
     if ($VolumeList.Count -gt 1) { $RangeHint = "1,$( 2 )..$($VolumeList.Count)" }
-    $Choice = Read-Host "  Monitor ($RangeHint / all / none) [all]"
+    $Choice = Read-Answer "  Monitor ($RangeHint / all / none) [all]"
     if (-not $Choice) { $Choice = "all" }
 
     $SelectedIndices = @()
@@ -605,12 +649,12 @@ try {
             Write-Host ""
 
             if (Get-Command winget -ErrorAction SilentlyContinue) {
-                $Install = Read-Host "  Install via winget now? [Y/n]"
+                $Install = Read-Answer "  Install via winget now? [Y/n]"
                 if ($Install -ne 'n' -and $Install -ne 'N') {
                     winget install smartmontools --accept-package-agreements --accept-source-agreements --disable-interactivity --source winget
                 }
             } elseif (Get-Command choco -ErrorAction SilentlyContinue) {
-                $Install = Read-Host "  Install via Chocolatey now? [Y/n]"
+                $Install = Read-Answer "  Install via Chocolatey now? [Y/n]"
                 if ($Install -ne 'n' -and $Install -ne 'N') {
                     choco install smartmontools -y
                 }
@@ -685,7 +729,7 @@ try {
         Write-Host ""
 
         if (Test-Interactive) {
-            $Answer = Read-Host "  Keep existing configuration? [Y/n]"
+            $Answer = Read-Answer "  Keep existing configuration? [Y/n]"
             if ($Answer -eq 'n' -or $Answer -eq 'N') {
                 $KeepConfig = $false
             } else {
@@ -782,19 +826,29 @@ try {
                 Write-Ok "Filesystem monitoring added to existing config."
             }
         }
+    } elseif (-not (Test-Interactive)) {
+        # No console to ask on (a script, SSH without a pty): the defaults,
+        # as install.sh does. -Yes is interactive with Enter's answers.
+        Write-Step "Non-interactive mode detected -- using defaults."
+        $Port         = "9099"
+        $Token        = ""
+        $ScanInterval = "60s"
+        $PickedIface  = ""
+        $PickedFS     = ""
+        $StandbyMode  = "never"
     } else {
         Write-Host ""
         Write-Host "  Configuration" -ForegroundColor White
         Write-Host "  (Press Enter to accept defaults)"
         Write-Host ""
 
-        $Port = Read-Host "  Port [9099]"
+        $Port = Read-Answer "  Port [9099]"
         if (-not $Port) { $Port = "9099" }
 
-        $Token = Read-Host "  Bearer token for API auth (leave blank to disable)"
+        $Token = Read-Answer "  Bearer token for API auth (leave blank to disable)"
 
         while ($true) {
-            $RawInterval = Read-Host "  Scan interval (e.g. 60s, 30m, 24h) [60s]"
+            $RawInterval = Read-Answer "  Scan interval (e.g. 60s, 30m, 24h) [60s]"
             if (-not $RawInterval) { $ScanInterval = "60s"; break }
             $ScanInterval = ConvertTo-ScanInterval $RawInterval
             if ($ScanInterval) { break }
@@ -825,7 +879,7 @@ try {
             Write-Host "  Spinning drives (HDDs) detected. The agent can skip drives in"
             Write-Host "  standby to avoid waking them up. Recommended for NAS setups."
             Write-Host ""
-            $StandbyAns = Read-Host "  Enable standby-aware polling? [Y/n]"
+            $StandbyAns = Read-Answer "  Enable standby-aware polling? [Y/n]"
             if ($StandbyAns -match '^[nN]') {
                 $StandbyMode = "never"
             } else {
