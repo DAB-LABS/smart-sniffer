@@ -76,10 +76,11 @@ def test_install_hint(os_name, container, kind, command):
 
 
 def test_the_commands_are_the_readme_one_liners():
+    # The --yes forms (item H): an update keeps the config and asks nothing.
     assert CURL_COMMAND == ("curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer"
-                            "/main/install.sh | sudo bash")
-    assert IRM_COMMAND == ("irm https://raw.githubusercontent.com/DAB-LABS/smart-sniffer"
-                           "/main/install.ps1 | iex")
+                            "/main/install.sh | sudo bash -s -- --yes")
+    assert IRM_COMMAND == ("$env:SMARTHA_YES=1; irm https://raw.githubusercontent.com/DAB-LABS"
+                           "/smart-sniffer/main/install.ps1 | iex")
     from pathlib import Path
 
     readme = (Path(__file__).resolve().parents[1] / "README.md").read_text()

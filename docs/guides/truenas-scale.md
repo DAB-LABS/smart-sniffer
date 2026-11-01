@@ -67,7 +67,7 @@ A major upgrade replaces `/root`. Run the installer again with `--install-dir` o
 
 ### Pool usage looks wrong
 
-Pool usage comes from `zfs list`. Check it on the host with `zfs list -o name,used,avail` and compare. If the numbers match there but not in Home Assistant, update the agent by running the installer again.
+Pool usage comes from `zfs list`. Check it on the host with `zfs list -o name,used,avail` and compare. If the numbers match there but not in Home Assistant, update the agent by running the installer again (add `--yes` after `bash -s --` to update over SSH or from a script without any questions; your config is kept).
 
 ### Home Assistant can't discover the agent
 

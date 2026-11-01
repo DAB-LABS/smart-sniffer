@@ -9,6 +9,7 @@ SMART Sniffer 1.0: config files, entity IDs and the agent API now change only wi
 ### Added
 - **Agent updates show in Home Assistant** (#68). An update entity under each agent's device says when a newer agent is out, what is new, and the install command for that machine (curl on Linux and macOS, irm on Windows, the docs for Docker). Home Assistant never installs anything. Not for the App's own agent, which the App updates.
 - **The App's page judges this box's drives by the integration's thresholds** (#11), when the integration has the box's entry.
+- **Update agents without questions, over SSH or from Ansible** (discussion #68): `curl ... | sudo bash -s -- --yes`, or `$env:SMARTHA_YES=1` before `irm ... | iex` on Windows. Every prompt takes its default, so an update keeps its configuration.
 
 ### Changed
 - **Serial numbers are masked on the cards**, keeping the last 4 characters, so screenshots and videos are safe to share. Click or tap a serial for the full value and Copy. Agentic access and Home Assistant's own device pages still show full serials.

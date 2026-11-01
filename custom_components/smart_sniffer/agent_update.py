@@ -3,7 +3,8 @@ is behind the newest release, and how that machine is updated.
 
 Home Assistant never installs an agent. The notice gives the install
 command for the machine's OS, as the agent reports it in /api/health: the
-curl one-liner on Linux and macOS, the irm one-liner on Windows. An agent in
+curl one-liner on Linux and macOS, the irm one-liner on Windows, both in
+their --yes form (every prompt takes its default). An agent in
 a container (the "container" health field, v1.0 agents) or on an OS the
 installers do not cover is pointed to the docs instead.
 
@@ -26,8 +27,11 @@ from .const import (
 
 SUMMARY_LIMIT = 255  # what Home Assistant keeps of an update entity's summary
 
-CURL_COMMAND = f"curl -sSL {AGENT_INSTALL_URL} | sudo bash"
-IRM_COMMAND = f"irm {AGENT_INSTALL_PS1_URL} | iex"
+# The update commands take every default (v1.0, item H): an update keeps the
+# machine's configuration and asks nothing, so they also work over SSH and
+# from Ansible.
+CURL_COMMAND = f"curl -sSL {AGENT_INSTALL_URL} | sudo bash -s -- --yes"
+IRM_COMMAND = f"$env:SMARTHA_YES=1; irm {AGENT_INSTALL_PS1_URL} | iex"
 
 UNIX = ("linux", "darwin")
 

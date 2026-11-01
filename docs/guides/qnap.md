@@ -171,6 +171,8 @@ QTS firmware updates can reset `/usr/local/bin` and `/etc/init.d/`. If the agent
 curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo bash
 ```
 
+Over SSH or from a script, add `--yes` so it asks nothing and keeps the config: `curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo bash -s -- --yes`.
+
 ## Example config
 
 A typical QNAP `config.yaml`:
