@@ -20,7 +20,7 @@ SMART Sniffer 1.0: config files, entity IDs and the agent API now change only wi
 - **No more impossible NVMe numbers** (#12). A counter that cannot be real (wider than 64 bits, as some laptops report Media Errors) shows as unknown or "not readable", never as a 34-digit number, and never raises Attention. Details no longer list smartctl's `_s` and `_le` helper fields.
 
 ### Security
-- **The agent slows down repeated wrong passwords.** After 5 wrong tries in a minute from one address it answers "wait" (429), for up to a minute at a time. A correct password is never slowed. The integration says "try again in a minute" instead of "password refused".
+- **The agent slows down repeated wrong passwords.** After 5 wrong tries in a minute from one address it answers "wait" (429), for up to a minute at a time. An address that only sends the correct password is never slowed. The integration says "try again in a minute" instead of "password refused".
 
 ### Upgrade notes
 - The "Beta" label is gone. Home Assistant 2024.4 or later, unchanged.
