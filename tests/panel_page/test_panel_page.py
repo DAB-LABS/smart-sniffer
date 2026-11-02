@@ -1548,8 +1548,10 @@ def test_the_laptop_drive_reads_healthy_on_its_card(page):
 
 
 def _mask(value):
-    keep = 4 if len(value) > 4 else 0
-    return "\u2022" * (len(value) - keep) + value[len(value) - keep:]
+    """As the App's page masks: 8 dots and the last 4, all dots at 4 or fewer."""
+    if len(value) <= 4:
+        return "\u2022" * len(value)
+    return "\u2022" * 8 + value[-4:]
 
 
 def _page_mask(p, value):
@@ -1557,9 +1559,10 @@ def _page_mask(p, value):
 
 
 @pytest.mark.parametrize(("value", "shown"), [
-    ("S12R00000000042A", "\u2022" * 12 + "042A"),
+    ("S12R00000000042A", "\u2022" * 8 + "042A"),
     ("S12R0000042A", "\u2022" * 8 + "042A"),
-    ("12345", "\u2022" + "2345"),
+    ("12345", "\u2022" * 8 + "2345"),
+    ("FIXTURE-HP-NVME-0001", "\u2022" * 8 + "0001"),
     ("ABCD", "\u2022" * 4),
     ("ABC", "\u2022" * 3),
     ("", ""),
@@ -1579,12 +1582,12 @@ def test_the_card_shows_the_serial_masked_and_the_popover_the_whole(page, touch)
     _open(card)
     row = card.locator("dl.kv.ident > div", has=p.frame.locator("dt", has_text="Serial"))
     trigger = row.locator(".bign.txt")
-    assert trigger.inner_text() == "\u2022" * 16 + "0001"
+    assert trigger.inner_text() == "\u2022" * 8 + "0001"
     assert "FIXTURE" not in card.inner_text() and "FIXTURE" not in (trigger.get_attribute("aria-label") or "")
     # No hover reveal.
     if not touch:
         trigger.hover()
-        assert trigger.inner_text() == "\u2022" * 16 + "0001"
+        assert trigger.inner_text() == "\u2022" * 8 + "0001"
         assert p.frame.locator(".numpop").count() == 0
     # A click or tap: the whole value, and Copy copies the whole value.
     if touch:
@@ -1600,7 +1603,7 @@ def test_the_card_shows_the_serial_masked_and_the_popover_the_whole(page, touch)
     # Closed again, the card still shows the mask.
     trigger.click()
     assert p.wait(lambda: pop.count() == 0)
-    assert trigger.inner_text() == "\u2022" * 16 + "0001"
+    assert trigger.inner_text() == "\u2022" * 8 + "0001"
     assert not p.errors, p.errors
 
 
