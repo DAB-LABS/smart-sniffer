@@ -57,6 +57,42 @@ def test_the_options_and_their_help():
     assert "| sudo bash -s -- --yes" in result.stdout
 
 
+@pytest.mark.parametrize(("option", "message"), [
+    ("--y", "Unknown option --y. Did you mean -y or --yes? See --help."),
+    ("-yes", "Unknown option -yes. Did you mean -y or --yes? See --help."),
+    ("--Yes", "Unknown option --Yes. Did you mean -y or --yes? See --help."),
+    ("-Y", "Unknown option -Y. Did you mean -y or --yes? See --help."),
+    ("--assume-yes", "Unknown option --assume-yes. Did you mean -y or --yes? See --help."),
+    ("--force", "Unknown option --force. See --help."),
+    ("--install-dir", "Unknown option --install-dir. See --help."),
+    ("-x", "Unknown option -x. See --help."),
+    ("install", "Unknown option install. See --help."),
+])
+def test_an_unknown_option_stops_before_anything(tmp_path, option, message):
+    """Stops at the argument loop, before root is checked or anything is
+    read, downloaded or written: run as any user, with a stand-in curl and
+    uname that would record a call."""
+    stubs = tmp_path / "stubs"
+    stubs.mkdir()
+    for name in ("curl", "uname", "systemctl", "smartctl", "mkdir"):
+        (stubs / name).write_text(f"#!/bin/sh\necho {name} >> '{tmp_path}/calls'\n")
+        (stubs / name).chmod(0o755)
+    result = subprocess.run(["bash", str(INSTALL_SH), "--yes", option], capture_output=True,
+                            text=True, check=False, stdin=subprocess.DEVNULL, timeout=20,
+                            env={"PATH": f"{stubs}:/usr/bin:/bin", "TERM": "dumb"})
+    assert result.returncode == 2
+    assert message in re.sub(r"\x1b\[[0-9;]*m", "", result.stderr), result.stderr
+    assert result.stdout == "" and not (tmp_path / "calls").exists()
+
+
+def test_the_bare_word_uninstall_is_still_taken():
+    source = INSTALL_SH.read_text()
+    assert "--uninstall|-u|uninstall) UNINSTALL_REQUESTED=true ;;" in source
+    loop = source[source.index('for arg in "$@"; do'):]
+    loop = loop[:loop.index("done")]
+    assert loop.index("uninstall)") < loop.index('*) unknown_option "$arg" ;;')
+
+
 def test_a_tty_that_cannot_be_opened_is_no_tty():
     source = INSTALL_SH.read_text()
     assert "elif ( : </dev/tty ) 2>/dev/null; then" in source
@@ -174,9 +210,7 @@ def _run(tmp_path: Path, args: list[str],
     }
     result = subprocess.run(["timeout", "120", "unshare", "-m", "bash", "-c", inner, "install", *args],
                             capture_output=True, text=True, env=run_env, check=False,
-                            stdin=subprocess.DEVNULL, timeout=150,
-                            # The masked token is cut byte-wise by tr.
-                            encoding="utf-8", errors="replace")
+                            stdin=subprocess.DEVNULL, timeout=150, encoding="utf-8")
     return result, log.read_text()
 
 
@@ -217,7 +251,11 @@ def test_an_update_with_yes_keeps_the_config(tmp_path):
     assert "Keeping existing configuration." in out
     assert (folder / "config.yaml").read_text() == existing
     assert "Writing config" not in out and "systemctl start smartha-agent" in log
-    assert TOKEN not in out  # shown masked only
+    # Shown as fixed dots, valid UTF-8 (the run decodes strictly), nothing
+    # of the token, not even its length.
+    assert "Token:      \u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022 (set)" in out
+    for part in (TOKEN, TOKEN[:2], TOKEN[-2:]):
+        assert f"Token:      {part}" not in out and f"{part} (set)" not in out
 
 
 @needs_namespace

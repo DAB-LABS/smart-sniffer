@@ -1202,6 +1202,23 @@ configuration. Documentation: https://github.com/DAB-LABS/smart-sniffer
 USAGE
 }
 
+# An option the installer does not know stops it before anything is done
+# (v1.0): a mistyped --yes must not turn into an install that asks
+# questions, or into one that silently ignores it. One that looks like
+# --yes gets that suggested.
+unknown_option() {
+  local bare="${1#-}"
+  bare="${bare#-}"
+  bare=$(printf '%s' "$bare" | tr '[:upper:]' '[:lower:]')
+  case "$bare" in
+    y*|*yes*)
+      echo -e "${RED}  ✗ Unknown option $1. Did you mean -y or --yes? See --help.${NC}" >&2 ;;
+    *)
+      echo -e "${RED}  ✗ Unknown option $1. See --help.${NC}" >&2 ;;
+  esac
+  exit 2
+}
+
 for arg in "$@"; do
   case "$arg" in
     --uninstall|-u|uninstall) UNINSTALL_REQUESTED=true ;;
@@ -1210,6 +1227,7 @@ for arg in "$@"; do
     # Consumed by resolve_install_paths. See issue #46.
     --install-dir=*) INSTALL_DIR_OVERRIDE="${arg#*=}" ;;
     --yes|-y) ASSUME_YES=true ;;
+    *) unknown_option "$arg" ;;
   esac
 done
 case "${SMARTHA_YES:-}" in
@@ -1663,13 +1681,10 @@ if [ -f "$EXISTING_CONFIG" ]; then
     echo -e "${GREEN}${BOLD}  Existing configuration found:${NC}"
     echo "    Port:       $_EXISTING_PORT"
     if [ -n "$_EXISTING_TOKEN" ]; then
-      # Mask the token for display
-      _TOKEN_LEN=${#_EXISTING_TOKEN}
-      if [ "$_TOKEN_LEN" -gt 4 ]; then
-        _TOKEN_DISPLAY="${_EXISTING_TOKEN:0:2}$(printf '%*s' $((_TOKEN_LEN - 4)) '' | tr ' ' '•')${_EXISTING_TOKEN:$((_TOKEN_LEN - 2))}"
-      else
-        _TOKEN_DISPLAY="••••"
-      fi
+      # Never derived from the token (v1.0): fixed dots, so nothing of it
+      # shows, not even its length. (A byte-wise tr of the dot printed
+      # broken characters.)
+      _TOKEN_DISPLAY="•••••••• (set)"
       echo "    Token:      $_TOKEN_DISPLAY"
     else
       echo "    Token:      (none)"
