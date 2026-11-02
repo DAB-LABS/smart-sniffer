@@ -28,6 +28,9 @@
 .NOTES
     Requires: Administrator privileges, smartmontools for Windows
 #>
+# CmdletBinding: an unknown parameter (a typo such as -Yess) is refused at
+# binding, before anything runs, instead of being ignored (v1.0).
+[CmdletBinding()]
 param([switch]$Yes)
 
 $ErrorActionPreference = "Stop"

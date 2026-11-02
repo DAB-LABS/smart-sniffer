@@ -379,3 +379,65 @@ def test_install_ps1_irm_iex_takes_the_param_block():
     head = source.split("$ErrorActionPreference", 1)[0]
     assert head.rstrip().endswith("param([switch]$Yes)")
     assert "$env:SMARTHA_YES=1; irm https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.ps1 | iex" in source
+
+
+# --- install.ps1 refuses an unknown parameter ([CmdletBinding()], v1.0) --------------
+#
+# Binding is checked on a copy of the script's header only (help, attribute,
+# param block) followed by a marker line, so install.ps1's body never runs
+# with a parameter that binds. The real file is run only with a parameter
+# that must be refused at binding, and with the irm | iex form, where a
+# stand-in Invoke-RestMethod stops it at its first network call.
+
+
+def _header_probe(tmp_path: Path) -> Path:
+    source = INSTALL_PS1.read_text()
+    head = source.split('$ErrorActionPreference = "Stop"', 1)[0]
+    assert "[CmdletBinding()]\nparam([switch]$Yes)" in head
+    probe = tmp_path / "header-probe.ps1"
+    probe.write_text(head.replace("#Requires -RunAsAdministrator", "") + '"BODY-RAN yes=$Yes"\n')
+    return probe
+
+
+@needs_pwsh
+@pytest.mark.parametrize(("arg", "yes"), [("-Yes", "True"), ("-Ye", "True"), ("-y", "True"),
+                                          (None, "False")])
+def test_install_ps1_yes_binds(tmp_path, arg, yes):
+    probe = _header_probe(tmp_path)
+    result = subprocess.run([PWSH, "-NoProfile", "-NonInteractive", "-File", str(probe),
+                             *([arg] if arg else [])], capture_output=True, text=True,
+                            stdin=subprocess.DEVNULL, timeout=120, check=False)
+    assert f"BODY-RAN yes={yes}" in result.stdout, result.stdout + result.stderr
+
+
+@needs_pwsh
+@pytest.mark.parametrize("arg", ["-Yess", "-Foo", "-Force"])
+def test_install_ps1_refuses_an_unknown_parameter_before_anything_runs(tmp_path, arg):
+    for script in (_header_probe(tmp_path), INSTALL_PS1):
+        env = {k: v for k, v in os.environ.items() if k not in ("SMARTHA_YES", "VERSION", "TEMP")}
+        result = subprocess.run([PWSH, "-NoProfile", "-NonInteractive", "-File", str(script), arg],
+                                capture_output=True, text=True, env=env,
+                                stdin=subprocess.DEVNULL, timeout=120, check=False)
+        out = result.stdout + result.stderr
+        assert result.returncode != 0
+        assert f"A parameter cannot be found that matches parameter name '{arg[1:]}'" in out, out
+        assert "BODY-RAN" not in out and "Windows Installer" not in out
+        assert "Detected platform" not in out
+
+
+@needs_pwsh
+def test_install_ps1_irm_iex_form_still_runs_its_normal_flow(tmp_path):
+    body = (
+        "function Invoke-RestMethod { Write-Host 'STOP-AT-NETWORK'; throw 'no network in tests' }\n"
+        "function Invoke-WebRequest { Write-Host 'STOP-AT-NETWORK'; throw 'no network in tests' }\n"
+        "$env:SMARTHA_YES = '1'\n"
+        "Remove-Item Env:VERSION -ErrorAction SilentlyContinue\n"
+        "Get-Content -Raw $args[0] | Invoke-Expression\n"
+    )
+    result = _ps_file(tmp_path, "iex.ps1", body, str(INSTALL_PS1),
+                      env={k: v for k, v in os.environ.items() if k != "VERSION"})
+    out = result.stdout + result.stderr
+    assert "SMART Sniffer Agent - Windows Installer" in out, out
+    assert "Detected platform: windows/" in out and "Fetching latest release version" in out
+    assert "STOP-AT-NETWORK" in out and "Could not determine latest version" in out
+    assert "parameter" not in out.lower() or "matches parameter name" not in out
