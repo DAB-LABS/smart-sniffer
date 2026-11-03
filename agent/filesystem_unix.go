@@ -72,6 +72,8 @@ func (fc *FilesystemCache) Refresh() {
 		results = append(results, info)
 	}
 
+	uniqueFilesystemIDs(results)
+
 	fc.mu.Lock()
 	fc.filesystems = results
 	fc.mu.Unlock()

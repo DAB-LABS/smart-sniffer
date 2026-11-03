@@ -79,3 +79,58 @@ func mustRead(t *testing.T, path string) []byte {
 	}
 	return b
 }
+
+// v1.0 (J12): --advertise-interface is --interface; both is an error.
+func TestAdvertiseInterfaceAlias(t *testing.T) {
+	cfg, err := loadWith(t, "", "--advertise-interface", "eth1")
+	if err != nil || cfg.AdvertiseInterface != "eth1" {
+		t.Fatalf("alias: %v %v", cfg, err)
+	}
+	cfg, err = loadWith(t, "advertise_interface: eth0\n", "--interface", "eth2")
+	if err != nil || cfg.AdvertiseInterface != "eth2" {
+		t.Fatalf("--interface over the file: %v %v", cfg, err)
+	}
+	if _, err := loadWith(t, "", "--interface", "eth1", "--advertise-interface", "eth1"); err == nil ||
+		!strings.Contains(err.Error(), "give one of them") {
+		t.Fatalf("both: err = %v", err)
+	}
+}
+
+// v1.0 (J12): SMARTHA_TOKEN sits between --token and the file; empty is
+// not set. Only the source is kept for the log.
+func TestSmarthaTokenPrecedence(t *testing.T) {
+	cases := []struct {
+		file, env string
+		args      []string
+		token     string
+		source    string
+	}{
+		{"token: from-file\n", "", nil, "from-file", "config file"},
+		{"token: from-file\n", "from-env", nil, "from-env", "SMARTHA_TOKEN"},
+		{"", "from-env", nil, "from-env", "SMARTHA_TOKEN"},
+		{"token: from-file\n", "from-env", []string{"--token", "from-flag"}, "from-flag", "--token"},
+		{"token: from-file\n", "", []string{"--token", "from-flag"}, "from-flag", "--token"},
+		{"", "", nil, "", ""},
+	}
+	for _, tc := range cases {
+		t.Setenv("SMARTHA_TOKEN", tc.env)
+		cfg, err := loadWith(t, tc.file+"port: 9099\n", tc.args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.Token != tc.token || cfg.TokenSource != tc.source {
+			t.Errorf("file %q env %q args %v: token %q from %q, want %q from %q",
+				tc.file, tc.env, tc.args, cfg.Token, cfg.TokenSource, tc.token, tc.source)
+		}
+	}
+}
+
+// config.yaml.example names every key the agent reads (J12).
+func TestTheExampleListsEveryKey(t *testing.T) {
+	example := string(mustRead(t, "config.yaml.example"))
+	for key := range knownConfigKeys() {
+		if !strings.Contains(example, "\n"+key+":") && !strings.Contains(example, "\n# "+key+":") {
+			t.Errorf("config.yaml.example does not list %s", key)
+		}
+	}
+}

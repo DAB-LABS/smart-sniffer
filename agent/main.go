@@ -106,7 +106,7 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 	// --- Startup banner ---
 	authLabel := "disabled"
 	if cfg.Token != "" {
-		authLabel = "enabled"
+		authLabel = "enabled (password from " + cfg.TokenSource + ")"
 	}
 	mdnsLabel := "disabled"
 	if cfg.MDNSEnabled() {

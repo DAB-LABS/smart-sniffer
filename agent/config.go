@@ -51,7 +51,9 @@ type Config struct {
 	DeviceStatistics   *bool              `yaml:"device_statistics"`   // read ATA Device Statistics with a second smartctl call per poll (default: true); pointer to tell "not set" from false
 	Discover           bool               `yaml:"-"`                   // set by --discover flag; not read from config file
 	NoWrite            bool               `yaml:"-"`                   // set by --no-write flag; skips config write in discover mode
-	AssumeYes          bool               `yaml:"-"`                   // set by --yes / -y; with --discover, answers yes to its questions without reading stdin
+	AssumeYes          bool               `yaml:"-"`                   // set by --yes / -y; with --discover, takes the default answer at every question without reading stdin
+	Force              bool               `yaml:"-"`                   // set by --force; with --discover, replaces existing device_overrides without asking
+	TokenSource        string             `yaml:"-"`                   // where the token came from: --token, SMARTHA_TOKEN or the config file; "" when none (logged, never the value)
 	SmartctlPathConfig string             `yaml:"smartctl_path"`       // smartctl binary from config; empty = PATH, then the usual install locations
 	SmartctlPath       string             `yaml:"-"`                   // resolved path to smartctl binary; set by resolveSmartctlPath()
 	AgentID            string             `yaml:"agent_id"`            // pins the agent ID; empty = random ID saved in agent_id.json
@@ -169,12 +171,14 @@ func LoadConfig() (*Config, error) {
 	var interval scanIntervalFlag
 	flag.Var(&interval, "scan-interval", "Drive rescan interval: a duration (30s, 5m, 1h) or a number of seconds (3600)")
 	noMDNS := flag.Bool("no-mdns", false, "Disable mDNS/Zeroconf service advertisement")
-	advIface := flag.String("interface", "", "Restrict mDNS advertisement to this network interface")
+	advIface := flag.String("interface", "", "Restrict mDNS advertisement to this network interface (config: advertise_interface)")
+	advIfaceAlias := flag.String("advertise-interface", "", "Same as --interface, named like the config key")
 	mdnsName := flag.String("mdns-name", "", "Custom mDNS instance name (default: smartha-<hostname>)")
 	discover := flag.Bool("discover", false, "Probe drives and detect protocols (diagnostic tool)")
 	noWrite := flag.Bool("no-write", false, "With --discover: print proposed overrides but do not write config")
-	assumeYes := flag.Bool("yes", false, "With --discover: write without asking, replacing any device_overrides already in config.yaml")
+	assumeYes := flag.Bool("yes", false, "With --discover: take the default answer at every question (existing device_overrides are kept)")
 	flag.BoolVar(assumeYes, "y", false, "Short for --yes")
+	force := flag.Bool("force", false, "With --discover: replace device_overrides already in config.yaml without asking")
 	verbose := flag.Bool("verbose", false, "Log every poll cycle instead of suppressing repeated lines")
 	noDevstat := flag.Bool("no-device-statistics", false, "Do not read ATA Device Statistics (one extra smartctl call per SATA drive per poll)")
 	flag.Parse()
@@ -207,12 +211,22 @@ func LoadConfig() (*Config, error) {
 		}
 	}
 
-	// --- CLI flags (override file values) ---
+	// --- Environment and CLI flags (override file values) ---
 	if *port != 0 {
 		cfg.Port = *port
 	}
+	// The token: --token, else SMARTHA_TOKEN, else the file (v1.0). An
+	// empty SMARTHA_TOKEN counts as not set: it never clears a file's token
+	// (to run without a password, remove token from the file). Only where it
+	// came from is logged, never the value.
+	if cfg.Token != "" {
+		cfg.TokenSource = "config file"
+	}
+	if v := os.Getenv("SMARTHA_TOKEN"); v != "" {
+		cfg.Token, cfg.TokenSource = v, "SMARTHA_TOKEN"
+	}
 	if *token != "" {
-		cfg.Token = *token
+		cfg.Token, cfg.TokenSource = *token, "--token"
 	}
 	if interval.set {
 		cfg.ScanInterval = interval.d
@@ -225,8 +239,14 @@ func LoadConfig() (*Config, error) {
 		f := false
 		cfg.DeviceStatistics = &f
 	}
+	if *advIface != "" && *advIfaceAlias != "" {
+		return nil, fmt.Errorf("--interface and --advertise-interface are the same setting: give one of them")
+	}
 	if *advIface != "" {
 		cfg.AdvertiseInterface = *advIface
+	}
+	if *advIfaceAlias != "" {
+		cfg.AdvertiseInterface = *advIfaceAlias
 	}
 	if *mdnsName != "" {
 		cfg.MDNSName = *mdnsName
@@ -239,6 +259,9 @@ func LoadConfig() (*Config, error) {
 	}
 	if *assumeYes {
 		cfg.AssumeYes = true
+	}
+	if *force {
+		cfg.Force = true
 	}
 	// --verbose is enable-only: the flag can turn verbose logging on, but its
 	// absence must not clobber a "verbose: true" config-file setting back to

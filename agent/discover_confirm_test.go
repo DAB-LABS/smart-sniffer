@@ -31,8 +31,13 @@ func writeConfig(t *testing.T, content string) string {
 
 func confirm(t *testing.T, content, input string, terminal, yes bool) (bool, string) {
 	t.Helper()
+	return confirmWith(t, content, input, terminal, yes, false)
+}
+
+func confirmWith(t *testing.T, content, input string, terminal, yes, force bool) (bool, string) {
+	t.Helper()
 	var out strings.Builder
-	a := discoverAsk{in: strings.NewReader(input), terminal: terminal, yes: yes, out: &out}
+	a := discoverAsk{in: strings.NewReader(input), terminal: terminal, yes: yes, force: force, out: &out}
 	ok, err := a.confirmWrite(writeConfig(t, content))
 	if err != nil {
 		t.Fatal(err)
@@ -94,7 +99,7 @@ func TestDiscoverConfirmNoTerminalDoesNotReplace(t *testing.T) {
 	if got {
 		t.Fatalf("replaced with no terminal")
 	}
-	if !strings.Contains(out, "--yes") || !strings.Contains(out, "Not changed") {
+	if !strings.Contains(out, "--discover --force") || !strings.Contains(out, "Not changed") {
 		t.Errorf("output does not say how to force:\n%s", out)
 	}
 	if strings.Contains(out, "[y/N]") {
@@ -102,10 +107,34 @@ func TestDiscoverConfirmNoTerminalDoesNotReplace(t *testing.T) {
 	}
 }
 
-func TestDiscoverConfirmYesReplaces(t *testing.T) {
-	got, out := confirm(t, configWithOverrides, "", false, true)
-	if !got || !strings.Contains(out, "WARNING") || !strings.Contains(out, "(--yes)") {
-		t.Errorf("--yes: write=%v\n%s", got, out)
+// v1.0 (J15): --force replaces without asking; --yes takes the default,
+// which keeps them, as the installers' --yes does; --force wins over --yes.
+func TestDiscoverConfirmForceReplacesAndYesKeeps(t *testing.T) {
+	for _, terminal := range []bool{true, false} {
+		got, out := confirmWith(t, configWithOverrides, "n\n", terminal, false, true)
+		if !got || !strings.Contains(out, "WARNING") || !strings.Contains(out, "(--force)") {
+			t.Errorf("--force (terminal %v): write=%v\n%s", terminal, got, out)
+		}
+		if strings.Contains(out, "[y/N]") {
+			t.Errorf("--force asked:\n%s", out)
+		}
+		got, out = confirmWith(t, configWithOverrides, "y\n", terminal, true, false)
+		if got || !strings.Contains(out, "--yes takes the default") || !strings.Contains(out, "--discover --force") {
+			t.Errorf("--yes (terminal %v): write=%v\n%s", terminal, got, out)
+		}
+		if strings.Contains(out, "[y/N]") {
+			t.Errorf("--yes asked:\n%s", out)
+		}
+		if got, _ := confirmWith(t, configWithOverrides, "", terminal, true, true); !got {
+			t.Errorf("--yes --force (terminal %v): not replaced", terminal)
+		}
+	}
+	// Nothing to replace: either flag writes without asking.
+	for _, f := range [][2]bool{{true, false}, {false, true}} {
+		got, out := confirmWith(t, configWithout, "n\n", false, f[0], f[1])
+		if !got || strings.Contains(out, "[Y/n]") {
+			t.Errorf("flags %v on a file without overrides: write=%v\n%s", f, got, out)
+		}
 	}
 }
 

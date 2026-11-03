@@ -1,12 +1,20 @@
 # SMART Sniffer Agent configuration
 # Copy this file to config.yaml and edit as needed.
+#
+# Every key the agent reads is listed here with its default. An unknown
+# top-level key is ignored with a WARNING at startup (its name only). Keys
+# inside a list item (filesystems, device_overrides) are not checked.
+# The "smartha" names (smartha-agent, SMARTHA_*, /etc/smartha-agent) are
+# permanent.
 
 # HTTP listen port (default: 9099)
 port: 9099
 
-# Bearer token for API authentication.
+# Bearer token for API authentication (default: none).
 # If set, all requests must include "Authorization: Bearer <token>".
-# Leave empty or omit to disable auth.
+# Leave empty or omit to disable auth. Also: --token, or the SMARTHA_TOKEN
+# environment variable (--token wins over SMARTHA_TOKEN, which wins over
+# this file; an empty SMARTHA_TOKEN counts as not set).
 token: ""
 
 # How often to re-scan drives and refresh SMART data (default: 60s).
@@ -35,6 +43,30 @@ mdns: true
 #
 # Examples: eth0, enp1s0, en0, bond0, vmbr0, br-lan
 # advertise_interface: eth0
+
+# mDNS instance name (optional, default: smartha-<hostname>).
+# The name the agent advertises itself under. Also: --mdns-name.
+# mdns_name: smartha-nas
+
+# Standby-aware polling (default: never).
+# never: every poll reads every drive, waking sleeping ones.
+# standby, sleep or idle: a drive in that power state (or deeper) is not
+# woken; its last reading is served with in_standby true. The first poll
+# after startup always reads every drive once.
+# standby_mode: never
+
+# Drives to skip (optional, default: none). Set by the installer's drive
+# picker. Symlinks are resolved at startup, so /dev/disk/by-id/... and
+# /dev/sdX both match.
+# exclude_devices:
+#   - /dev/sdb
+
+# Protocol overrides (optional, default: none), for drives smartctl's scan
+# does not find or reads with the wrong protocol (Synology /dev/sataN,
+# RAID controllers). "smartha-agent --discover" can write them.
+# device_overrides:
+#   - device: /dev/sata1
+#     protocol: sat
 
 # Agent ID (optional).
 # A random ID that lets Home Assistant tell this agent from others. By

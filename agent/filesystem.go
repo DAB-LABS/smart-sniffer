@@ -5,6 +5,7 @@
 package main
 
 import (
+	"crypto/sha1"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -31,6 +32,24 @@ type FilesystemInfo struct {
 	// exactly one drive the agent reports. Omitted elsewhere and when unknown.
 	PhysicalDevices []string `json:"physical_devices,omitempty"`
 	DriveID         string   `json:"drive_id,omitempty"`
+}
+
+// MarshalJSON writes the api_version 1 shape (v1.0): when the filesystem
+// could not be read (status "unavailable") its byte counts and use_percent
+// are null, not 0, so "unknown" never reads as "empty". Read filesystems
+// keep their numbers.
+func (f FilesystemInfo) MarshalJSON() ([]byte, error) {
+	type plain FilesystemInfo
+	if f.Status == "ok" {
+		return json.Marshal(plain(f))
+	}
+	return json.Marshal(struct {
+		plain
+		TotalBytes     *uint64  `json:"total_bytes"`
+		UsedBytes      *uint64  `json:"used_bytes"`
+		AvailableBytes *uint64  `json:"available_bytes"`
+		UsePercent     *float64 `json:"use_percent"`
+	}{plain: plain(f)})
 }
 
 // FilesystemCache holds cached filesystem usage data. It is refreshed on
@@ -91,6 +110,29 @@ func (fc *FilesystemCache) HandleFilesystems(w http.ResponseWriter, r *http.Requ
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(data)
+}
+
+// uniqueFilesystemIDs makes the ids in one list distinct (v1.0). Two
+// configured filesystems can share an id: the id is "fs-" plus the first 8
+// characters of the UUID, and btrfs subvolumes and bind mounts of one
+// filesystem share its UUID. Home Assistant has always followed the first of
+// them in the list (one entity per id, which reads the first match), so the
+// first keeps the plain id and its entity never changes. Each later one gets
+// "<id>-<6 hex of the SHA-1 of its mountpoint>", the same every run.
+func uniqueFilesystemIDs(list []FilesystemInfo) {
+	seen := make(map[string]bool, len(list))
+	for i := range list {
+		id := list[i].ID
+		if seen[id] {
+			sum := sha1.Sum([]byte(list[i].Mountpoint))
+			id = fmt.Sprintf("%s-%x", id, sum[:3])
+			for n := 2; seen[id]; n++ { // the same mountpoint twice
+				id = fmt.Sprintf("%s-%x-%d", list[i].ID, sum[:3], n)
+			}
+			list[i].ID = id
+		}
+		seen[id] = true
+	}
 }
 
 // makeFilesystemID creates a stable, URL-safe identifier for a filesystem.

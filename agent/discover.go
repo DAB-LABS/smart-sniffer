@@ -209,7 +209,7 @@ func RunDiscover(cfg *Config, noWrite bool) error {
 		return nil
 	}
 
-	ask := discoverAsk{in: os.Stdin, terminal: stdinIsTerminal(), yes: cfg.AssumeYes, out: os.Stdout}
+	ask := discoverAsk{in: os.Stdin, terminal: stdinIsTerminal(), yes: cfg.AssumeYes, force: cfg.Force, out: os.Stdout}
 	write, err := ask.confirmWrite(configPath)
 	if err != nil {
 		return err
@@ -221,22 +221,25 @@ func RunDiscover(cfg *Config, noWrite bool) error {
 }
 
 // discoverAsk is how --discover decides whether to write config.yaml: its
-// input, whether that input is a terminal, and --yes.
+// input, whether that input is a terminal, --yes and --force.
 type discoverAsk struct {
 	in       io.Reader
 	terminal bool
-	yes      bool
+	yes      bool // --yes: the default answer at every question, read nothing
+	force    bool // --force: replace existing device_overrides without asking
 	out      io.Writer
 }
 
 // confirmWrite asks before writing device_overrides to configPath.
 //
 // With no device_overrides in the file it asks "Write to ...? [Y/n]" as it
-// always has (Enter, or no input at all, means yes). When the file already
-// has device_overrides entries, writing replaces them, so it lists them and
-// asks "Replace them? [y/N]" (Enter means no). With no terminal to ask on it
-// leaves the file alone and says how to replace them anyway: --yes. --yes
-// answers yes to either question without reading input.
+// always has (Enter, or no input at all, means yes); --yes and --force take
+// that yes without reading. When the file already has device_overrides
+// entries, writing replaces them, so it lists them and asks "Replace them?
+// [y/N]" (Enter means no). --force replaces them without asking; --yes takes
+// the default, so they are kept (the installers' meaning of --yes). With no
+// terminal to ask on and no --force it leaves the file alone and says to add
+// --force. --force wins when both are given.
 func (a discoverAsk) confirmWrite(configPath string) (bool, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
@@ -249,8 +252,8 @@ func (a discoverAsk) confirmWrite(configPath string) (bool, error) {
 
 	fmt.Fprintln(a.out)
 	if len(current) == 0 {
-		if a.yes {
-			fmt.Fprintf(a.out, "Writing to %s (--yes).\n", configPath)
+		if a.force || a.yes {
+			fmt.Fprintf(a.out, "Writing to %s (%s).\n", configPath, a.flagName())
 			return true, nil
 		}
 		fmt.Fprintf(a.out, "Write to %s? [Y/n]: ", configPath)
@@ -268,13 +271,17 @@ func (a discoverAsk) confirmWrite(configPath string) (bool, error) {
 	}
 	fmt.Fprintln(a.out)
 	fmt.Fprintf(a.out, "Writing replaces them with the entries above. The current file is kept as %s.bak.\n", configPath)
-	if a.yes {
-		fmt.Fprintln(a.out, "Replacing them (--yes).")
+	switch {
+	case a.force:
+		fmt.Fprintln(a.out, "Replacing them (--force).")
 		return true, nil
-	}
-	if !a.terminal {
-		fmt.Fprintf(a.out, "Not changed: there is no terminal to confirm on. To replace them, run again with --yes:\n")
-		fmt.Fprintln(a.out, "  smartha-agent --discover --yes")
+	case a.yes:
+		fmt.Fprintln(a.out, "Not changed: --yes takes the default answer, which keeps them. To replace them, run again with --force:")
+		fmt.Fprintln(a.out, "  smartha-agent --discover --force")
+		return false, nil
+	case !a.terminal:
+		fmt.Fprintln(a.out, "Not changed: there is no terminal to confirm on. To replace them, run again with --force:")
+		fmt.Fprintln(a.out, "  smartha-agent --discover --force")
 		return false, nil
 	}
 	fmt.Fprint(a.out, "Replace them? [y/N]: ")
@@ -284,6 +291,13 @@ func (a discoverAsk) confirmWrite(configPath string) (bool, error) {
 		return false, nil
 	}
 	return true, nil
+}
+
+func (a discoverAsk) flagName() string {
+	if a.force {
+		return "--force"
+	}
+	return "--yes"
 }
 
 // readAnswer reads one line of input, trimmed; "" on end of input.
