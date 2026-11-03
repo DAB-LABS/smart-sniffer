@@ -142,7 +142,8 @@ async def _handle_get_drive_data(hass: HomeAssistant, call: ServiceCall) -> dict
             "protocol": drive_data.get("protocol"),
             "device_path": drive_data.get("device_path"),
             "attention": {
-                "state": state,
+                # Lower case as the Attention sensor shows it (v1.0, J2).
+                "state": state.lower() if isinstance(state, str) else state,
                 "severity": severity,
                 "reasons": list(reasons or []),
                 "accepted": list(accepted or []),

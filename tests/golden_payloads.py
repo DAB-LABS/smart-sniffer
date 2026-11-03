@@ -121,6 +121,19 @@ def v100_golden(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[
     removed: dict[str, int] = {}
     for row in out:
         attrs = row.get("attributes") or {}
+        # J2: fixed states lower case at the HA boundary, translated.
+        if row["class"] == "SmartSnifferAttentionSensor":
+            row["value"] = row["value"].lower() if isinstance(row["value"], str) else row["value"]
+            row["translation_key"] = "attention"
+            removed["lowercase"] = removed.get("lowercase", 0) + 1
+        elif row["class"] == "ZfsPoolStateSensor":
+            row["value"] = row["value"].lower() if isinstance(row["value"], str) else row["value"]
+            removed["lowercase"] = removed.get("lowercase", 0) + 1
+        elif row["class"] == "SmartSnifferSensor" and row["unique_id"].endswith("_smart_status"):
+            row["value"] = row["value"].lower() if isinstance(row["value"], str) else row["value"]
+            row["translation_key"] = "smart_status"
+            row["device_class"] = "enum"
+            removed["lowercase"] = removed.get("lowercase", 0) + 1
         # J4: the filesystem sensors gain *_gib beside *_gb, same values.
         if row["class"] == "SmartSnifferFilesystemSensor":
             for name in ("total", "used", "available"):

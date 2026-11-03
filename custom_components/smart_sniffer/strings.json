@@ -190,7 +190,19 @@
         "name": "Data Read"
       },
       "pool_state": {
-        "name": "State"
+        "name": "State",
+        "state": {
+          "online": "Online",
+          "degraded": "Degraded",
+          "faulted": "Faulted",
+          "offline": "Offline",
+          "unavail": "Unavailable",
+          "removed": "Removed",
+          "suspended": "Suspended",
+          "split": "Split",
+          "unknown": "Unknown",
+          "missing": "Missing"
+        }
       },
       "pool_read_errors": {
         "name": "Read Errors"
@@ -203,6 +215,20 @@
       },
       "pool_last_scrub": {
         "name": "Last Scrub"
+      },
+      "attention": {
+        "state": {
+          "no": "No",
+          "maybe": "Maybe",
+          "yes": "Yes",
+          "unsupported": "Unsupported"
+        }
+      },
+      "smart_status": {
+        "state": {
+          "passed": "Passed",
+          "failed": "Failed"
+        }
       }
     },
     "binary_sensor": {

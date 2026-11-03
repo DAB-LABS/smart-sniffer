@@ -682,8 +682,14 @@ def _entity_keys_in_source() -> dict[str, set[str]]:
         # Entity descriptions that take their name from a translation (the
         # v0.8.0 Data Written and Data Read sensors).
         found |= set(re.findall(r'translation_key="(\w+)"', source))
+        found |= set(re.findall(r'_attr_translation_key = "(\w+)"', source))
         keys[platform] = found
     return keys
+
+
+# v1.0 (J2): translation keys that carry state translations only. Their names
+# stay the hard-coded English ones, so no friendly name changes.
+STATE_ONLY = {"attention", "smart_status"}
 
 
 def test_every_pool_entity_has_a_translated_name():
@@ -692,7 +698,9 @@ def test_every_pool_entity_has_a_translated_name():
         assert keys, platform
         names = strings["entity"][platform]
         assert keys == set(names), platform
-        assert all(names[k].get("name") for k in keys), platform
+        assert all(names[k].get("name") for k in keys - STATE_ONLY), platform
+        for k in keys & STATE_ONLY:
+            assert "name" not in names[k] and names[k]["state"], k
 
 
 def test_pool_entities_set_no_hard_coded_name():

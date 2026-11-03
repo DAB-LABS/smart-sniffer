@@ -104,6 +104,28 @@ _LOGGER = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Fixed states as Home Assistant shows them (v1.0, J2)
+# ---------------------------------------------------------------------------
+# Inside the integration, the panel and the App the states stay upper case
+# (attention.py, pool_health.py, the agent's zpool states). At the Home
+# Assistant boundary, a sensor's state and its enum options are lower case,
+# so Home Assistant can translate them (strings.json, entity.sensor.<key>.
+# state): Attention yes/maybe/no/unsupported, pool online/degraded/...,
+# SMART Status passed/failed.
+
+
+def ha_state(value: Any) -> Any:
+    """A fixed upper-case state as Home Assistant shows it: lower case.
+    None and anything that is not a string pass through."""
+    return value.lower() if isinstance(value, str) else value
+
+
+ATTENTION_OPTIONS: list[str] = [ha_state(s) for s in ATTENTION_STATES]
+POOL_OPTIONS: list[str] = [ha_state(s) for s in POOL_STATES]
+SMART_STATUS_OPTIONS: list[str] = ["passed", "failed"]
+
+
+# ---------------------------------------------------------------------------
 # SMART attribute sensor descriptions
 # ---------------------------------------------------------------------------
 SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
@@ -149,6 +171,10 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
     SensorEntityDescription(
         key="smart_status",
         name="SMART Status",
+        # v1.0 (J2): an enum, passed/failed, translated in strings.json.
+        translation_key="smart_status",
+        device_class=SensorDeviceClass.ENUM,
+        options=SMART_STATUS_OPTIONS,
         icon="mdi:harddisk",
     ),
 
@@ -484,8 +510,8 @@ class SmartSnifferSensor(CoordinatorEntity[SmartSnifferCoordinator], SensorEntit
             if value >= 90:
                 return _ALERT_ICON_WARNING
 
-        # SMART Status — FAILED = critical.
-        if key == "smart_status" and value == "FAILED":
+        # SMART Status — failed = critical.
+        if key == "smart_status" and value == "failed":
             return _ALERT_ICON_CRITICAL
 
         return self._default_icon
@@ -495,7 +521,10 @@ class SmartSnifferSensor(CoordinatorEntity[SmartSnifferCoordinator], SensorEntit
         drive_data = self.coordinator.data.get(self._drive_id)
         if drive_data is None:
             return None
-        return _extract_attribute(drive_data, self.entity_description.key)
+        value = _extract_attribute(drive_data, self.entity_description.key)
+        if self.entity_description.key == "smart_status":
+            return ha_state(value)  # PASSED / FAILED -> passed / failed (J2)
+        return value
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -629,7 +658,9 @@ class SmartSnifferAttentionSensor(
     _attr_has_entity_name = True
     _attr_name = "Attention Needed"
     _attr_device_class = SensorDeviceClass.ENUM
-    _attr_options = ATTENTION_STATES
+    # v1.0 (J2): lower case, translated (entity.sensor.attention.state).
+    _attr_translation_key = "attention"
+    _attr_options = ATTENTION_OPTIONS
 
     # Icon per state — provides at-a-glance status on dashboards.
     _STATE_ICONS: dict[str, str] = {
@@ -664,11 +695,11 @@ class SmartSnifferAttentionSensor(
     def icon(self) -> str:
         """Dynamic icon based on current attention state."""
         return self._STATE_ICONS.get(
-            self.native_value, "mdi:help-circle-outline"
+            self._state(), "mdi:help-circle-outline"
         )
 
-    @property
-    def native_value(self) -> str | None:
+    def _state(self) -> str | None:
+        """The state as attention.py names it (upper case), or None."""
         drive_data = self.coordinator.data.get(self._drive_id)
         if drive_data is None:
             return STATE_UNSUPPORTED
@@ -676,6 +707,10 @@ class SmartSnifferAttentionSensor(
             return None
         state, _, _, _ = evaluate_attention(drive_data, self._thresholds())
         return state
+
+    @property
+    def native_value(self) -> str | None:
+        return ha_state(self._state())
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -895,22 +930,27 @@ class ZfsPoolStateSensor(ZfsPoolMissingAwareEntity, SensorEntity):
     """
 
     _attr_device_class = SensorDeviceClass.ENUM
-    _attr_options = POOL_STATES
+    # v1.0 (J2): lower case, translated (entity.sensor.pool_state.state).
+    _attr_options = POOL_OPTIONS
     _attr_icon = "mdi:database-check-outline"
 
     def __init__(self, coordinator: SmartSnifferCoordinator, pool_name: str) -> None:
         super().__init__(coordinator, pool_name, "pool_state")
 
-    @property
-    def native_value(self) -> str | None:
+    def _state(self) -> str | None:
+        """The state as pool_health.py names it (upper case), or None."""
         pool = self._pool
         if pool is not None:
             return state_option(pool)
         return STATE_MISSING if self._missing else None
 
     @property
+    def native_value(self) -> str | None:
+        return ha_state(self._state())
+
+    @property
     def icon(self) -> str:
-        if self.native_value in (None, "ONLINE"):
+        if self._state() in (None, "ONLINE"):
             return "mdi:database-check-outline"
         return "mdi:database-alert-outline"
 

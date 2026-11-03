@@ -231,8 +231,8 @@ def test_a_threshold_save_refreshes_without_a_reload(tmp_path, agent, notes):
         h = await _set_up(hass)
         coordinator, ids = h.coordinator, h.entity_ids()
         assert ATTENTION in ids
-        assert _attention(h) == ("NO", [])  # v1.0 (J3): no reasons, an empty list
-        assert await _other_readers(h) == ("NO", "NO", {})
+        assert _attention(h) == ("no", [])  # v1.0 (J3): no reasons, an empty list
+        assert await _other_readers(h) == ("no", "NO", {})  # the service lower case (J2), diagnostics as stored
         polls = agent.drive_fetches
 
         # Lower the wear limit below the 50% reading.
@@ -243,9 +243,9 @@ def test_a_threshold_save_refreshes_without_a_reload(tmp_path, agent, notes):
         assert h.coordinator is coordinator and h.entity_ids() == ids
         assert agent.drive_fetches == polls + 1  # one refresh
         state, reasons = _attention(h)
-        assert state == "MAYBE" and "wear at 50%" in reasons[0]
+        assert state == "maybe" and "wear at 50%" in reasons[0]
         assert notes == [("create", NOTICE)]
-        assert await _other_readers(h) == ("MAYBE", "MAYBE", {WEAR: 40})
+        assert await _other_readers(h) == ("maybe", "MAYBE", {WEAR: 40})
         assert h.unavailable() == []
         assert all(h.state(eid).state != STATE_UNAVAILABLE for eid in ids
                    if h.state(eid) is not None)
@@ -256,9 +256,9 @@ def test_a_threshold_save_refreshes_without_a_reload(tmp_path, agent, notes):
         assert h.entry.data["thresholds"] == {}
         assert h.reloads == [] and h.coordinator is coordinator
         assert agent.drive_fetches == polls + 2
-        assert _attention(h) == ("NO", [])  # v1.0 (J3): no reasons, an empty list
+        assert _attention(h) == ("no", [])  # v1.0 (J3): no reasons, an empty list
         assert notes[-1] == ("dismiss", NOTICE)
-        assert await _other_readers(h) == ("NO", "NO", {})
+        assert await _other_readers(h) == ("no", "NO", {})  # the service lower case (J2), diagnostics as stored
         assert h.unavailable() == []
     _run(tmp_path, body)
 
@@ -266,7 +266,7 @@ def test_a_threshold_save_refreshes_without_a_reload(tmp_path, agent, notes):
 def test_a_save_that_changes_nothing_does_not_poll(tmp_path, agent, notes):
     async def body(hass):
         h = await _set_up(hass, thresholds={DRIVE: {WEAR: 40}})
-        assert _attention(h)[0] == "MAYBE"
+        assert _attention(h)[0] == "maybe"
         polls = agent.drive_fetches
         await h.options("threshold_form", {WEAR: 40}, drive_id=DRIVE)
         assert h.reloads == [] and agent.drive_fetches == polls
@@ -289,7 +289,7 @@ def test_a_threshold_save_with_the_agent_down(tmp_path, agent, notes):
         agent.up = True
         await coordinator.async_refresh()
         await hass.async_block_till_done()
-        assert _attention(h)[0] == "MAYBE"
+        assert _attention(h)[0] == "maybe"
         assert h.reloads == []
     _run(tmp_path, body)
 

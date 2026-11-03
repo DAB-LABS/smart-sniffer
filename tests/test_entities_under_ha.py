@@ -560,7 +560,7 @@ def test_never_had_smart_is_unchanged(monkeypatch):
     stub.smart_presence.update(never["id"], never)
     by_uid = {e.unique_id: e for e in added["sensor"]}
     prefix = f"{ENTRY_ID}_{never['id']}"
-    assert by_uid[f"{prefix}_attention"].native_value == "UNSUPPORTED"
+    assert by_uid[f"{prefix}_attention"].native_value == "unsupported"
     assert by_uid[f"{prefix}_attention_reasons"].native_value == "No usable SMART data"
 
 
@@ -574,7 +574,7 @@ def test_lost_smart_entities(monkeypatch):
     attention_entity = by_uid[f"{prefix}_attention"]
     reasons_entity = by_uid[f"{prefix}_attention_reasons"]
     health_entity = by_uid[f"{prefix}_health"]
-    assert attention_entity.native_value == "NO"
+    assert attention_entity.native_value == "no"
     assert health_entity.is_on is False
 
     gone = _smart_gone(healthy)
@@ -594,7 +594,7 @@ def test_lost_smart_entities(monkeypatch):
 
     data[healthy["id"]] = healthy
     coord.smart_presence.update(healthy["id"], healthy)
-    assert attention_entity.native_value == "NO"
+    assert attention_entity.native_value == "no"
     assert reasons_entity.native_value == "No issues detected"
     assert health_entity.is_on is False
 
@@ -1013,7 +1013,7 @@ def test_wd_wear_level_and_its_note():
     wear = by_key["wear_leveling_count"]
     assert wear.native_value == 1
     assert "wear_note" not in wear.extra_state_attributes
-    assert _attention(added) == "NO"
+    assert _attention(added) == "no"
 
     drive = _wd_red_sa500(99)
     _, added = _setup({drive["id"]: drive})
@@ -1021,7 +1021,7 @@ def test_wd_wear_level_and_its_note():
     wear = by_key["wear_leveling_count"]
     assert wear.native_value is None
     assert wear.extra_state_attributes["wear_note"].startswith("wear unknown: attribute 230")
-    assert _attention(added) == "NO"
+    assert _attention(added) == "no"
 
 
 _TRANSLATIONS = None
@@ -1106,3 +1106,51 @@ def test_filesystem_sizes_in_gib_and_null(monkeypatch):
     down = fs[f"{ENTRY_ID}_fs-data_usage"]
     assert down.available is False and down.native_value is None
     assert down.extra_state_attributes["total_gib"] is None
+
+
+def test_fixed_states_are_lower_case_and_translated():
+    """v1.0 (J2): Attention, pool State and SMART Status show lower-case
+    states with a translation for every option; the constants inside stay
+    upper case (the App and the panel compare against them)."""
+    strings = json.loads((Path(sensor.__file__).with_name("strings.json")).read_text())
+    en = json.loads((Path(sensor.__file__).parent / "translations" / "en.json").read_text())
+    att = importlib.import_module("custom_components.smart_sniffer.attention")
+    ph = importlib.import_module("custom_components.smart_sniffer.pool_health")
+    assert att.ATTENTION_STATES == ["NO", "MAYBE", "YES", "UNSUPPORTED"]
+    assert "ONLINE" in ph.POOL_STATES and "MISSING" in ph.POOL_STATES
+    _, added = _setup(golden_payload())
+    one = {type(e).__name__: e for e in added["sensor"]}
+    smart = next(e for e in added["sensor"] if getattr(e, "entity_description", None) is not None
+                 and e.entity_description.key == "smart_status")
+    cases = {
+        "attention": (one["SmartSnifferAttentionSensor"].options, ["no", "maybe", "yes", "unsupported"]),
+        "pool_state": (one["ZfsPoolStateSensor"].options, [s.lower() for s in ph.POOL_STATES]),
+        "smart_status": (smart.options, ["passed", "failed"]),
+    }
+    assert one["SmartSnifferAttentionSensor"].translation_key == "attention"
+    assert one["ZfsPoolStateSensor"].translation_key == "pool_state"
+    assert smart.translation_key == "smart_status"
+    for key, (options, want) in cases.items():
+        assert options == want, key
+        assert all(o == o.lower() for o in options), key
+        for source in (strings, en):
+            states = source["entity"]["sensor"][key]["state"]
+            assert set(states) == set(options), key
+    assert smart.device_class == "enum"
+    # No name translations (test_pool_health STATE_ONLY): the names stay.
+    assert "name" not in strings["entity"]["sensor"]["attention"]
+    assert "name" not in strings["entity"]["sensor"]["smart_status"]
+
+
+def test_pool_state_and_smart_status_values():
+    data = golden_payload()
+    _, added = _setup(data)
+    pools = {e.unique_id: e for e in added["sensor"] if type(e).__name__ == "ZfsPoolStateSensor"}
+    values = {uid.split("zpool_")[1]: e.native_value for uid, e in pools.items()}
+    assert values["oldpool_pool_state"] == "missing"
+    assert all(v is None or v == v.lower() for v in values.values()), values
+    assert "online" in values.values() and "degraded" in values.values()
+    statuses = {e.native_value for e in added["sensor"]
+                if getattr(e, "entity_description", None) is not None
+                and e.entity_description.key == "smart_status"}
+    assert statuses <= {"passed", "failed", None} and "passed" in statuses
