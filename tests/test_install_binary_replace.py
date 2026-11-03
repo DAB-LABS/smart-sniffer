@@ -1,11 +1,13 @@
-"""Replacing the agent binary on an update retries while the old file is in use.
+"""Replacing the agent binary on an update: retried for a while, then a clear stop.
 
-After the service stops, the old binary can stay in use for a moment: on
-Windows the service manager or an antivirus scan keeps the .exe open, on
-Linux a process still running it makes cp fail with "Text file busy". Both
-installers retry the copy for up to 10 seconds, then stop with a clear
-message. The helpers are taken out of the scripts and run with a copy that
-fails on purpose; the installers themselves are never run here.
+install.ps1: after the service stops, Windows can keep the old .exe open for
+a moment (the service manager, an antivirus scan), so a failed copy is
+retried for up to 10 seconds. install.sh: the binary is copied next to the
+old one and renamed over it, so the old file is never written to (a running
+binary on Linux, the cached code signature on Apple silicon), and a failed
+step is retried for up to 10 seconds. Both then stop with a clear message.
+The helpers are taken out of the scripts and run with a copy that fails on
+purpose; the installers themselves are never run here.
 """
 
 from __future__ import annotations
@@ -44,23 +46,26 @@ def test_install_sh_puts_the_binary_in_place_only_through_replace_binary():
     assert copies == [], copies
 
 
-def _run_replace(tmp_path: Path, busy: int, tries: int = 10) -> tuple[subprocess.CompletedProcess, Path]:
-    """Runs replace_binary with a cp that fails `busy` times first (as a
-    busy file does) and a sleep that only records the call."""
+def _run_replace(tmp_path: Path, failures: int, tries: int = 10) -> tuple[subprocess.CompletedProcess, Path]:
+    """Runs replace_binary with a cp that fails `failures` times first and a
+    sleep that only records the call."""
     stubs = tmp_path / "stubs"
     stubs.mkdir()
     real_cp = shutil.which("cp")
     (stubs / "cp").write_text(
         "#!/bin/sh\n"
         f"n=$(cat '{tmp_path}/cp.count' 2>/dev/null || echo 0); n=$((n + 1)); echo $n > '{tmp_path}/cp.count'\n"
-        f"if [ $n -le {busy} ]; then echo \"cp: cannot create regular file '$2': Text file busy\" >&2; exit 1; fi\n"
+        f"if [ $n -le {failures} ]; then echo \"cp: cannot create regular file '$2': No space left on device\" >&2; "
+        "exit 1; fi\n"
         f"exec {real_cp} \"$@\"\n")
     (stubs / "sleep").write_text(f"#!/bin/sh\necho \"$1\" >> '{tmp_path}/sleeps'\n")
     for stub in stubs.iterdir():
         stub.chmod(0o755)
+    folder = tmp_path / "bin"
+    folder.mkdir()
     src = tmp_path / "new-agent"
     src.write_text("new build\n")
-    dest = tmp_path / "smartha-agent"
+    dest = folder / "smartha-agent"
     dest.write_text("old build\n")
     script = (
         "set -e\n"
@@ -74,29 +79,53 @@ def _run_replace(tmp_path: Path, busy: int, tries: int = 10) -> tuple[subprocess
     return result, dest
 
 
-def test_install_sh_a_busy_binary_is_retried_until_it_is_free(tmp_path):
-    result, dest = _run_replace(tmp_path, busy=3)
+def test_install_sh_a_failed_copy_is_retried_until_it_works(tmp_path):
+    result, dest = _run_replace(tmp_path, failures=3)
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines() == [
-        "WARN The old binary is still in use; retrying for up to 10 seconds...", "replaced"]
+        "WARN Could not replace the binary yet; retrying for up to 10 seconds...", "replaced"]
     assert dest.read_text() == "new build\n"
     assert (tmp_path / "cp.count").read_text().strip() == "4"
     assert (tmp_path / "sleeps").read_text().split() == ["1", "1", "1"]
+    assert sorted(p.name for p in dest.parent.iterdir()) == ["smartha-agent"]
 
 
-def test_install_sh_a_free_binary_is_copied_at_once(tmp_path):
-    result, dest = _run_replace(tmp_path, busy=0)
+def test_install_sh_the_new_binary_is_a_new_file_and_the_old_one_is_never_written(tmp_path):
+    """A process still holding the old binary keeps reading the old bytes:
+    the old file was renamed over, not overwritten."""
+    folder = tmp_path / "bin"
+    folder.mkdir()
+    dest = folder / "smartha-agent"
+    dest.write_text("old build\n")
+    old_inode = dest.stat().st_ino
+    src = tmp_path / "new-agent"
+    src.write_text("new build\n")
+    with dest.open() as held:
+        script = ("set -e\nwarn() { echo \"WARN $*\"; }\n" + _sh_function("replace_binary")
+                  + 'replace_binary "$1" "$2" && echo replaced\n')
+        result = subprocess.run(["bash", "-c", script, "t", str(src), str(dest)], capture_output=True,
+                                text=True, check=False, timeout=30)
+        assert result.stdout.splitlines() == ["replaced"], result.stdout + result.stderr
+        assert held.read() == "old build\n"
+    assert dest.read_text() == "new build\n"
+    assert dest.stat().st_ino != old_inode
+    assert sorted(p.name for p in folder.iterdir()) == ["smartha-agent"]
+
+
+def test_install_sh_a_copy_that_works_at_once_does_not_wait(tmp_path):
+    result, dest = _run_replace(tmp_path, failures=0)
     assert result.stdout.splitlines() == ["replaced"]
     assert dest.read_text() == "new build\n"
     assert not (tmp_path / "sleeps").exists()
 
 
-def test_install_sh_a_binary_that_stays_busy_gives_up_after_ten_tries(tmp_path):
-    result, dest = _run_replace(tmp_path, busy=99)
+def test_install_sh_a_copy_that_keeps_failing_gives_up_after_ten_tries(tmp_path):
+    result, dest = _run_replace(tmp_path, failures=99)
     assert result.returncode == 0, result.stderr
-    assert result.stdout.splitlines()[-1].startswith("failed: cp: cannot create regular file")
-    assert result.stdout.splitlines()[-1].endswith("Text file busy")
+    last = result.stdout.splitlines()[-1]
+    assert last.startswith("failed: cp: cannot create regular file") and last.endswith("No space left on device")
     assert dest.read_text() == "old build\n"
+    assert sorted(p.name for p in dest.parent.iterdir()) == ["smartha-agent"]
     assert (tmp_path / "cp.count").read_text().strip() == "10"
     assert len((tmp_path / "sleeps").read_text().split()) == 9
 

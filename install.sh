@@ -35,24 +35,28 @@ success() { echo -e "${GREEN}  ✓ $*${NC}"; }
 warn()    { echo -e "${YELLOW}  ⚠ $*${NC}"; }
 fail()    { echo -e "${RED}  ✗ $*${NC}"; exit 1; }
 
-# replace_binary SRC DEST: copies the downloaded binary into place. A
-# running copy of the old binary makes cp fail (Text file busy) until it
-# has exited, so after the service stops a failed copy is retried once a
-# second for up to 10 seconds (REPLACE_TRIES). Returns 1 if it never
-# succeeds, with cp's last message in REPLACE_ERROR.
+# replace_binary SRC DEST: puts the downloaded binary in place. It is
+# copied next to DEST first and renamed over it, so DEST becomes a new file:
+# overwriting a binary in place can get the new one killed at launch on
+# Apple silicon (the old code signature stays cached for that file), and
+# fails with "Text file busy" on Linux while the old one still runs. A
+# failed step is retried once a second for up to 10 seconds
+# (REPLACE_TRIES). Returns 1 if it never succeeds, with the last error in
+# REPLACE_ERROR; DEST is then left as it was.
 replace_binary() {
   _tries=0
   _told=false
   while :; do
-    if REPLACE_ERROR=$(cp "$1" "$2" 2>&1); then
+    if REPLACE_ERROR=$( { cp "$1" "$2.new" && mv -f "$2.new" "$2"; } 2>&1 ); then
       return 0
     fi
+    rm -f "$2.new" 2>/dev/null || true
     _tries=$((_tries + 1))
     if [ "$_tries" -ge "${REPLACE_TRIES:-10}" ]; then
       return 1
     fi
     if [ "$_told" = "false" ]; then
-      warn "The old binary is still in use; retrying for up to 10 seconds..."
+      warn "Could not replace the binary yet; retrying for up to 10 seconds..."
       _told=true
     fi
     sleep 1
@@ -2021,7 +2025,7 @@ if [ "$PLATFORM" = "darwin" ] && launchctl list | grep -q com.dablabs.smartha-ag
 fi
 info "Installing binary to $INSTALL_BIN..."
 if ! replace_binary "$TMPDIR/$BINARY_FILE" "$INSTALL_BIN"; then
-  fail "Could not replace $INSTALL_BIN after 10 seconds: ${REPLACE_ERROR:-cp failed}. If another copy of the agent is still running (pgrep -lx $BINARY_NAME), stop it, then run the installer again."
+  fail "Could not replace $INSTALL_BIN after 10 seconds: ${REPLACE_ERROR:-copy failed}. The old binary is unchanged. Check that $(dirname "$INSTALL_BIN") is writable and has free space, then run the installer again."
 fi
 chmod +x "$INSTALL_BIN"
 
