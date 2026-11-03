@@ -98,8 +98,7 @@ attributes:
 # Example: all clear
 state: "NO"
 attributes:
-  reasons:
-    - "No issues detected"
+  reasons: []   # v1.0: only real reasons; the Attention Reasons sensor says "No issues detected"
 ```
 
 The integration also fires persistent notifications automatically on state transitions — no automations needed. See [attention-severity-logic.md](attention-severity-logic.md) for the full notification lifecycle.

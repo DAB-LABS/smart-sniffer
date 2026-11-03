@@ -46,7 +46,7 @@ Each drive gets its own HA device, and entities are created only for what that d
 
 **Vendor-specific attributes** for any drive smartctl's database recognizes: every named SMART attribute not already covered above, created disabled by default. Enable what you need from the device page.
 
-**Disk usage** (per agent host, needs filesystems configured): one percentage-used sensor per mountpoint, with `mountpoint`, `device`, `fstype` and the raw byte counts as attributes.
+**Disk usage** (per agent host, needs filesystems configured): one percentage-used sensor per mountpoint, with `mountpoint`, `device`, `fstype` and the sizes in GiB (`total_gib`, `used_gib`, `available_gib`) as attributes. The older `total_gb`, `used_gb` and `available_gb` hold the same GiB values and go in 2.0.
 
 **Per agent:** Agent Status (connectivity, enabled by default), Agent Version, and OS, plus disabled-by-default diagnostics for last-seen time, IP, port, HA poll interval and whether a bearer token is set.
 

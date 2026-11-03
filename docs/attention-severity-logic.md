@@ -46,16 +46,15 @@ reasons:
   - "Current Pending Sector Count: 1 (expected 0)"
 issue_count: 2
 
-# When state is NO
+# When state is NO (v1.0: reasons is an empty list; before 1.0 it held
+# "No issues detected". The Attention Reasons sensor still says that.)
 severity: "none"
-reasons:
-  - "No issues detected"
+reasons: []
 issue_count: 0
 
 # When state is UNSUPPORTED
 severity: "none"
-reasons:
-  - "Drive data unavailable"
+reasons: []
 issue_count: 0
 ```
 
