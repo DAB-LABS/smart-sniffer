@@ -2,6 +2,12 @@
 
 All notable changes to the SMART Sniffer Card.
 
+## [1.0.20] - DRAFT (ships with SMART Sniffer 1.0.0)
+
+### Fixed
+
+- S.M.A.R.T. Status FAILED is still marked critical with SMART Sniffer 1.0, which reports the status as `passed` / `failed` in lower case. The card shows it in capitals with any integration version. The Attention state was already read case-insensitively.
+
 ## [1.0.19] - 2026-05-02
 
 ### Fixed

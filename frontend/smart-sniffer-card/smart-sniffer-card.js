@@ -14,7 +14,7 @@
  *   visual config editor pattern carried over from that prototype. Thank you.
  */
 
-const VERSION = "1.0.19";
+const VERSION = "1.0.20";
 const DOMAIN  = "smart_sniffer";
 
 /* ─── Entity-id suffix patterns ─────────────────────────────────────────────
@@ -1718,10 +1718,13 @@ class SmartSnifferCard extends HTMLElement {
     const pcc = this._state(hass, e.power_cycle_count);
     if (pcc != null) out.push({ label: "Power Cycles", value: this._fmtNumber(pcc) });
 
-    const smart = this._state(hass, e.smart_status);
-    if (smart != null) {
+    const smartRaw = this._state(hass, e.smart_status);
+    if (smartRaw != null) {
       // PASSED stays neutral; color is reserved for problems. Only FAILED
-      // gets a critical stroke.
+      // gets a critical stroke. Integration 1.0 sends passed/failed in lower
+      // case (translated in Home Assistant); older ones PASSED/FAILED. Shown
+      // in capitals either way.
+      const smart = String(smartRaw).toUpperCase();
       const cls = smart === "FAILED" ? "is-crit" : "";
       out.push({ label: "S.M.A.R.T. Status", value: smart, cls });
     }

@@ -66,7 +66,7 @@ See the `examples/` directory:
 
 ## Severity logic
 
-The card never invents severity thresholds. It reads the integration's `Attention Needed` enum sensor (`NO` / `MAYBE` / `YES` / `UNSUPPORTED`) and the matching `Attention Reasons` text sensor. If you want to change what counts as critical or watch, change `attention.py` in the integration. The card will follow.
+The card never invents severity thresholds. It reads the integration's `Attention Needed` enum sensor (`no` / `maybe` / `yes` / `unsupported`; upper case before SMART Sniffer 1.0, read either way) and the matching `Attention Reasons` text sensor. If you want to change what counts as critical or watch, change `attention.py` in the integration. The card will follow.
 
 The visible severity ramp:
 
