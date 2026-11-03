@@ -969,12 +969,14 @@ def serve(snapshot: dict, path: str) -> tuple[int, Any]:
         return 200, snapshot["drives"]
     if len(parts) == 3 and parts[:2] == ["api", "drives"]:
         drive = snapshot["drive"].get(parts[2])
-        return (200, drive) if drive is not None else (404, {"error": "drive not found"})
+        return (200, drive) if drive is not None else (
+            404, {"error": "not_found", "message": "No drive with this id on this agent."})
     if path == "/api/filesystems" and snapshot["filesystems"]:
         return 200, snapshot["filesystems"]
     if path == "/api/pools" and snapshot["pools"]:
         return 200, snapshot["pools"]
-    return 404, {"error": "not found"}
+    # The agent's one error shape (api_version 1).
+    return 404, {"error": "not_found", "message": "No such endpoint on this agent."}
 
 
 def pool_document(pool: dict, filesystems: list[dict] | None = None) -> dict:

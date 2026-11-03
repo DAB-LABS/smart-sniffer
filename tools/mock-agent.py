@@ -2576,7 +2576,8 @@ class MockHandler(BaseHTTPRequestHandler):
         auth = self.headers.get("Authorization", "")
         if auth == f"Bearer {self.token}":
             return True
-        self._json_response(401, {"error": "unauthorized"})
+        self._json_response(401, {"error": "unauthorized",
+                                  "message": "This agent needs its password (Authorization: Bearer <password>)."})
         return False
 
     def _json_response(self, code: int, data: Any) -> None:
@@ -2738,7 +2739,7 @@ class MockHandler(BaseHTTPRequestHandler):
             if drive:
                 self._json_response(200, drive)
             else:
-                self._json_response(404, {"error": "drive not found"})
+                self._json_response(404, {"error": "not_found", "message": "No drive with this id on this agent."})
         elif path == "/api/filesystems" and store.filesystem_count():
             self._json_response(200, store.served_filesystems())
         elif path == "/api/pools" and store.pools_enabled():
@@ -2768,7 +2769,7 @@ class MockHandler(BaseHTTPRequestHandler):
             library.refresh()
             self._json_response(200, copy.deepcopy(library.scenarios))
         else:
-            self._json_response(404, {"error": "not found"})
+            self._json_response(404, {"error": "not_found", "message": "No such endpoint on this agent."})
 
     def _export(self, kind: str, key: str, verdict: Any) -> None:
         doc = store.export(kind, key, verdict)

@@ -162,7 +162,10 @@ def test_health_needs_no_token_but_the_rest_does(tmp_path):
         assert get("/api/health", "wrong")[0] == 200
         for path in ("/api/drives", "/api/drives/mock-sata-0002", "/api/state", "/api/replicas",
                      "/api/scenarios", "/mock/replicas"):
-            assert get(path) == (401, {"error": "unauthorized"}), path
+            # The agent's one error shape (v1.0): the code, and a message.
+            code, body = get(path)
+            assert code == 401 and body["error"] == "unauthorized" and body["message"], path
+            assert set(body) == {"error", "message"}, path
             assert get(path, "wrong")[0] == 401, path
             assert get(path, "s3cret")[0] == 200, path
     finally:

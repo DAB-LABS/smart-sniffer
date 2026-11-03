@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -188,6 +189,7 @@ func LoadConfig() (*Config, error) {
 		if err := decodeConfigFile(data, &cfg); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", *configPath, err)
 		}
+		warnUnknownConfigKeys(*configPath, data, log.Printf)
 		cfg.ConfigPath = absPath(*configPath)
 	} else {
 		// Auto-detect: working directory first, then system path.
@@ -199,6 +201,7 @@ func LoadConfig() (*Config, error) {
 			if err := decodeConfigFile(data, &cfg); err != nil {
 				return nil, fmt.Errorf("parsing %s: %w", path, err)
 			}
+			warnUnknownConfigKeys(path, data, log.Printf)
 			cfg.ConfigPath = absPath(path)
 			break
 		}
@@ -323,6 +326,53 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// knownConfigKeys is every top-level key config.yaml may hold: the yaml
+// names of Config's fields, plus scan_interval (read on its own).
+func knownConfigKeys() map[string]bool {
+	keys := map[string]bool{"scan_interval": true}
+	t := reflect.TypeOf(Config{})
+	for i := 0; i < t.NumField(); i++ {
+		name := strings.Split(t.Field(i).Tag.Get("yaml"), ",")[0]
+		if name != "" && name != "-" {
+			keys[name] = true
+		}
+	}
+	return keys
+}
+
+// unknownConfigKeys returns the top-level keys of a config file the agent
+// does not read, in file order, each once (v1.0). Only top-level keys:
+// keys inside a list item (filesystems, device_overrides) are not checked.
+func unknownConfigKeys(data []byte) []string {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil || len(doc.Content) == 0 {
+		return nil
+	}
+	root := doc.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return nil
+	}
+	known := knownConfigKeys()
+	seen := map[string]bool{}
+	var out []string
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		key := root.Content[i].Value
+		if !known[key] && !seen[key] {
+			seen[key] = true
+			out = append(out, key)
+		}
+	}
+	return out
+}
+
+// warnUnknownConfigKeys logs one WARNING per unknown top-level key: its name
+// only, never its value (a mistyped "tokn:" would hold a password).
+func warnUnknownConfigKeys(path string, data []byte, logf func(string, ...any)) {
+	for _, key := range unknownConfigKeys(data) {
+		logf("WARNING: %s: unknown key %q is ignored (check its spelling)", path, key)
+	}
 }
 
 // decodeConfigFile reads config.yaml into cfg. scan_interval is read on its

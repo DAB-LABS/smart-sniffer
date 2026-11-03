@@ -189,10 +189,7 @@ func RunAgent(ctx context.Context, ready chan<- struct{}) error {
 		mux.HandleFunc("/api/pools", cache.poolCache.HandlePools)
 	}
 
-	var handler http.Handler = mux
-	if cfg.Token != "" {
-		handler = authMiddleware(cfg.Token, mux)
-	}
+	handler := apiHandlerChain(cfg.Token, mux)
 
 	srv := newHTTPServer(fmt.Sprintf(":%d", cfg.Port), handler)
 
@@ -510,18 +507,16 @@ func authMiddlewareWith(token string, limiter *authLimiter, next http.Handler) h
 		}
 		ip := clientIP(r)
 		if wait, left := limiter.blocked(ip); wait {
-			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Retry-After", retryAfter(left))
-			w.WriteHeader(http.StatusTooManyRequests)
-			w.Write([]byte(`{"error":"too_many_attempts"}`))
+			writeError(w, http.StatusTooManyRequests, "too_many_attempts",
+				"Too many wrong passwords from this address. Try again in "+retryAfter(left)+" s.")
 			return
 		}
 		auth := []byte(r.Header.Get("Authorization"))
 		if subtle.ConstantTimeCompare(auth, expected) != 1 {
 			limiter.fail(ip)
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte(`{"error":"unauthorized"}`))
+			writeError(w, http.StatusUnauthorized, "unauthorized",
+				"This agent needs its password (Authorization: Bearer <password>).")
 			return
 		}
 		limiter.succeed(ip)
@@ -1481,7 +1476,7 @@ func (dc *DriveCache) HandleDrive(w http.ResponseWriter, r *http.Request) {
 	dc.mu.RUnlock()
 
 	if !ok {
-		http.Error(w, `{"error":"drive not found"}`, http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "not_found", "No drive with this id on this agent.")
 		return
 	}
 

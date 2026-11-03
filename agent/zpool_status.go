@@ -349,12 +349,12 @@ func (pc *PoolCache) HandlePools(w http.ResponseWriter, r *http.Request) {
 	pc.mu.RLock()
 	ok := pc.ok
 	pc.mu.RUnlock()
-	w.Header().Set("Content-Type", "application/json")
 	if !ok {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]string{"error": "zpool status has not been read successfully"})
+		writeError(w, http.StatusServiceUnavailable, "pools_unavailable",
+			"zpool status has not been read successfully.")
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(pc.Pools())
 }
 

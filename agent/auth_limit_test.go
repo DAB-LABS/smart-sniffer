@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -56,8 +57,12 @@ func TestFiveWrongPasswordsThen429(t *testing.T) {
 	if ra := rec.Header().Get("Retry-After"); ra != "1" {
 		t.Errorf("Retry-After = %q, want 1", ra)
 	}
-	if body := rec.Body.String(); body != `{"error":"too_many_attempts"}` {
-		t.Errorf("body = %s", body)
+	var body apiError
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body.Error != "too_many_attempts" || body.Message == "" {
+		t.Errorf("body = %s", rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+		t.Errorf("Content-Type = %q", ct)
 	}
 }
 
