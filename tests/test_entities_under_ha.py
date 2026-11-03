@@ -172,6 +172,8 @@ def test_the_v070_golden_rebuilt(force):
     golden, removed = v100_golden(golden)
     assert removed["SmartSnifferHealthSensor"] == 1
     assert removed["SmartSnifferSensor"] >= 5
+    assert removed["reasons"] >= 10  # J3: the healthy drives and pools
+    assert removed["gib_added"] == 6  # J4: two filesystems, three sizes each
     data = golden_payload()
     _, added = _setup(data, force)
     rows = [_describe(e, "sensor") for e in added["sensor"]] + [
@@ -582,7 +584,7 @@ def test_lost_smart_entities(monkeypatch):
     assert attention_entity.icon == "mdi:help-circle-outline"
     assert attention_entity.extra_state_attributes == {
         "severity": "none",
-        "reasons": ["SMART data not available right now"],
+        "reasons": [],  # v1.0 (J3): only real reasons; the Reasons sensor says why
         "issue_count": 0,
         "accepted": [],
     }
@@ -1087,3 +1089,20 @@ def test_duplicate_filesystem_ids_from_an_old_agent_warn_once(caplog):
         caplog.clear()
         fresh._warn_duplicate_filesystem_ids([{"id": "a"}, {"id": "b"}, "junk"])
     assert not [r for r in caplog.records if "several filesystems" in r.getMessage()]
+
+
+def test_filesystem_sizes_in_gib_and_null(monkeypatch):
+    """v1.0 (J4, J11): *_gib beside *_gb with the same GiB values; a size the
+    agent sends as null (an unavailable mountpoint) is None, not an error."""
+    assert sensor._bytes_to_gb(5 * 1024**3) == 5.0
+    assert sensor._bytes_to_gb(None) is None and sensor._bytes_to_gb(True) is None
+    data = golden_payload()
+    data["_filesystems"][1].update(total_bytes=None, used_bytes=None, available_bytes=None,
+                                   use_percent=None, status="unavailable")
+    _, added = _setup(data)
+    fs = {e.unique_id: e for e in added["sensor"] if e.unique_id.endswith("_usage")}
+    root = fs[f"{ENTRY_ID}_fs-root_usage"].extra_state_attributes
+    assert root["total_gib"] == root["total_gb"] == 100.0 and root["used_gib"] == 41.0
+    down = fs[f"{ENTRY_ID}_fs-data_usage"]
+    assert down.available is False and down.native_value is None
+    assert down.extra_state_attributes["total_gib"] is None

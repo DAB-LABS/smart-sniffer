@@ -112,7 +112,11 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for SMART Sniffer."""
 
+    # Entry data version (v1.0, J8). A 1.x minor may add keys; every 1.x
+    # integration loads every 1.x entry (__init__.async_migrate_entry). A
+    # change older integrations cannot read is VERSION 2, which they refuse.
     VERSION = 1
+    MINOR_VERSION = 1
 
     @staticmethod
     @callback

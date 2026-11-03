@@ -231,7 +231,7 @@ def test_a_threshold_save_refreshes_without_a_reload(tmp_path, agent, notes):
         h = await _set_up(hass)
         coordinator, ids = h.coordinator, h.entity_ids()
         assert ATTENTION in ids
-        assert _attention(h) == ("NO", ["No issues detected"])
+        assert _attention(h) == ("NO", [])  # v1.0 (J3): no reasons, an empty list
         assert await _other_readers(h) == ("NO", "NO", {})
         polls = agent.drive_fetches
 
@@ -256,7 +256,7 @@ def test_a_threshold_save_refreshes_without_a_reload(tmp_path, agent, notes):
         assert h.entry.data["thresholds"] == {}
         assert h.reloads == [] and h.coordinator is coordinator
         assert agent.drive_fetches == polls + 2
-        assert _attention(h) == ("NO", ["No issues detected"])
+        assert _attention(h) == ("NO", [])  # v1.0 (J3): no reasons, an empty list
         assert notes[-1] == ("dismiss", NOTICE)
         assert await _other_readers(h) == ("NO", "NO", {})
         assert h.unavailable() == []
@@ -379,3 +379,24 @@ def test_get_drive_data_names_an_unknown_entry(tmp_path, agent, notes):
                 DOMAIN, "get_drive_data", {"config_entry_id": "nope"},
                 blocking=True, return_response=True)
     _run(tmp_path, body)
+
+
+# --- Entry versions (v1.0, J8) ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(("version", "minor", "loads"), [
+    (1, 1, True), (1, 2, True), (1, 9, True), (2, 1, False), (3, 0, False)])
+def test_async_migrate_entry_loads_every_1x_and_refuses_2(version, minor, loads, caplog):
+    import asyncio  # noqa: PLC0415
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    init = _package_init()
+    entry = SimpleNamespace(version=version, minor_version=minor, title="SMART Sniffer (nas)")
+    assert asyncio.run(init.async_migrate_entry(None, entry)) is loads
+    if not loads:
+        assert "from a newer SMART Sniffer" in caplog.text
+
+
+def test_the_flow_is_version_1_minor_1():
+    assert config_flow.SmartSnifferConfigFlow.VERSION == 1
+    assert config_flow.SmartSnifferConfigFlow.MINOR_VERSION == 1

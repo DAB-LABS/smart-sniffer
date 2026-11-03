@@ -359,7 +359,7 @@ class ZfsPoolProblemSensor(ZfsPoolMissingAwareEntity, BinarySensorEntity):
             return {}
         reasons = pool_problems(pool)
         return {
-            "reasons": reasons if reasons else ["No issues detected"],
+            "reasons": list(reasons),  # [] when healthy (v1.0)
             "issue_count": len(reasons),
             "problem_devices": problem_devices(pool),
         }

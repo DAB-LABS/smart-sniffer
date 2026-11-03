@@ -621,7 +621,8 @@ class SmartSnifferAttentionSensor(
 
     Attributes:
       severity     "critical" | "warning" | "none"
-      reasons      List of human-readable trigger descriptions.
+      reasons      List of human-readable trigger descriptions; [] when
+                   there is nothing to report (v1.0).
       issue_count  Number of active issues.
     """
 
@@ -682,23 +683,25 @@ class SmartSnifferAttentionSensor(
         if not drive_data:
             return {
                 "severity": SEVERITY_NONE,
-                "reasons": ["Drive data unavailable"],
+                "reasons": [],
                 "issue_count": 0,
                 "accepted": [],
             }
         if self.coordinator.smart_presence.is_lost(self._drive_id):
             return {
                 "severity": SEVERITY_NONE,
-                "reasons": [REASON_SMART_NOT_AVAILABLE],
+                "reasons": [],
                 "issue_count": 0,
                 "accepted": [],
             }
         _, severity, reasons, accepted = evaluate_attention(
             drive_data, self._thresholds()
         )
+        # reasons holds only real reasons (v1.0): [] when there is nothing.
+        # The Attention Reasons sensor keeps its text ("No issues detected").
         return {
             "severity": severity,
-            "reasons": reasons if reasons else ["No issues detected"],
+            "reasons": list(reasons),
             # issue_count counts actionable reasons only. Accepted readings are
             # explicitly not issues, which is the whole point of accepting them.
             "issue_count": len(reasons),
@@ -804,7 +807,8 @@ class SmartSnifferFilesystemSensor(
     """Disk usage percentage sensor for a monitored filesystem.
 
     One sensor per mountpoint configured on the agent host. Attributes
-    expose total/used/available in GB plus filesystem metadata.
+    expose total/used/available in GiB (total_gib...; the older *_gb names
+    carry the same values) plus filesystem metadata.
     """
 
     _attr_has_entity_name = True
@@ -869,6 +873,11 @@ class SmartSnifferFilesystemSensor(
             "mountpoint": fs.get("mountpoint"),
             "device": fs.get("device"),
             "fstype": fs.get("fstype"),
+            # GiB (1024^3 bytes), one decimal. The *_gb names hold the same
+            # GiB values: kept through 1.x, removed in 2.0 (v1.0, J4).
+            "total_gib": _bytes_to_gb(fs.get("total_bytes", 0)),
+            "used_gib": _bytes_to_gb(fs.get("used_bytes", 0)),
+            "available_gib": _bytes_to_gb(fs.get("available_bytes", 0)),
             "total_gb": _bytes_to_gb(fs.get("total_bytes", 0)),
             "used_gb": _bytes_to_gb(fs.get("used_bytes", 0)),
             "available_gb": _bytes_to_gb(fs.get("available_bytes", 0)),

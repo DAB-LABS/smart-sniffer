@@ -79,6 +79,23 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Entry versions (v1.0, J8). Version 1 with any minor version loads as
+    it is: a later 1.x minor only adds keys this release ignores, so a user
+    who goes back to 1.0 keeps working entries. Version 2 and up come from a
+    newer integration that changed the data in a way this one cannot read:
+    refused, and Home Assistant shows the entry as a migration error until
+    that integration is back."""
+    if entry.version == 1:
+        return True
+    _LOGGER.error(
+        "SMART Sniffer entry %s is version %s.%s, from a newer SMART Sniffer; this one "
+        "reads version 1 only. Install the newer integration again",
+        entry.title, entry.version, getattr(entry, "minor_version", 1),
+    )
+    return False
+
+
 def async_register_services(hass: HomeAssistant) -> None:
     """smart_sniffer.get_drive_data, registered once per run (async_setup)
     and never removed: with no agent loaded it answers with a clear error."""

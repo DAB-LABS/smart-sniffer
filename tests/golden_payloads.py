@@ -107,12 +107,31 @@ V100_REMOVED_HEALTH_ATTRIBUTES = ("in_standby", "data_as_of")
 V100_REMOVED_FROM = ("SmartSnifferHealthSensor", "SmartSnifferSensor", "SmartSnifferDiagnosticAttrSensor")
 
 
+# J3: `reasons` holds only real reasons, [] when there are none (v0.7.0 put
+# a placeholder sentence there).
+V100_NOT_REASONS = ("No issues detected", "Drive data unavailable")
+V100_REASONS_FROM = ("SmartSnifferAttentionSensor", "ZfsPoolProblemSensor")
+
+
 def v100_golden(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, int]]:
     """The v0.7.0 golden rows as v1.0 shows them (without the added sensors),
-    and, per entity class, how many rows lost the removed attributes."""
+    and, per entity class, how many rows lost the removed attributes
+    ("reasons" counts the rows whose placeholder reason went)."""
     out = copy.deepcopy(rows)
     removed: dict[str, int] = {}
     for row in out:
+        attrs = row.get("attributes") or {}
+        # J4: the filesystem sensors gain *_gib beside *_gb, same values.
+        if row["class"] == "SmartSnifferFilesystemSensor":
+            for name in ("total", "used", "available"):
+                if f"{name}_gb" in attrs:
+                    attrs[f"{name}_gib"] = attrs[f"{name}_gb"]
+                    removed["gib_added"] = removed.get("gib_added", 0) + 1
+        if row["class"] in V100_REASONS_FROM and isinstance(attrs.get("reasons"), list):
+            kept = [r for r in attrs["reasons"] if r not in V100_NOT_REASONS]
+            if kept != attrs["reasons"]:
+                removed["reasons"] = removed.get("reasons", 0) + 1
+                attrs["reasons"] = kept
         if row["class"] in V100_REMOVED_FROM:
             attrs = row.get("attributes") or {}
             if any(key in attrs for key in V100_REMOVED_HEALTH_ATTRIBUTES):
