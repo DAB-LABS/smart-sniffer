@@ -23,7 +23,7 @@ A lightweight Go agent on each machine reads `smartctl` and serves the result ov
   <img src="images/smartsniffer-architecture.png" alt="One smartha-agent per machine (Proxmox host, NAS, Mac, and the SMART Sniffer App inside Home Assistant OS) reporting over JSON/HTTP to the smart_sniffer integration" width="100%">
 </p>
 
-- **Attention Needed**, the proactive health sensor, watches leading indicators of failure across ATA, SATA, NVMe and SAS drives and reports `NO`, `MAYBE`, `YES` or `UNSUPPORTED`. A persistent notification fires the moment a drive's state changes, escalates on worsening readings, and clears itself when the drive recovers. No automations or blueprints needed.
+- **Attention Needed**, the proactive health sensor, watches leading indicators of failure across ATA, SATA, NVMe and SAS drives and reports No, Maybe, Yes or Unsupported (states `no`, `maybe`, `yes`, `unsupported`). A persistent notification fires the moment a drive's state changes, escalates on worsening readings, and clears itself when the drive recovers. No automations or blueprints needed.
 - **The Control Center**, a SMART Sniffer page in the Home Assistant sidebar (admins only), shows every drive, ZFS pool and filesystem on every machine as a card, with the reason behind its health. See [The Control Center](#the-control-center).
 - **Replicas** let you try notifications and automations against test drives and pools with readings you choose, no failing hardware required.
 - **ZFS pools** show up as their own device with state, error counts and last scrub; a notification names the pool and the failing disks when one degrades.
@@ -57,12 +57,14 @@ Each drive gets its own HA device, and entities are created only for what that d
 
 <br>
 
-| State | Meaning | Action |
-|-------|---------|--------|
-| **NO** | All monitored indicators clear | None required |
-| **MAYBE** | Early degradation signals detected | Monitor closely, plan replacement |
-| **YES** | Data integrity at risk | **Back up immediately** |
-| **UNSUPPORTED** | No usable SMART data | Common with USB enclosures |
+| State | Shown as | Meaning | Action |
+|-------|----------|---------|--------|
+| `no` | No | All monitored indicators clear | None required |
+| `maybe` | Maybe | Early degradation signals detected | Monitor closely, plan replacement |
+| `yes` | Yes | Data integrity at risk | **Back up immediately** |
+| `unsupported` | Unsupported | No usable SMART data | Common with USB enclosures |
+
+From 1.0 the states are lower case (before 1.0: `NO`, `MAYBE`, `YES`, `UNSUPPORTED`), so Home Assistant shows them translated. Automations and templates compare the lower-case state, for example `state: "yes"` or `is_state('sensor.nas_disk_attention_needed', 'maybe')`. ZFS pool State (`online`, `degraded`, `faulted`...) and SMART Status (`passed`, `failed`) are lower case too.
 
 **Triggers YES:** reallocated sectors, pending sectors, uncorrectable errors, NVMe critical_warning or media_errors, spare depletion below threshold.
 
@@ -367,11 +369,11 @@ For every machine at once, use [Agentic access](#agentic-access) in the Control 
 
 <br>
 
-External drives behind a USB enclosure typically block SMART passthrough entirely. SMART Sniffer marks these `UNSUPPORTED` with Health: Unknown; this is the most common "why isn't my drive showing data" case, and it is a limitation of the USB bridge chip, not a bug.
+External drives behind a USB enclosure typically block SMART passthrough entirely. SMART Sniffer marks these Unsupported (`unsupported`) with Health: Unknown; this is the most common "why isn't my drive showing data" case, and it is a limitation of the USB bridge chip, not a bug.
 
 <img src="images/unsupported-screenshot.png" width="280">
 
-If a USB drive gave SMART data before and stops, Attention Needed shows unknown with the reason "SMART data not available right now" rather than `UNSUPPORTED`, since the drive has proven it can report. On macOS, USB drives only report SMART through a third-party SAT driver; reinstalling and re-authorizing it has restored data when this happens.
+If a USB drive gave SMART data before and stops, Attention Needed shows unknown with the reason "SMART data not available right now" rather than Unsupported, since the drive has proven it can report. On macOS, USB drives only report SMART through a third-party SAT driver; reinstalling and re-authorizing it has restored data when this happens.
 
 </details>
 

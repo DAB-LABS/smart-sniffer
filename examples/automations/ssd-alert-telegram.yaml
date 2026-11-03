@@ -1,7 +1,9 @@
 # SSD Alert → Telegram Notification
 #
 # Sends a Telegram message when your drive's Attention Needed sensor
-# changes from "NO" to any warning state (MAYBE, YES, or UNSUPPORTED).
+# changes from "no" to any warning state (maybe, yes, or unsupported).
+# SMART Sniffer 1.0 and later use lower-case states; before 1.0 they were
+# upper case ("NO").
 # The message includes the specific attention reasons so you know
 # exactly what changed.
 #
@@ -21,7 +23,7 @@
     - trigger: state
       entity_id: sensor.haos_ssd_attention_needed
       not_to:
-        - "NO"
+        - "no"
   actions:
     - action: telegram_bot.send_message
       data:

@@ -18,8 +18,9 @@ SMART Sniffer has two components that work together:
 Key behaviors:
 - Each monitored machine appears as a separate HA device. Each drive on that machine
   gets its own HA device with sensors and diagnostic entities.
-- The Attention Needed sensor classifies each drive as NO / MAYBE / YES / UNSUPPORTED
-  based on leading S.M.A.R.T. failure indicators, evaluated every poll cycle.
+- The Attention Needed sensor classifies each drive as no / maybe / yes / unsupported
+  (lower-case states from v1.0; NO / MAYBE / YES / UNSUPPORTED before) based on
+  leading S.M.A.R.T. failure indicators, evaluated every poll cycle.
 - Disk usage monitoring: opt-in at install time. Each configured mountpoint gets a
   percentage sensor with total/used/available attributes under a "Disk Usage" device.
   Served via /api/filesystems on the agent. Requires agent v0.5.0+.
@@ -97,14 +98,14 @@ Key behaviors:
   if the version is too old. The installer handles smartmontools installation.
 
 Attention Needed classification:
-- NO: All monitored indicators clear. No action required.
-- MAYBE: Early degradation signals detected (spin retry count, command timeouts above
+- no: All monitored indicators clear. No action required.
+- maybe: Early degradation signals detected (spin retry count, command timeouts above
   100, NVMe spare below 20%, NVMe percentage_used at or above 90%). Monitor closely,
   plan replacement.
-- YES: Data integrity at risk (reallocated sectors, pending sectors, uncorrectable
+- yes: Data integrity at risk (reallocated sectors, pending sectors, uncorrectable
   errors, NVMe critical_warning, NVMe media_errors, spare below threshold). Back up
   immediately.
-- UNSUPPORTED: No usable S.M.A.R.T. data available. Common with USB enclosures due to
+- unsupported: No usable S.M.A.R.T. data available. Common with USB enclosures due to
   hardware bridge chip limitations -- not a bug.
 
 Supported drive types: ATA, SATA, NVMe, and basic SAS/SCSI (health, temperature,

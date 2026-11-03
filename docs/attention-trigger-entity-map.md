@@ -61,7 +61,7 @@ Last updated: v0.8.0
 
 | Entity | Type | Description |
 |---|---|---|
-| **Attention Needed** | Enum sensor | Primary state: NO / MAYBE / YES / UNSUPPORTED. Icon changes per state. Attributes include `severity`, `reasons` list, and `issue_count`. |
+| **Attention Needed** | Enum sensor | Primary state: `no` / `maybe` / `yes` / `unsupported` (v1.0; upper case before), shown translated. Icon changes per state. Attributes include `severity`, `reasons` list, and `issue_count`. |
 | **Attention Reasons** | Text sensor (diagnostic) | Human-readable semicolon-separated list of what's triggering the alert. Shows "No issues detected" when clean, "No usable SMART data" for UNSUPPORTED. Icon matches attention severity. |
 
 ---

@@ -10,7 +10,7 @@ Have one to share? Open a PR or post it in the [community thread](https://commun
 
 ### Alert via Telegram when drive health changes
 
-Fires when `sensor.haos_ssd_attention_needed` leaves the "NO" state and sends the attention reasons via Telegram. Swap `telegram_bot.send_message` for your notification service.
+Fires when `sensor.haos_ssd_attention_needed` leaves the "no" state and sends the attention reasons via Telegram. Swap `telegram_bot.send_message` for your notification service.
 
 ```yaml
 - id: ssd_alert_telegram
@@ -21,7 +21,7 @@ Fires when `sensor.haos_ssd_attention_needed` leaves the "NO" state and sends th
     - trigger: state
       entity_id: sensor.haos_ssd_attention_needed
       not_to:
-        - "NO"
+        - "no"
   actions:
     - action: telegram_bot.send_message
       data:

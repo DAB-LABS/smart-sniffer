@@ -78,16 +78,18 @@ NVMe drives use a different health log structure. The following map to the `atte
 
 | State | Meaning |
 |---|---|
-| `NO` | All monitored indicators clear |
-| `MAYBE` | Early degradation signals detected (warning) |
-| `YES` | Data integrity at risk (critical) |
-| `UNSUPPORTED` | No usable SMART data (e.g., USB enclosures) |
+| `no` | All monitored indicators clear |
+| `maybe` | Early degradation signals detected (warning) |
+| `yes` | Data integrity at risk (critical) |
+| `unsupported` | No usable SMART data (e.g., USB enclosures) |
+
+From v1.0 the states are lower case (Home Assistant shows them as No, Maybe, Yes, Unsupported). Before v1.0 they were `NO`, `MAYBE`, `YES`, `UNSUPPORTED`.
 
 The `reasons` attribute contains a human-readable list of what triggered the state:
 
 ```yaml
 # Example: critical state
-state: "YES"
+state: "yes"
 attributes:
   reasons:
     - "Reallocated Sector Count: 3 (expected 0)"
@@ -96,7 +98,7 @@ attributes:
 
 ```yaml
 # Example: all clear
-state: "NO"
+state: "no"
 attributes:
   reasons: []   # v1.0: only real reasons; the Attention Reasons sensor says "No issues detected"
 ```
@@ -107,7 +109,7 @@ The integration also fires persistent notifications automatically on state trans
 
 ## Clearing Attention / Acknowledgment
 
-The `attention_needed` sensor is **self-clearing**: when the underlying condition resolves, it automatically returns to `NO`. In practice, for most failure-type attributes (reallocated sectors, uncorrectable errors), the count will not go back to zero — the sensor stays in `YES` or `MAYBE` until the drive is replaced.
+The `attention_needed` sensor is **self-clearing**: when the underlying condition resolves, it automatically returns to `no`. In practice, for most failure-type attributes (reallocated sectors, uncorrectable errors), the count will not go back to zero — the sensor stays in `yes` or `maybe` until the drive is replaced.
 
 **Optional HA automation pattern for custom alerting:**
 
@@ -117,7 +119,7 @@ automation:
     trigger:
       - platform: state
         entity_id: sensor.your_drive_attention_needed
-        to: "YES"
+        to: "yes"
     action:
       - service: persistent_notification.create
         data:
