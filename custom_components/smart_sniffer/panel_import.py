@@ -28,9 +28,11 @@ The rules:
   filled again: a lost reply, a retry or a second App start changes
   nothing, and a machine the user deleted after the handover stays deleted
   (its row is marked removed then).
-- A machine is matched by its agent_id first, then by being the App's own
-  agent (HAOS), then by its address; else it is made through the config
-  flow's import step. One that does not answer is made too, and shows
+- A machine is matched by the agent_id the App sends first, then by being
+  the App's own agent (HAOS), then by its address; else it is made through
+  the config flow's import step. The agent_id an agent answers in
+  /api/health is used only when the flow says the agent is already
+  configured (v1.0). One that does not answer is made too, and shows
   offline until it does (owner decision). Probes: 4 at a time, 5 s each.
 - Settings that need the machine's drives (a drive's name is its device's
   name; thresholds are kept by drive id) wait in the Store until the
@@ -310,13 +312,16 @@ def _app_agent(hass: HomeAssistant):
     return next((e for e in entries(hass) if entry_kind(e) == "haos"), None) or haos_entry(hass)
 
 
-def _match(hass: HomeAssistant, item: dict[str, Any], health: dict[str, Any] | None):
-    """agent_id (the App's, then the one the agent answers), then the App's
-    own agent, then the address."""
-    for agent_id in (item.get("agent_id"), (health or {}).get("agent_id")):
-        found = _by_agent_id(hass, agent_id)
-        if found is not None:
-            return found
+def _match(hass: HomeAssistant, item: dict[str, Any]):
+    """The App's own record of the machine: its agent_id, then the App's own
+    agent, then the address. Never the agent_id the agent answers in
+    /api/health (v1.0): it needs no password and is broadcast in mDNS, so
+    whatever answers at the App's address could name another machine and
+    have the App's names, hidden cards and thresholds filled into it. That
+    answer is used only after the config flow said already_configured."""
+    found = _by_agent_id(hass, item.get("agent_id"))
+    if found is not None:
+        return found
     if APP_HOST.match(norm_host(item["address"])):
         found = _app_agent(hass)
         if found is not None:
@@ -526,7 +531,7 @@ async def async_run(hass: HomeAssistant, items: list[dict[str, Any]]) -> dict[st
         sem = asyncio.Semaphore(PROBES)
 
         async def probe(item: dict[str, Any]) -> dict[str, Any] | None:
-            if _match(hass, item, None) is not None:
+            if _match(hass, item) is not None:
                 return None  # matched without asking the agent
             async with sem:
                 return await async_health(hass, item["address"], item["port"])
@@ -586,7 +591,7 @@ async def _field(hass: HomeAssistant, data: dict[str, Any], item: dict[str, Any]
     address, port = item["address"].strip(), item["port"]
     if not address or any(c in address for c in "/?#@ \t"):
         return {"outcome": SKIPPED, "reason": "bad_address"}
-    entry = _match(hass, item, health)
+    entry = _match(hass, item)
     outcome = MATCHED
     if entry is None:
         made, entry_id = await async_create(hass, address, port, item.get("password") or "")
@@ -597,13 +602,14 @@ async def _field(hass: HomeAssistant, data: dict[str, Any], item: dict[str, Any]
             outcome = CREATED if health is not None else CREATED_OFFLINE
         elif made == "already_configured":
             # The same agent under another address or name: the flow knew it.
-            entry = (_match(hass, item, health)
+            entry = (_match(hass, item)
+                     or _by_agent_id(hass, (health or {}).get("agent_id"))
                      or await _by_resolved_address(hass, address, port)
                      or _by_hostname(hass, (health or {}).get("hostname"), port))
         if entry is None:
             return {"outcome": SKIPPED, "reason": "not_added" if made != "error" else "error"}
     elif (item.get("password") and not entry.data.get(CONF_TOKEN)
-          and _match(hass, item, None) is entry):
+          and _match(hass, item) is entry):
         # The machine is here without its password: the App's fills the gap,
         # only when the App's own record names this machine (its agent_id,
         # the App's own agent, or its address). An agent_id read from

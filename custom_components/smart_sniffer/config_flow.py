@@ -799,7 +799,9 @@ class SmartSnifferConfigFlow(ConfigFlow, domain=DOMAIN):
                 else:
                     # The card may have waited while the agent was added
                     # another way: the duplicate checks again, as they stand.
-                    agent_id = norm_agent_id(health.get("agent_id")) or info["agent_id"]
+                    # The Supervisor's agent_id first (v1.0): the one in
+                    # /api/health needs no password to answer.
+                    agent_id = info["agent_id"] or norm_agent_id(health.get("agent_id"))
                     hostname = display_hostname(health.get("hostname")) or info["hostname"]
                     if (self._hassio_known_entry(agent_id, hostname, info["host"]) is not None
                             or await self._entry_at(info["host"], info["port"]) is not None):

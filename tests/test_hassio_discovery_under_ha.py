@@ -214,6 +214,18 @@ def test_added_while_the_card_waited_aborts():
     assert _run(flow.async_step_hassio_confirm({}))["reason"] == "already_configured"
 
 
+def test_the_supervisors_agent_id_wins_over_the_one_health_answers():
+    """v1.0 (J1): /api/health needs no password, so the agent_id it answers
+    must not make the confirm step take the App's agent for another
+    machine. The Supervisor's agent_id is the one checked."""
+    other = _entry("e-other", f"{LAN}:9099", LAN, 9099, agent_id=DEV_ID)
+    claims_other = (APP, ["SER-H1", "SER-H2"], "", {"agent_id": DEV_ID})
+    flow, result = _discover([other], {f"{APP}:9099": claims_other}, _info(agent_id=APP_ID))
+    assert result["type"] == "form" and result["step_id"] == "hassio_confirm"
+    created = _run(flow.async_step_hassio_confirm({}))
+    assert created["type"] == "create_entry", created
+
+
 # --- a second App on the same box (a local dev build) ------------------------------
 
 

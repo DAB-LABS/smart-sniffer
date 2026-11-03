@@ -65,6 +65,13 @@ class Net:
             raise RuntimeError("flow failed")
         if panel_import._by_address(hass, address, port) is not None:
             return "already_configured", None
+        # The flow's _configured_elsewhere: the same host name answering with
+        # the same drives (here: the host name an entry already has).
+        answer = self.agents.get(f"{address}:{port}") or {}
+        if answer.get("hostname") and any(
+                e.data.get("agent_hostname") == answer["hostname"]
+                for e in hass.config_entries.async_entries("smart_sniffer")):
+            return "already_configured", None
         self.seq += 1
         entry_id = f"01NEW{self.seq:021d}"
         data = {"host": address, "port": port, "token": password, "scan_interval": 60}
@@ -238,6 +245,27 @@ def test_a_password_goes_only_to_a_machine_the_apps_record_names(tmp_path, monke
                                              agent_id="nas01-agent-id")])
         assert report["items"]["b"]["entry_id"] == NAS
         assert nas.data["token"] == SECRET
+    run(tmp_path, body, monkeypatch, specs=specs, agents=agents)
+
+
+def test_an_agent_id_in_health_alone_never_matches(tmp_path, monkeypatch):
+    """v1.0 (J1): a device at a stored address that claims another machine's
+    agent_id in /api/health is that address's machine, never the one it
+    claims; and at a new address it is made as a new machine."""
+    specs = [{**H.BOARD[0], "data": {**H.BOARD[0]["data"], "agent_id": "haos-agent-id"}},
+             H.BOARD[1]]
+    agents = {"10.0.10.20:9099": {"status": "ok", "agent_id": "haos-agent-id", "hostname": "x"},
+              "10.0.10.99:9099": {"status": "ok", "agent_id": "haos-agent-id", "hostname": "y"}}
+
+    async def body(hass, board, net):
+        report = await handover(hass, [field("10.0.10.20", item_id="a",
+                                             name="Renamed by the App")])
+        assert report["items"]["a"]["outcome"] == "matched"
+        assert report["items"]["a"]["entry_id"] == NAS
+        report = await handover(hass, [field("10.0.10.99", item_id="b")])
+        assert report["items"]["b"]["outcome"] == "created"
+        assert report["items"]["b"]["entry_id"] not in (HAOS, NAS)
+        assert net.created == [("10.0.10.99", 9099, "")]
     run(tmp_path, body, monkeypatch, specs=specs, agents=agents)
 
 
