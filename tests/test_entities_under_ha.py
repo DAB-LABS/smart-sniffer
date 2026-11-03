@@ -20,7 +20,14 @@ import pytest
 pytest.importorskip("homeassistant")
 
 from tests.devstat_payloads import HGST_WRITES, agent_drive  # noqa: E402
-from tests.golden_payloads import ENTRY_ID, GOLDEN, REGISTERED_POOLS, golden_payload  # noqa: E402
+from tests.golden_payloads import (  # noqa: E402
+    ENTRY_ID,
+    GOLDEN,
+    REGISTERED_POOLS,
+    V100_ADDED_SUFFIX,
+    golden_payload,
+    v100_golden,
+)
 
 DOMAIN = "smart_sniffer"
 sensor = importlib.import_module("custom_components.smart_sniffer.sensor")
@@ -159,12 +166,27 @@ def test_the_v070_golden_rebuilt(force):
             row["name"] = new_name
             renamed += 1
     assert renamed == len(V083_RENAMED)
+    # v1.0: the Health sensor's in_standby and data_as_of are gone (the
+    # standby drive's Health row had them).
+    golden, removed = v100_golden(golden)
+    assert removed == 1
     data = golden_payload()
     _, added = _setup(data, force)
     rows = [_describe(e, "sensor") for e in added["sensor"]] + [
         _describe(e, "binary_sensor") for e in added["binary_sensor"]
     ]
-    assert rows == golden
+    # v1.0 (#71): the Unsafe Shutdowns sensors are new; checked on their own.
+    new = [r for r in rows if r["unique_id"].endswith(V100_ADDED_SUFFIX)]
+    assert len(new) >= 3
+    for row in new:
+        drive = data[row["device_identifiers"][0][1]]
+        log = drive["smart_data"]["nvme_smart_health_information_log"]
+        assert row["class"] == "SmartSnifferSensor" and row["name"] == "Unsafe Shutdowns"
+        assert row["entity_category"] == "diagnostic" and row["enabled_default"] is True
+        assert row["state_class"] == "total_increasing" and row["unit"] is None
+        assert row["value"] == log["unsafe_shutdowns"] and row["icon"] == "mdi:power-plug-off-outline"
+        assert row["force_update"] is force
+    assert [r for r in rows if r not in new] == golden
 
 
 def _devstat_drive(name, **kwargs):

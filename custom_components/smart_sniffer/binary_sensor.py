@@ -240,14 +240,9 @@ class SmartSnifferHealthSensor(
             status = smart_data.get("smart_status", {})
             if isinstance(status, dict):
                 attrs["smart_passed"] = status.get("passed")
-        # DEPRECATED (v0.5.4): the in_standby and data_as_of attributes on
-        # this sensor are superseded by the dedicated DriveStandbySensor
-        # (binary_sensor.*_standby). Kept here for backward compatibility
-        # with v0.5.3 automations/templates. Planned removal in a future
-        # release. See docs/internal/process/deprecations.md.
-        if drive_data.get("in_standby"):
-            attrs["in_standby"] = True
-            attrs["data_as_of"] = drive_data.get("last_updated", "unknown")
+        # The in_standby and data_as_of attributes, deprecated in v0.5.4, were
+        # removed in v1.0: the Standby binary sensor (binary_sensor.*_standby)
+        # has the state and its own data_as_of attribute.
         return attrs
 
 
@@ -260,9 +255,9 @@ class DriveStandbySensor(
     off = drive is active; SMART data is fresh
 
     When on, exposes `data_as_of` as an attribute so consumers can see how
-    stale the cached readings are. Introduced in v0.5.4 as the canonical
-    replacement for the in_standby/data_as_of attributes previously attached
-    to the Health sensor.
+    stale the cached readings are. Introduced in v0.5.4 as the replacement
+    for the in_standby/data_as_of attributes on the Health sensor, which
+    were removed in v1.0.
     """
 
     _attr_has_entity_name = True

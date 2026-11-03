@@ -26,7 +26,13 @@ from custom_components.smart_sniffer.extract import (
     _extract_attribute,
 )
 from tests.devstat_payloads import agent_drive
-from tests.golden_payloads import ENTRY_ID, GOLDEN, REGISTERED_POOLS, golden_payload
+from tests.golden_payloads import (
+    ENTRY_ID,
+    GOLDEN,
+    REGISTERED_POOLS,
+    V100_ADDED_SUFFIX,
+    golden_payload,
+)
 
 _SENSOR_PY = Path(__file__).resolve().parents[1] / "custom_components" / "smart_sniffer" / "sensor.py"
 
@@ -79,6 +85,17 @@ def test_the_plan_is_v070s_setup(force):
         if not drive_id.startswith("_"):
             drive[DEVSTAT_KEY], _ = merge_devstat(drive, None)  # older agent: empty
     specs = _plan(data)
+    # v1.0 (#71): one Unsafe Shutdowns sensor per NVMe drive, right after
+    # that drive's other SMART sensors; everything else as v0.7.0 set it up.
+    added = [s for s in specs if s.unique_id.endswith(V100_ADDED_SUFFIX)]
+    nvme = sorted(d for d, v in data.items() if not d.startswith("_")
+                  and (v["smart_data"].get("nvme_smart_health_information_log")))
+    assert sorted(s.device for s in added) == nvme and len(nvme) >= 3
+    for spec in added:
+        after = specs[specs.index(spec) + 1]
+        assert after.unique_id == f"{ENTRY_ID}_{spec.device}_attention", after.unique_id
+        assert spec.platform == ep.SENSOR and spec.kind == ep.KIND_ATTRIBUTE
+    specs = [s for s in specs if s not in added]
     assert [s.unique_id for s in specs] == [r["unique_id"] for r in rows]
     assert [s.platform for s in specs] == [r["platform"] for r in rows]
     assert [s.kind for s in specs] == [CLASS_KIND[r["class"]] for r in rows]

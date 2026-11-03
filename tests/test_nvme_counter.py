@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from custom_components.smart_sniffer.attention import NVME_COUNTER_LIMIT, NVME_COUNTERS, nvme_counter
+from tests.golden_payloads import drive_payload, smart_data_sources
 
 extract = importlib.import_module("custom_components.smart_sniffer.extract")
 
@@ -193,3 +194,55 @@ def test_an_impossible_hours_or_cycles_counter_reads_unknown(hp, key, field):
     log[f"{field}_le"] = [0] * 12 + [118, 71]
     # Not the number, and not smartctl's top-level copy either.
     assert extract._extract_attribute(hp, key) is None
+
+
+# --- Unsafe Shutdowns (v1.0, #71) ---------------------------------------------------
+#
+# The NVMe health log's unsafe_shutdowns, as its own sensor: a count of times
+# the drive lost power without a clean shutdown. Like Media Errors it is
+# NVMe-only, diagnostic and on by default, and an impossible value reads
+# unknown. Unlike Media Errors it is never a reason for Attention.
+
+ep = importlib.import_module("custom_components.smart_sniffer.entity_plan")
+
+
+def test_unsafe_shutdowns_reads_the_count(hp, drive):
+    assert extract._extract_attribute(hp, "unsafe_shutdowns") == \
+        hp["smart_data"]["nvme_smart_health_information_log"]["unsafe_shutdowns"]
+    payload = drive("nvme_healthy")
+    log = payload["smart_data"]["nvme_smart_health_information_log"]
+    assert extract._extract_attribute(payload, "unsafe_shutdowns") == log["unsafe_shutdowns"]
+    log["unsafe_shutdowns"], log["unsafe_shutdowns_s"] = 9007199254740993.0, "9007199254740993"
+    assert extract._extract_attribute(payload, "unsafe_shutdowns") == 9007199254740993
+
+
+def test_an_impossible_unsafe_shutdowns_reads_unknown_and_is_no_reason(att, hp):
+    log = hp["smart_data"]["nvme_smart_health_information_log"]
+    log["unsafe_shutdowns"] = 1449400005035951791936293027446784
+    log["unsafe_shutdowns_s"] = "1449400005035951791936293027446784"
+    log["unsafe_shutdowns_le"] = [0] * 12 + [118, 71]
+    assert extract._extract_attribute(hp, "unsafe_shutdowns") is None
+    assert att.evaluate_attention(hp)[:3] == ("NO", "none", [])
+
+
+def test_many_unsafe_shutdowns_are_no_reason_for_attention(att, drive):
+    payload = drive("nvme_healthy")
+    payload["smart_data"]["nvme_smart_health_information_log"]["unsafe_shutdowns"] = 5000
+    assert att.evaluate_attention(payload)[:3] == ("NO", "none", [])
+
+
+def test_unsafe_shutdowns_is_planned_for_nvme_only():
+    sources = smart_data_sources()
+
+    def plan(name, change=None):
+        payload = drive_payload(name, sources[name])
+        if change:
+            change(payload["smart_data"]["nvme_smart_health_information_log"])
+        return [s.unique_id for s in ep.sensor_specs({payload["id"]: payload}, "entry", (), {})]
+
+    assert "entry_fx-nvme-healthy_unsafe_shutdowns" in plan("nvme_healthy")
+    assert not any(u.endswith("_unsafe_shutdowns") for u in plan("ata_healthy"))
+    # Even with the value unreadable the NVMe drive keeps the entity (it shows
+    # unknown), as Media Errors does.
+    assert "entry_fx-nvme-healthy_unsafe_shutdowns" in plan(
+        "nvme_healthy", lambda log: log.update(unsafe_shutdowns_le=[1] * 16))

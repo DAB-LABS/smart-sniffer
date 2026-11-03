@@ -219,6 +219,15 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
         native_unit_of_measurement=PERCENTAGE,
         icon="mdi:harddisk-remove",
         entity_category=EntityCategory.DIAGNOSTIC,
+    ),    # v1.0 (#71): times the drive lost power without a clean shutdown. Shown
+    # like Media Errors (diagnostic, on by default); a value that cannot be
+    # real is unknown (nvme_counter). Never a reason for Attention.
+    SensorEntityDescription(
+        key="unsafe_shutdowns",
+        name="Unsafe Shutdowns",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:power-plug-off-outline",
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
 ]
 

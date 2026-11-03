@@ -29,6 +29,7 @@ ATA_ONLY_KEYS: frozenset[str] = frozenset({
 NVME_ONLY_KEYS: frozenset[str] = frozenset({
     "critical_warning",
     "media_errors",
+    "unsafe_shutdowns",
     "available_spare",
     "available_spare_threshold",
 })
@@ -63,6 +64,8 @@ SENSOR_KEYS: tuple[str, ...] = (
     "media_errors",
     "available_spare",
     "available_spare_threshold",
+    # v1.0 (#71). Last, so every older sensor keeps its place in the order.
+    "unsafe_shutdowns",
 )
 
 
@@ -280,6 +283,9 @@ def _extract_attribute(drive_data: dict[str, Any], key: str) -> Any | None:
             "media_errors":                 lambda: nvme_counter(nvme_log, "media_errors"),
             "available_spare":              lambda: nvme_log.get("available_spare"),
             "available_spare_threshold":    lambda: nvme_log.get("available_spare_threshold"),
+            # v1.0 (#71): power lost without a clean shutdown, as the drive
+            # counts it. A count, not a health alert.
+            "unsafe_shutdowns":             lambda: nvme_counter(nvme_log, "unsafe_shutdowns"),
         }
         extractor = nvme_map.get(key)
         if extractor:
