@@ -31,10 +31,19 @@ def _config_step() -> str:
     return match.group(1)
 
 
+def _helpers() -> str:
+    """The functions the config step calls (v1.0: the carry-over on a rewrite)."""
+    source = (ROOT / "install.sh").read_text()
+    return "".join(
+        re.search(rf"^{name}\(\) \{{\n.*?^\}}\n", source, re.MULTILINE | re.DOTALL).group(0)
+        for name in ("carry_config_blocks", "config_block_keys"))
+
+
 def _run_config_step(folder: Path, keep: bool) -> subprocess.CompletedProcess:
     script = f"""
 set -e
 info() {{ :; }}; success() {{ :; }}
+{_helpers()}
 INSTALL_CFG='{folder}'
 KEEP_CONFIG={"true" if keep else "false"}
 PORT=9099; SCAN_INTERVAL=60s; TOKEN='{TOKEN}'
@@ -57,6 +66,13 @@ def test_install_sh_config_is_readable_by_its_owner_only(tmp_path, existing, kee
     assert result.returncode == 0, result.stderr
     assert stat.S_IMODE(config.stat().st_mode) == 0o600
     assert (TOKEN in config.read_text()) is not keep
+    # v1.0: a rewritten file is saved first, root only too; a kept one is not.
+    backups = list(folder.glob("config.yaml.bak-*")) if folder.exists() else []
+    if existing and not keep:
+        assert len(backups) == 1 and stat.S_IMODE(backups[0].stat().st_mode) == 0o600
+        assert backups[0].read_text() == "port: 9099\n"
+    else:
+        assert backups == []
 
 
 def test_install_ps1_restricts_the_config_before_writing_it():

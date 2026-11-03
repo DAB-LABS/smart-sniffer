@@ -18,6 +18,7 @@ touched. The token is invented.
 from __future__ import annotations
 
 import os
+import pty
 import re
 import shutil
 import subprocess
@@ -183,11 +184,13 @@ def _can_run() -> str | None:
 needs_namespace = pytest.mark.skipif(_can_run() is not None, reason=str(_can_run()))
 
 
-def _run(tmp_path: Path, args: list[str],
-         env: dict | None = None) -> tuple[subprocess.CompletedProcess, str]:
+def _run(tmp_path: Path, args: list[str], env: dict | None = None, answers: str | None = None,
+         stubs_extra: dict | None = None) -> tuple[subprocess.CompletedProcess, str]:
+    """answers: run on a terminal (a pty as stdin) with these lines typed
+    ahead, instead of with no terminal at all."""
     stubs = tmp_path / "stubs"
     stubs.mkdir(exist_ok=True)
-    for name, body in STUBS.items():
+    for name, body in {**STUBS, **(stubs_extra or {})}.items():
         (stubs / name).write_text(body)
         (stubs / name).chmod(0o755)
     (stubs / "agent-bin").write_text("#!/bin/sh\nexit 0\n")
@@ -200,7 +203,8 @@ def _run(tmp_path: Path, args: list[str],
         "mount -t tmpfs none /var/log && "
         # A new session has no controlling terminal: /dev/tty exists, and
         # opening it fails (ENXIO), as over ssh without a pty.
-        "exec setsid -w bash \"$INSTALL_SH\" \"$@\" < /dev/null"
+        + ("exec bash \"$INSTALL_SH\" \"$@\"" if answers is not None
+           else "exec setsid -w bash \"$INSTALL_SH\" \"$@\" < /dev/null")
     )
     run_env = {
         "PATH": f"{stubs}:/usr/sbin:/usr/bin:/sbin:/bin",
@@ -208,9 +212,20 @@ def _run(tmp_path: Path, args: list[str],
         "STUB_LOG": str(log), "INSTALL_SH": str(INSTALL_SH), "TERM": "dumb",
         **(env or {}),
     }
-    result = subprocess.run(["timeout", "120", "unshare", "-m", "bash", "-c", inner, "install", *args],
-                            capture_output=True, text=True, env=run_env, check=False,
-                            stdin=subprocess.DEVNULL, timeout=150, encoding="utf-8")
+    master = slave = None
+    stdin = subprocess.DEVNULL
+    if answers is not None:
+        master, slave = pty.openpty()
+        os.write(master, answers.encode())
+        stdin = slave
+    try:
+        result = subprocess.run(["timeout", "120", "unshare", "-m", "bash", "-c", inner, "install", *args],
+                                capture_output=True, text=True, env=run_env, check=False,
+                                stdin=stdin, timeout=150, encoding="utf-8")
+    finally:
+        for fd in (master, slave):
+            if fd is not None:
+                os.close(fd)
     return result, log.read_text()
 
 
@@ -298,6 +313,125 @@ def test_without_yes_and_no_terminal_a_fresh_install_uses_defaults(tmp_path):
     assert result.returncode == 0, out[-3000:]
     assert "Non-interactive mode detected -- using defaults." in out
     assert "port: 9099" in (folder / "config.yaml").read_text()
+
+
+# --- Answering N at "Keep current settings?" (v1.0, B1) ------------------------------
+#
+# The file is saved as config.yaml.bak-<date>-<time> before it is rewritten,
+# and every top-level key the prompts do not ask about is carried over:
+# device_overrides above all (docs/discover.md used to warn it was lost).
+
+KEEP_N_EXISTING = (
+    f"port: 9198\ntoken: \"{TOKEN}\"\nscan_interval: 5m\nstandby_mode: idle\n"
+    "# overrides from --discover\n"
+    "device_overrides:\n  - device: /dev/sata1\n    protocol: sat\n"
+    "# a note between items\n"
+    "  - device: /dev/sda\n    protocol: megaraid,0\n"
+    "agent_id: pinned-box-0042\nmdns: false\n"
+    "smartctl_path: /opt/bin/smartctl\n"
+    "exclude_devices:\n  - /dev/sdz\n"
+    "filesystems:\n  - path: /srv\n"
+)
+
+
+def _keys(config: str) -> list[str]:
+    return re.findall(r"^([A-Za-z_][A-Za-z0-9_]*)\s*:", config, re.M)
+
+
+def _carry(text: str, managed: str) -> str:
+    """carry_config_blocks from install.sh, run on its own."""
+    source = INSTALL_SH.read_text()
+    func = re.search(r"^carry_config_blocks\(\) \{\n.*?^\}\n", source, re.M | re.S).group(0)
+    result = subprocess.run(["bash", "-c", func + 'carry_config_blocks /dev/stdin "$1"', "x", managed],
+                            input=text, capture_output=True, text=True, check=True, timeout=20)
+    return result.stdout
+
+
+def test_carry_config_blocks_keeps_only_the_other_keys():
+    out = _carry(KEEP_N_EXISTING, "port scan_interval token advertise_interface exclude_devices "
+                                  "filesystems standby_mode")
+    assert out == ("device_overrides:\n  - device: /dev/sata1\n    protocol: sat\n"
+                   "  - device: /dev/sda\n    protocol: megaraid,0\n"
+                   "agent_id: pinned-box-0042\nmdns: false\nsmartctl_path: /opt/bin/smartctl\n"), out
+    assert TOKEN not in out
+
+
+@pytest.mark.parametrize(("text", "want"), [
+    # The compact sequence style, at column 0.
+    ("port: 1\ndevice_overrides:\n- device: /dev/sdc\n  protocol: sat\n",
+     "device_overrides:\n- device: /dev/sdc\n  protocol: sat\n"),
+    # Flow style, and a key nobody knows.
+    ("device_overrides: [{device: /dev/sdc, protocol: sat}]\nmy_note: hi\ntoken: x\n",
+     "device_overrides: [{device: /dev/sdc, protocol: sat}]\nmy_note: hi\n"),
+    # Nothing else in the file: nothing carried.
+    ("port: 1\ntoken: \"x\"\n", ""),
+    # A key that only starts like a managed one is not that key.
+    ("port_note: x\n", "port_note: x\n"),
+])
+def test_carry_config_blocks_shapes(text, want):
+    assert _carry(text, "port scan_interval token") == want
+
+
+@needs_namespace
+def test_answering_n_keeps_device_overrides_and_saves_a_backup(tmp_path):
+    folder = tmp_path / "agent"
+    folder.mkdir()
+    (folder / "config.yaml").write_text(KEEP_N_EXISTING)
+    # N, then Enter at every question that follows.
+    result, log = _run(tmp_path, [f"--install-dir={folder}"], answers="n\n" + "\n" * 30)
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out[-3000:]
+    assert "Keep current settings? [Y/n]:" in out and "Keeping existing configuration." not in out
+    config = (folder / "config.yaml").read_text()
+
+    # The answers: the defaults, standby asked (the stand-in drive spins).
+    assert config.startswith("port: 9099\nscan_interval: 60s\n"), config
+    assert "standby_mode: standby" in config and "standby_mode: idle" not in config
+    assert TOKEN not in config and "/srv" not in config and "/dev/sdz" not in config
+    # Carried over, once each.
+    assert ("device_overrides:\n  - device: /dev/sata1\n    protocol: sat\n"
+            "  - device: /dev/sda\n    protocol: megaraid,0\n") in config
+    assert "agent_id: pinned-box-0042" in config and "mdns: false" in config
+    assert "smartctl_path: /opt/bin/smartctl" in config
+    keys = _keys(config)
+    assert len(keys) == len(set(keys)), keys
+    assert "Kept from the previous config: device_overrides, agent_id, mdns, smartctl_path" in out
+
+    # The backup: the old file byte for byte, root only.
+    backups = sorted(folder.glob("config.yaml.bak-*"))
+    assert len(backups) == 1, backups
+    assert re.fullmatch(r"config\.yaml\.bak-\d{8}-\d{6}", backups[0].name)
+    assert backups[0].read_text() == KEEP_N_EXISTING
+    assert backups[0].stat().st_mode & 0o777 == 0o600
+    assert f"Previous config saved as {backups[0]}" in out
+    assert "systemctl start smartha-agent" in log
+
+
+@needs_namespace
+def test_answering_n_keeps_standby_mode_when_it_is_not_asked(tmp_path):
+    """No spinning drive: the standby question is not asked, so the old
+    standby_mode is a key the prompts did not ask about."""
+    folder = tmp_path / "agent"
+    folder.mkdir()
+    (folder / "config.yaml").write_text("port: 9099\nstandby_mode: idle\ndevice_overrides:\n"
+                                        "  - device: /dev/sata1\n    protocol: sat\n")
+    ssd = {"smartctl": STUBS["smartctl"].replace('"rotation_rate":7200', '"rotation_rate":0')}
+    result, _ = _run(tmp_path, [f"--install-dir={folder}"], answers="n\n" + "\n" * 30, stubs_extra=ssd)
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out[-3000:]
+    assert "Enable standby-aware polling" not in out
+    config = (folder / "config.yaml").read_text()
+    assert config.count("standby_mode:") == 1 and "standby_mode: idle" in config
+    assert "device_overrides:" in config
+
+
+@needs_namespace
+def test_a_fresh_install_writes_no_backup(tmp_path):
+    folder = tmp_path / "agent"
+    result, _ = _run(tmp_path, ["--yes", f"--install-dir={folder}"])
+    assert result.returncode == 0, (result.stdout + result.stderr)[-3000:]
+    assert not list(folder.glob("config.yaml.bak*"))
+    assert "Kept from the previous config" not in result.stdout
 
 
 # --- install.ps1, under PowerShell (pwsh) when it is installed ------------------------
@@ -441,3 +575,53 @@ def test_install_ps1_irm_iex_form_still_runs_its_normal_flow(tmp_path):
     assert "Detected platform: windows/" in out and "Fetching latest release version" in out
     assert "STOP-AT-NETWORK" in out and "Could not determine latest version" in out
     assert "parameter" not in out.lower() or "matches parameter name" not in out
+
+
+# --- install.ps1: N at "Keep existing configuration?" (v1.0, B1) ----------------------
+
+CARRY_PS1 = r"""
+$errs = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($args[0], [ref]$null, [ref]$errs)
+foreach ($f in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)) {
+    if (@('Get-CarriedConfigBlocks', 'Get-ConfigBlockKeys') -contains $f.Name) { . ([scriptblock]::Create($f.Extent.Text)) }
+}
+$lines = Get-CarriedConfigBlocks -Path $args[1] -Managed ($args[2] -split ' ')
+"COUNT=$($lines.Count)"
+$lines | ForEach-Object { "LINE=$_" }
+"KEYS=$(Get-ConfigBlockKeys $lines)"
+"""
+
+
+@needs_pwsh
+def test_install_ps1_carries_the_keys_the_prompts_do_not_ask(tmp_path):
+    config = tmp_path / "config.yaml"
+    config.write_text(KEEP_N_EXISTING)
+    result = _ps_file(tmp_path, "carry.ps1", CARRY_PS1, str(INSTALL_PS1), str(config),
+                      "port scan_interval token advertise_interface filesystems standby_mode")
+    assert result.returncode == 0, result.stdout + result.stderr
+    lines = [line[5:] for line in result.stdout.splitlines() if line.startswith("LINE=")]
+    # install.ps1 has no drive picker, so exclude_devices is carried too.
+    assert lines == ["device_overrides:", "  - device: /dev/sata1", "    protocol: sat",
+                     "  - device: /dev/sda", "    protocol: megaraid,0",
+                     "agent_id: pinned-box-0042", "mdns: false", "smartctl_path: /opt/bin/smartctl",
+                     "exclude_devices:", "  - /dev/sdz"], result.stdout
+    assert "KEYS=device_overrides, agent_id, mdns, smartctl_path, exclude_devices" in result.stdout
+    assert TOKEN not in result.stdout
+
+
+@needs_pwsh
+def test_install_ps1_carries_nothing_from_a_file_of_managed_keys(tmp_path):
+    config = tmp_path / "config.yaml"
+    config.write_text(f"port: 9099\ntoken: \"{TOKEN}\"\n")
+    result = _ps_file(tmp_path, "carry.ps1", CARRY_PS1, str(INSTALL_PS1), str(config), "port token")
+    assert "COUNT=0" in result.stdout, result.stdout + result.stderr
+
+
+def test_install_ps1_saves_the_old_file_before_it_rewrites_it():
+    source = INSTALL_PS1.read_text()
+    write = source[source.index("# An existing file is saved before it is rewritten"):]
+    write = write[:write.index('Write-Ok "Config written."')]
+    assert write.index("Copy-Item -LiteralPath $ConfigFile -Destination $ConfigBak") < write.index("Set-Content -Path $ConfigFile")
+    assert "$ConfigFile.bak-\" + (Get-Date -Format 'yyyyMMdd-HHmmss')" in write
+    assert "Protect-ConfigFile $ConfigBak" in write
+    assert "if ($StandbyAsked) { $Managed += 'standby_mode' }" in write

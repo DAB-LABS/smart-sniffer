@@ -120,6 +120,46 @@ function Read-YamlScalar {
     return $value
 }
 
+# Get-CarriedConfigBlocks (v1.0): the top-level blocks of config.yaml whose
+# keys are NOT in $Managed, each "key:" line with the indented or "- "
+# lines under it. Rewriting the config (N at "Keep existing
+# configuration?") carries these over, so device_overrides, agent_id,
+# exclude_devices and anything hand-added are not lost; the old file is
+# saved as config.yaml.bak-<date>-<time> first. Matches install.sh's
+# carry_config_blocks. Comments and blank lines at the top level are left
+# out (the backup has them).
+function Get-CarriedConfigBlocks {
+    param(
+        [string]$Path,
+        [string[]]$Managed
+    )
+    $out = New-Object System.Collections.Generic.List[string]
+    $keep = $false
+    foreach ($line in (Get-Content -LiteralPath $Path)) {
+        if ($line -cmatch '^([A-Za-z_][A-Za-z0-9_]*)[ \t]*:') {
+            $keep = -not ($Managed -ccontains $Matches[1])
+            if ($keep) { $out.Add($line) }
+        } elseif ($line -match '^#' -or $line -match '^[ \t]*$') {
+            continue
+        } elseif ($line -match '^[ \t]' -or $line -match '^-') {
+            if ($keep) { $out.Add($line) }
+        } else {
+            $keep = $false
+        }
+    }
+    return ,$out.ToArray()
+}
+
+# Get-ConfigBlockKeys: the top-level key names in lines from
+# Get-CarriedConfigBlocks, for the "Kept from the previous config" line.
+function Get-ConfigBlockKeys {
+    param([string[]]$Lines)
+    $keys = foreach ($line in $Lines) {
+        if ($line -cmatch '^([A-Za-z_][A-Za-z0-9_]*)[ \t]*:') { $Matches[1] }
+    }
+    return ($keys -join ', ')
+}
+
 # ---------------------------------------------------------------------------
 # Pick-Interface -- enumerate network adapters, present numbered list,
 # return the selected FriendlyName or "" for auto-filter.
@@ -839,6 +879,7 @@ try {
         $PickedIface  = ""
         $PickedFS     = ""
         $StandbyMode  = "never"
+        $StandbyAsked = $false
     } else {
         Write-Host ""
         Write-Host "  Configuration" -ForegroundColor White
@@ -866,6 +907,7 @@ try {
 
         # --- Fresh install: standby-aware polling (HDD detection) ---
         $StandbyMode = "never"
+        $StandbyAsked = $false
         $HasHDD = $false
         try {
             $ScanJson = & $SmartctlCmd --json --scan 2>$null | ConvertFrom-Json
@@ -882,6 +924,7 @@ try {
             Write-Host "  Spinning drives (HDDs) detected. The agent can skip drives in"
             Write-Host "  standby to avoid waking them up. Recommended for NAS setups."
             Write-Host ""
+            $StandbyAsked = $true
             $StandbyAns = Read-Answer "  Enable standby-aware polling? [Y/n]"
             if ($StandbyAns -match '^[nN]') {
                 $StandbyMode = "never"
@@ -946,6 +989,21 @@ try {
         Write-Step "Keeping config at $ConfigFile"
         Protect-ConfigFile $ConfigFile
     } else {
+        # An existing file is saved before it is rewritten, and the keys the
+        # prompts did not ask about are carried over (Get-CarriedConfigBlocks).
+        $CarriedLines = @()
+        if ((Test-Path -LiteralPath $ConfigFile) -and (Get-Item -LiteralPath $ConfigFile).Length -gt 0) {
+            $ConfigBak = "$ConfigFile.bak-" + (Get-Date -Format 'yyyyMMdd-HHmmss')
+            Copy-Item -LiteralPath $ConfigFile -Destination $ConfigBak -Force
+            Protect-ConfigFile $ConfigBak
+            Write-Step "Previous config saved as $ConfigBak"
+            # What the rewrite below writes from the answers.
+            $Managed = @('port', 'scan_interval', 'token', 'advertise_interface', 'filesystems')
+            if ($StandbyAsked) { $Managed += 'standby_mode' }
+            if ($SmartctlConfigPath) { $Managed += 'smartctl_path' }
+            $CarriedLines = Get-CarriedConfigBlocks -Path $ConfigBak -Managed $Managed
+        }
+
         Write-Step "Writing config to $ConfigFile..."
         Protect-ConfigFile $ConfigFile
         $ConfigContent = "port: $Port`nscan_interval: $ScanInterval"
@@ -964,7 +1022,13 @@ try {
         if ($PickedFS) {
             $ConfigContent += "`n$PickedFS"
         }
+        if ($CarriedLines.Count -gt 0) {
+            $ConfigContent += "`n`n# Kept from the previous config.yaml`n" + ($CarriedLines -join "`n")
+        }
         Set-Content -Path $ConfigFile -Value $ConfigContent -Encoding UTF8
+        if ($CarriedLines.Count -gt 0) {
+            Write-Ok "Kept from the previous config: $(Get-ConfigBlockKeys $CarriedLines)"
+        }
         Write-Ok "Config written."
     }
 

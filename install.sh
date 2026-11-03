@@ -49,6 +49,40 @@ ask() {
 }
 
 # ---------------------------------------------------------------------------
+# Rewriting an existing config.yaml (v1.0): the old file is saved first as
+# config.yaml.bak-<date>-<time>, and every top-level key the installer does
+# not write is carried into the new file (device_overrides, agent_id, mdns,
+# smartctl_path, zfs_pool_status, anything hand-added), so answering N at
+# "Keep current settings?" only changes what the prompts asked about.
+# ---------------------------------------------------------------------------
+
+# Prints the top-level blocks of a YAML file whose keys are NOT in the
+# space-separated list $2: each "key:" line with the indented or "- " lines
+# under it. Comments and blank lines at the top level are left out (the
+# backup has them).
+carry_config_blocks() {
+  awk -v managed=" $2 " '
+    /^[A-Za-z_][A-Za-z0-9_]*[ \t]*:/ {
+      key = $0
+      sub(/[ \t]*:.*/, "", key)
+      keep = (index(managed, " " key " ") == 0)
+      if (keep) print
+      next
+    }
+    /^[ \t]*#/ && !/^[ \t]/ { next }
+    /^[ \t]*$/ { next }
+    /^[ \t]/ || /^-/ { if (keep) print; next }
+    { keep = 0 }
+  ' "$1"
+}
+
+# Prints the top-level key names in a block printed by carry_config_blocks,
+# comma separated.
+config_block_keys() {
+  printf '%s\n' "$1" | awk '/^[A-Za-z_][A-Za-z0-9_]*[ \t]*:/ { k = $0; sub(/[ \t]*:.*/, "", k); printf "%s%s", sep, k; sep = ", " } END { print "" }'
+}
+
+# ---------------------------------------------------------------------------
 # Disk usage picker — detects real block-device mounts, shows numbered list,
 # user enters comma-separated numbers, "all", or "none".
 # Sets FS_YAML with the config.yaml entries and FS_DISPLAY with mount list.
@@ -1800,6 +1834,7 @@ if [ "$KEEP_CONFIG" = "false" ] && [ -n "$TTY_IN" ]; then
 
   # --- Standby-aware polling (HDD detection) ---
   STANDBY_MODE="never"
+  _STANDBY_ASKED="false"
   _HAS_HDD="false"
   if command -v smartctl &>/dev/null; then
     _SCAN_JSON=$(smartctl --json --scan 2>/dev/null || true)
@@ -1820,6 +1855,7 @@ if [ "$KEEP_CONFIG" = "false" ] && [ -n "$TTY_IN" ]; then
     echo "  Spinning drives (HDDs) detected. The agent can skip drives in"
     echo "  standby to avoid waking them up. Recommended for NAS setups."
     echo ""
+    _STANDBY_ASKED="true"
     ask _STANDBY_ANS "  Enable standby-aware polling? [Y/n]: "
     case "$_STANDBY_ANS" in
       [nN]*) STANDBY_MODE="never" ;;
@@ -1889,6 +1925,24 @@ if [ "$KEEP_CONFIG" = "true" ]; then
   info "Keeping existing config at $INSTALL_CFG/config.yaml"
   chmod 600 "$INSTALL_CFG/config.yaml"
 else
+  # An existing file is saved before it is rewritten, and the keys the
+  # prompts did not ask about are carried over (see carry_config_blocks).
+  _CARRIED=""
+  _CONFIG_BAK=""
+  if [ -s "$INSTALL_CFG/config.yaml" ]; then
+    _CONFIG_BAK="$INSTALL_CFG/config.yaml.bak-$(date +%Y%m%d-%H%M%S)"
+    cp "$INSTALL_CFG/config.yaml" "$_CONFIG_BAK"
+    chmod 600 "$_CONFIG_BAK"
+    info "Previous config saved as $_CONFIG_BAK"
+    # What the rewrite below writes from the answers. standby_mode only
+    # when its question was asked (spinning drives found).
+    _MANAGED="port scan_interval token advertise_interface exclude_devices filesystems"
+    if [ "${_STANDBY_ASKED:-false}" = "true" ]; then
+      _MANAGED="$_MANAGED standby_mode"
+    fi
+    _CARRIED=$(carry_config_blocks "$_CONFIG_BAK" "$_MANAGED")
+  fi
+
   info "Writing config to $INSTALL_CFG/config.yaml..."
   mkdir -p "$INSTALL_CFG"
   : > "$INSTALL_CFG/config.yaml"
@@ -1915,6 +1969,14 @@ CONFEOF
   if [ -n "$FS_YAML" ]; then
     echo "" >> "$INSTALL_CFG/config.yaml"
     echo "$FS_YAML" >> "$INSTALL_CFG/config.yaml"
+  fi
+  if [ -n "$_CARRIED" ]; then
+    {
+      echo ""
+      echo "# Kept from the previous config.yaml"
+      printf '%s\n' "$_CARRIED"
+    } >> "$INSTALL_CFG/config.yaml"
+    success "Kept from the previous config: $(config_block_keys "$_CARRIED")"
   fi
   success "Config written."
 fi
