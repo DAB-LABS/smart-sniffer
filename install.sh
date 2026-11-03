@@ -834,6 +834,14 @@ pick_drives() {
   done
 
   default_nums=$(IFS=','; echo "${default_selected[*]}")
+  # Never a default of no drives at all (v1.0): when every drive is yellow
+  # (a VM's virtual disk reports an unknown transport), Enter monitors all
+  # of them, as before the drive picker existed.
+  local all_yellow="false"
+  if [ -z "$default_nums" ]; then
+    default_nums="all"
+    all_yellow="true"
+  fi
 
   # Display the picker.
   echo ""
@@ -868,7 +876,12 @@ pick_drives() {
       break
     fi
   done
-  if [ "$has_yellow" = "true" ]; then
+  if [ "$all_yellow" = "true" ]; then
+    echo "  Yellow drives use network storage or unknown transport and may not"
+    echo "  support SMART. Every drive here is yellow, so all are selected by"
+    echo "  default; enter none to skip SMART monitoring."
+    echo ""
+  elif [ "$has_yellow" = "true" ]; then
     echo "  Yellow drives use network storage or unknown transport and may not"
     echo "  support SMART. They are excluded from the default selection."
     echo ""
@@ -934,14 +947,17 @@ pick_drives() {
     echo ""
     warn "No drives selected for SMART monitoring."
     echo "  The agent will still run (disk usage, mDNS) but won't report drive health."
-    ask _confirm "  Continue? [Y/n]: "
-    _confirm="${_confirm:-y}"
-    if [ "$_confirm" != "y" ] && [ "$_confirm" != "Y" ]; then
-      info "Re-run the installer to change drive selection."
-      EXCLUDE_YAML=""
-      EXCLUDE_DISPLAY=""
-      return
-    fi
+    # Enter is No (v1.0): excluding every drive is never the default.
+    ask _confirm "  Exclude every drive? [y/N]: "
+    case "${_confirm:-n}" in
+      y|Y|yes|YES|Yes) ;;
+      *)
+        info "No drive excluded: all drives are monitored. Re-run the installer to change it."
+        EXCLUDE_YAML=""
+        EXCLUDE_DISPLAY=""
+        return
+        ;;
+    esac
   fi
 
   # Build YAML output.
@@ -1271,8 +1287,9 @@ Options:
                        area is read-only, such as TrueNAS.
   --yes, -y            Ask nothing: take the default answer at every
                        prompt, as if you pressed Enter each time. An
-                       update keeps the existing configuration. For
-                       updates over SSH, Ansible and other scripts.
+                       update keeps config.yaml exactly as it is (no
+                       follow-up questions). For updates over SSH,
+                       Ansible and other scripts.
   --uninstall, -u      Remove the agent, its service, and its config.
   --help, -h           Show this message and exit.
 
@@ -1824,10 +1841,22 @@ if [ -f "$EXISTING_CONFIG" ]; then
       fi
       success "Keeping existing configuration."
 
+      # The upgrade pickers below add settings an older config lacks. They
+      # are offered only when someone answers them: an update with --yes
+      # keeps config.yaml exactly as it is (v1.0, owner decision 2026-11-03),
+      # so nothing an unattended update did can change what the agent
+      # monitors.
+      _OFFER_UPGRADE_PICKERS=false
+      if [ -n "$TTY_IN" ] && [ "$ASSUME_YES" != "true" ]; then
+        _OFFER_UPGRADE_PICKERS=true
+      elif [ "$ASSUME_YES" = "true" ]; then
+        info "--yes: config.yaml is kept exactly as it is."
+      fi
+
       # --- Upgrade path: offer interface picker if config predates v0.4.25 ---
       # Old configs won't have advertise_interface. On multi-homed hosts this
       # can cause mDNS to advertise on a VPN or Docker IP. Prompt once.
-      if [ -z "$ADV_IFACE" ] && [ -n "$TTY_IN" ]; then
+      if [ -z "$ADV_IFACE" ] && [ "$_OFFER_UPGRADE_PICKERS" = "true" ]; then
         count_non_virtual_interfaces
         if [ "$NON_VIRTUAL_COUNT" -gt 1 ]; then
           echo ""
@@ -1846,7 +1875,7 @@ if [ -f "$EXISTING_CONFIG" ]; then
       fi
 
       # --- Upgrade path: offer drive picker if config has no exclude_devices ---
-      if ! grep -q '^exclude_devices:' "$EXISTING_CONFIG" 2>/dev/null && [ -n "$TTY_IN" ]; then
+      if ! grep -q '^exclude_devices:' "$EXISTING_CONFIG" 2>/dev/null && [ "$_OFFER_UPGRADE_PICKERS" = "true" ]; then
         pick_drives
         if [ -n "$EXCLUDE_YAML" ]; then
           echo "" >> "$EXISTING_CONFIG"
@@ -1856,7 +1885,7 @@ if [ -f "$EXISTING_CONFIG" ]; then
       fi
 
       # --- Upgrade path: offer filesystem picker if config has no filesystems ---
-      if ! grep -q '^filesystems:' "$EXISTING_CONFIG" 2>/dev/null && [ -n "$TTY_IN" ]; then
+      if ! grep -q '^filesystems:' "$EXISTING_CONFIG" 2>/dev/null && [ "$_OFFER_UPGRADE_PICKERS" = "true" ]; then
         echo ""
         info "Disk usage monitoring is now available."
         echo ""

@@ -19,8 +19,9 @@
 
 .PARAMETER Yes
     Ask nothing: take the default answer at every prompt, as if Enter was
-    pressed each time. Same as $env:SMARTHA_YES=1, which is the form to use
-    with irm ... | iex (a piped script cannot take a switch).
+    pressed each time. An update keeps config.yaml exactly as it is (no
+    follow-up questions). Same as $env:SMARTHA_YES=1, which is the form to
+    use with irm ... | iex (a piped script cannot take a switch).
 
 .EXAMPLE
     .\install.ps1 -Yes
@@ -839,8 +840,18 @@ try {
         $Token        = $ExistingToken
         $ScanInterval = $ExistingInterval
 
+        # The upgrade steps below add or rewrite settings in an older config.
+        # An update with -Yes / SMARTHA_YES keeps config.yaml exactly as it is
+        # (v1.0, owner decision 2026-11-03): none of them run. Agent 1.0
+        # reads a bare-number scan_interval and finds smartctl in the usual
+        # places by itself.
+        $UpgradeSteps = -not $script:AssumeYes
+        if (-not $UpgradeSteps) {
+            Write-Step "-Yes: config.yaml is kept exactly as it is."
+        }
+
         # --- Upgrade path: a bare number the agent cannot parse (GH #69) ---
-        if ($ExistingInterval -match '^\d+$') {
+        if ($UpgradeSteps -and $ExistingInterval -match '^\d+$') {
             $ScanInterval = "${ExistingInterval}s"
             (Get-Content -Path $ConfigFile) -replace '^scan_interval:.*$', "scan_interval: $ScanInterval" |
                 Set-Content -Path $ConfigFile -Encoding UTF8
@@ -854,14 +865,14 @@ try {
                 Write-Warn "smartctl_path in your config does not exist: $ExistingSmartctl"
                 Write-Warn "The agent will log this and search for smartctl itself. Edit $ConfigFile to fix or remove it."
             }
-        } elseif ($SmartctlConfigPath) {
+        } elseif ($UpgradeSteps -and $SmartctlConfigPath) {
             Add-Content -Path $ConfigFile -Value "" -Encoding UTF8
             Add-Content -Path $ConfigFile -Value (Format-SmartctlPathYaml $SmartctlConfigPath) -Encoding UTF8
             Write-Ok "smartctl_path added to existing config."
         }
 
         # --- Upgrade path: offer interface picker if field is missing ---
-        if (-not $ExistingIface -and (Test-Interactive)) {
+        if ($UpgradeSteps -and -not $ExistingIface -and (Test-Interactive)) {
             # Count non-virtual adapters to decide whether to prompt.
             $UpgradeAdapters = @()
             try {
@@ -905,7 +916,7 @@ try {
         if (Test-Path $ConfigFile) {
             $HasFilesystems = (Get-Content -Path $ConfigFile | Where-Object { $_ -match '^filesystems:' }).Count -gt 0
         }
-        if (-not $HasFilesystems -and (Test-Interactive)) {
+        if ($UpgradeSteps -and -not $HasFilesystems -and (Test-Interactive)) {
             Write-Host ""
             Write-Step "Disk usage monitoring is now available."
             $MigFS = Pick-Filesystem

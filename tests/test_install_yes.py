@@ -276,18 +276,83 @@ def test_an_update_with_yes_keeps_the_config(tmp_path):
 
 
 @needs_namespace
-def test_an_update_with_yes_takes_the_follow_up_defaults(tmp_path):
-    """An older config without exclude_devices: the drive picker runs and
-    takes its default (every local drive), so nothing is excluded."""
+def test_an_update_with_yes_keeps_the_config_byte_for_byte(tmp_path):
+    """v1.0 (owner, 2026-11-03): an older config without exclude_devices,
+    filesystems or advertise_interface. With --yes no follow-up picker runs
+    and the file is kept exactly; the update says so."""
     folder = tmp_path / "agent"
     folder.mkdir()
-    (folder / "config.yaml").write_text("port: 9099\nscan_interval: 60s\nadvertise_interface: eth0\n"
-                                        "filesystems:\n  - path: /srv\n")
+    existing = "port: 9099\ntoken: \"x\"\nscan_interval: 60s\n"
+    (folder / "config.yaml").write_text(existing)
     result, _ = _run(tmp_path, ["--yes", f"--install-dir={folder}"])
     out = result.stdout + result.stderr
     assert result.returncode == 0, out[-3000:]
-    assert re.search(r"Monitor \(1 / all / none\) \[1\]: \(default\)", out), out[-3000:]
+    assert (folder / "config.yaml").read_text() == existing
+    assert "--yes: config.yaml is kept exactly as it is." in out
+    for picker in ("Monitor (", "Advertise on (", "Drive Scanner", "Disk usage monitoring is now available"):
+        assert picker not in out, picker
+    assert not list(folder.glob("config.yaml.bak*"))
+
+
+# The Kali VM case (2026-11-03): its only disk is a QEMU virtual disk whose
+# transport lsblk reports as empty (shown "unknown", a yellow drive).
+QEMU_ONLY = {
+    "lsblk": """#!/bin/bash
+echo 'NAME="sda" SIZE="32G" MODEL="QEMU HARDDISK" TRAN="" VENDOR="QEMU"'
+""",
+    "smartctl": STUBS["smartctl"].replace('"rotation_rate":7200,"model_name":"FAKE HDD"',
+                                          '"rotation_rate":0,"model_name":"QEMU HARDDISK"'),
+}
+
+
+@needs_namespace
+def test_the_kali_case_update_with_yes_leaves_the_file_identical(tmp_path):
+    folder = tmp_path / "agent"
+    folder.mkdir()
+    existing = ('port: 9099\nscan_interval: 60s\ntoken: "abcd"\nadvertise_interface: eth0\n\n'
+                'filesystems:\n  - path: "/"\n    uuid: ""\n    device: "/dev/sda1"\n    fstype: "ext4"\n')
+    (folder / "config.yaml").write_text(existing)
+    result, _ = _run(tmp_path, ["--yes", f"--install-dir={folder}"], stubs_extra=QEMU_ONLY)
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out[-3000:]
+    assert (folder / "config.yaml").read_bytes() == existing.encode()
+    assert "Drive Scanner" not in out and "No drives selected" not in out
+
+
+@needs_namespace
+def test_a_fresh_install_with_only_yellow_drives_monitors_them_all(tmp_path):
+    """The drive picker never defaults to no drives: all yellow means all."""
+    folder = tmp_path / "agent"
+    result, _ = _run(tmp_path, ["--yes", f"--install-dir={folder}"], stubs_extra=QEMU_ONLY)
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out[-3000:]
+    assert re.search(r"Monitor \(1 / all / none\) \[all\]: \(default\)", out), out[-3000:]
+    assert "all are selected by" in out
     assert "exclude_devices" not in (folder / "config.yaml").read_text()
+
+
+@needs_namespace
+@pytest.mark.parametrize(("choice", "confirm", "excluded"), [
+    ("", "", False),        # Enter at the picker: all
+    ("none", "", False),    # none, then Enter at the question: No, nothing excluded
+    ("none", "n", False),
+    ("none", "y", True),    # only a typed yes excludes every drive
+])
+def test_the_drive_picker_never_excludes_everything_by_default(tmp_path, choice, confirm, excluded):
+    """Interactive (a pty): N at Keep, then port, token, interval, then the
+    drive picker."""
+    folder = tmp_path / "agent"
+    folder.mkdir()
+    (folder / "config.yaml").write_text("port: 9099\n")
+    typed = "n\n\n\n\n" + choice + "\n" + (confirm + "\n" if choice == "none" else "")
+    result, _ = _run(tmp_path, [f"--install-dir={folder}"], answers=typed + "\n" * 30,
+                     stubs_extra=QEMU_ONLY)
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out[-3000:]
+    config = (folder / "config.yaml").read_text()
+    assert ("exclude_devices" in config) is excluded, config
+    if choice == "none":
+        assert "Exclude every drive? [y/N]:" in out
 
 
 @needs_namespace
@@ -698,3 +763,20 @@ def test_keeping_the_config_reads_a_quoted_token_back(tmp_path):
     assert result.returncode == 0, (result.stdout + result.stderr)[-3000:]
     sent = (tmp_path / "stubs" / "curl-config").read_text()
     assert 'header = "Authorization: Bearer it\'s # here"' in sent, sent
+
+
+def test_install_ps1_update_with_yes_changes_nothing_in_the_config():
+    """v1.0: every upgrade step that writes into a kept config is gated on
+    $UpgradeSteps, which is false with -Yes / SMARTHA_YES."""
+    source = INSTALL_PS1.read_text()
+    keep = source[source.index('Write-Ok "Keeping existing configuration."'):]
+    keep = keep[:keep.index("} elseif (-not (Test-Interactive)) {")]
+    assert "$UpgradeSteps = -not $script:AssumeYes" in keep
+    writers = [line.strip() for line in keep.splitlines()
+               if re.search(r"Set-Content|Add-Content", line)]
+    assert writers, keep
+    # Each writer sits inside an if that tests $UpgradeSteps.
+    blocks = re.findall(r"if \((.*?)\) \{(.*?)\n        \}", keep, re.S)
+    gated = "".join(body for cond, body in blocks if "$UpgradeSteps" in cond)
+    for line in writers:
+        assert line in gated, line

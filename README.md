@@ -245,7 +245,7 @@ Or go to **System Settings > Privacy & Security**, find the blocked app, and cli
 VERSION=0.1.0 curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo bash
 ```
 
-**Update without questions** (over SSH, from Ansible or any script): `--yes` takes the default answer at every prompt, so an update keeps your configuration and never waits for input. Home Assistant's update notice for each agent shows the same command.
+**Update without questions** (over SSH, from Ansible or any script): `--yes` takes the default answer at every prompt and never waits for input; an update keeps config.yaml exactly as it is, with no follow-up questions. Home Assistant's update notice for each agent shows the same command.
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/DAB-LABS/smart-sniffer/main/install.sh | sudo bash -s -- --yes
