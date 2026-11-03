@@ -1622,3 +1622,118 @@ def test_no_serial_shows_whole_on_any_card(page):
         assert serial not in text, serial
         assert serial[-4:] in text, serial
     assert not p.errors, p.errors
+
+
+# --- Leaving and coming back (v1.0, C3) ---------------------------------------------
+#
+# Home Assistant takes the panel element out of its page when another sidebar
+# page opens, and after the window has been hidden a while, then puts the same
+# element back. Out: the page's clock and timers stop and its subscription is
+# closed. Back: the page loads again with one subscription. Hidden in place:
+# the clock stops, the subscription stays.
+
+_FRAME_DATA = "() => { const w = window.panelEl.shadowRoot.querySelector('iframe').contentWindow;" \
+              " return w.Alpine.$data(w.document.querySelector('main.page')); }"
+
+
+def _count_ticks(p):
+    """Counts the page's clock ticks in the shell (a counter that outlives
+    the frame's document), and keeps the page's data object."""
+    p.page.evaluate(f"""() => {{
+      const x = ({_FRAME_DATA})();
+      window.ticks = 0;
+      window.oldData = x;
+      x.tick = () => {{ window.ticks += 1; }};
+    }}""")
+
+
+def _subs(p):
+    return _state(p.base)["subs"]
+
+
+def test_leaving_stops_the_clock_and_the_subscription(page):
+    p = page()
+    assert p.wait(lambda: _subs(p) == 1)
+    _count_ticks(p)
+    assert p.wait(lambda: p.page.evaluate("window.ticks") >= 2, timeout=5)
+
+    # Out of the page, as Home Assistant does on another sidebar page.
+    p.page.evaluate("() => { window.panelParent = window.panelEl.parentNode; window.panelEl.remove(); }")
+    assert p.wait(lambda: _subs(p) == 0), "the subscription was left open"
+    assert p.page.evaluate("window.oldData.stopped") is True
+    assert p.page.evaluate("window.oldData.tickTimer") is None
+    assert p.page.evaluate("window.panelEl._subs.size") == 0
+    before = p.page.evaluate("window.ticks")
+    p.page.wait_for_timeout(2500)
+    assert p.page.evaluate("window.ticks") == before, "the clock kept ticking after the panel left"
+
+    # Back: the page loads again, subscribes once, and its clock runs.
+    p.page.evaluate("() => window.panelParent.appendChild(window.panelEl)")
+    p.frame.locator("main.page").first.wait_for()
+    assert p.wait(lambda: p.page.evaluate(f"() => {{ try {{ return ({_FRAME_DATA})().loaded; }}"
+                                          " catch (e) { return false; } }"), timeout=10)
+    assert p.wait(lambda: _subs(p) == 1)
+    p.page.wait_for_timeout(500)
+    assert _subs(p) == 1
+    assert p.page.evaluate(f"() => ({_FRAME_DATA})().stopped") is False
+    assert p.page.evaluate(f"() => ({_FRAME_DATA})().tickTimer") is not None
+    p.card("STUDIO-MAC")
+    assert p.errors == []
+
+
+def test_leaving_twice_leaves_no_subscription_behind(page):
+    p = page()
+    assert p.wait(lambda: _subs(p) == 1)
+    for _ in range(3):
+        p.page.evaluate("() => { window.panelParent = window.panelEl.parentNode; window.panelEl.remove(); }")
+        assert p.wait(lambda: _subs(p) == 0)
+        p.page.evaluate("() => window.panelParent.appendChild(window.panelEl)")
+        p.frame.locator("main.page").first.wait_for()
+        assert p.wait(lambda: _subs(p) == 1)
+    p.page.wait_for_timeout(500)
+    assert _subs(p) == 1
+    assert p.errors == []
+
+
+def test_a_hidden_page_stops_its_clock_and_keeps_its_subscription(page):
+    p = page()
+    assert p.wait(lambda: _subs(p) == 1)
+    _count_ticks(p)
+    assert p.wait(lambda: p.page.evaluate("window.ticks") >= 1, timeout=5)
+
+    def visibility(hidden):
+        p.doc.evaluate(f"""() => {{
+          Object.defineProperty(document, 'hidden', {{ configurable: true, get: () => {str(hidden).lower()} }});
+          document.dispatchEvent(new Event('visibilitychange'));
+        }}""")
+
+    visibility(True)
+    assert p.page.evaluate("window.oldData.tickTimer") is None
+    before = p.page.evaluate("window.ticks")
+    p.page.wait_for_timeout(2500)
+    assert p.page.evaluate("window.ticks") == before
+    assert _subs(p) == 1 and p.page.evaluate("window.oldData.stopped") is False
+
+    visibility(False)
+    assert p.page.evaluate("window.oldData.tickTimer") is not None
+    assert p.wait(lambda: p.page.evaluate("window.ticks") >= before + 2, timeout=5)
+    assert p.errors == []
+
+
+def test_stop_and_start_in_place(page):
+    """pagehide then pageshow from the back-forward cache: the same page
+    stops and starts again, with one subscription and fresh data."""
+    p = page()
+    assert p.wait(lambda: _subs(p) == 1)
+    p.doc.evaluate("() => window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }))")
+    assert p.wait(lambda: _subs(p) == 0)
+    p.doc.evaluate("() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))")
+    assert p.wait(lambda: _subs(p) == 1)
+    x = f"({_FRAME_DATA})()"
+    assert p.page.evaluate(f"() => {x}.stopped") is False
+    assert p.page.evaluate(f"() => {x}.tickTimer") is not None
+    # An ordinary pageshow (the first load) does not subscribe twice.
+    p.doc.evaluate("() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: false }))")
+    p.page.wait_for_timeout(500)
+    assert _subs(p) == 1
+    assert p.errors == []

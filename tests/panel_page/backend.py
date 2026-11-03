@@ -395,7 +395,7 @@ class Backend:
     async def state(self, request: web.Request) -> web.Response:
         pd = H.panel_data.panel_data(self.hass)
         await pd.state.async_load()
-        return web.json_response({"state": pd.state.data,
+        return web.json_response({"state": pd.state.data, "subs": len(self.subs),
                                   "entries": {e.entry_id: dict(e.data) for e in
                                               self.hass.config_entries.async_entries("smart_sniffer")}})
 

@@ -19,7 +19,16 @@
    reads is swapped; nothing is drawn again.
 
    On a narrow screen the panel shows Home Assistant's own top bar with the
-   menu button, as an app's page in the sidebar has it. */
+   menu button, as an app's page in the sidebar has it.
+
+   Leaving and coming back (v1.0): Home Assistant takes the panel out of its
+   page when the user opens another sidebar page, and after the window has
+   been hidden a while. Taking the frame out unloads the Control Center, so
+   its clock and timers stop with it (it stops them itself on pagehide), and
+   every subscription the page opened through the bridge is closed here
+   (disconnectedCallback), so none is left running on Home Assistant's
+   connection. Putting the panel back loads the page in the frame again,
+   which subscribes again. */
 
 (function () {
   const VERSION_FALLBACK = '';
@@ -32,6 +41,8 @@
       this._panel = null;
       this._frame = null;
       this._bar = null;
+      // Subscriptions the page opened through the bridge and has not closed.
+      this._subs = new Set();
     }
 
     set hass(hass) {
@@ -58,6 +69,22 @@
       this._build();
     }
 
+    disconnectedCallback() {
+      this._closeSubs();
+    }
+
+    // Closes every subscription still open; one still on its way is closed
+    // when it lands.
+    _closeSubs() {
+      for (const rec of this._subs) {
+        rec.closed = true;
+        if (rec.unsub) {
+          try { Promise.resolve(rec.unsub()).catch(() => {}); } catch (e) { /* already gone */ }
+        }
+      }
+      this._subs.clear();
+    }
+
     _config() {
       return (this._panel && this._panel.config) || {};
     }
@@ -70,8 +97,26 @@
           return el._hass.callWS(msg);
         },
         subscribe(msg, callback) {
-          if (!el._hass) return Promise.reject({ code: 'not_ready', message: 'Home Assistant is not connected' });
-          return el._hass.connection.subscribeMessage(callback, msg);
+          if (!el._hass || !el.isConnected) return Promise.reject({ code: 'not_ready', message: 'Home Assistant is not connected' });
+          const rec = { unsub: null, closed: false };
+          el._subs.add(rec);
+          return el._hass.connection.subscribeMessage((ev) => { if (!rec.closed) callback(ev); }, msg).then((unsub) => {
+            if (rec.closed) {
+              // The panel left before Home Assistant answered.
+              Promise.resolve(unsub()).catch(() => {});
+              return () => Promise.resolve();
+            }
+            rec.unsub = unsub;
+            return () => {
+              if (rec.closed) return Promise.resolve();
+              rec.closed = true;
+              el._subs.delete(rec);
+              return unsub();
+            };
+          }, (err) => {
+            el._subs.delete(rec);
+            throw err;
+          });
         },
         navigate(path) {
           if (typeof path !== 'string' || !path.startsWith('/')) return;

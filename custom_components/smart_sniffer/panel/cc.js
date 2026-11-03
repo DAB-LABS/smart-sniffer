@@ -191,6 +191,12 @@ function cc() {
     haTimers: [],
     toastTimer: null,
     scanTimer: null,
+    // v1.0 lifecycle (stop/start): the clock's interval, the subscription's
+    // unsubscribe, its generation, and whether the page is stopped.
+    tickTimer: null,
+    unsub: null,
+    subGen: 0,
+    stopped: false,
     scanPolling: false,
     now: Date.now(),
     // Cards: the stored order and hidden ids, cards removed while their
@@ -226,7 +232,7 @@ function cc() {
       }
       this.loadAll();
       this.subscribe();
-      setInterval(() => this.tick(), 1000);
+      this.startTicks();
       this.watchCols();
       this.watchRows();
       // Links into Home Assistant open in its own window, without a reload.
@@ -237,11 +243,28 @@ function cc() {
         e.preventDefault();
         BRIDGE.navigate(href);
       });
+      // A hidden page (another tab, the app in the background) stops its
+      // clock and its scan polling; the subscription stays, so the cards are
+      // current when it shows again.
       document.addEventListener('visibilitychange', () => {
-        if (document.hidden) return;
+        if (this.stopped) return;
+        if (document.hidden) {
+          this.stopTicks();
+          clearTimeout(this.scanTimer);
+          this.scanTimer = null;
+          return;
+        }
+        this.startTicks();
         this.tick();
         this.resumeScan();
       });
+      // The panel left Home Assistant's page (another sidebar page, or Home
+      // Assistant took it out while hidden): panel.js's frame unloads this
+      // page. Everything stops here, the subscription too. A page restored
+      // as it was (pageshow from the back-forward cache) starts again; a
+      // panel put back loads this page anew (init).
+      window.addEventListener('pagehide', () => this.stop());
+      window.addEventListener('pageshow', (e) => { if (e.persisted) this.start(); });
       // The exact-number popover closes on any click outside it, a scroll
       // or Escape.
       document.addEventListener('click', (e) => {
@@ -266,6 +289,43 @@ function cc() {
     // Every timer waits while the page is hidden.
     tick() {
       this.now = Date.now();
+    },
+    // The one-second clock behind every "seconds ago" (v1.0: stopped while
+    // hidden and when the panel goes, see init).
+    startTicks() {
+      if (this.tickTimer || this.stopped || document.hidden) return;
+      this.tickTimer = setInterval(() => this.tick(), 1000);
+    },
+    stopTicks() {
+      clearInterval(this.tickTimer);
+      this.tickTimer = null;
+    },
+    // The whole page stops: the clock, scan polling and the subscription.
+    stop() {
+      if (this.stopped) return;
+      this.stopped = true;
+      this.stopTicks();
+      clearTimeout(this.scanTimer);
+      this.scanTimer = null;
+      this.unsubscribe();
+    },
+    // And starts again: what changed meanwhile is read in full.
+    start() {
+      if (!this.stopped || !BRIDGE) return;
+      this.stopped = false;
+      this.subscribe();
+      this.loadAll();
+      this.startTicks();
+      this.tick();
+      this.resumeScan();
+    },
+    unsubscribe() {
+      const unsub = this.unsub;
+      this.unsub = null;
+      this.subGen += 1; // a subscription still on its way is dropped when it lands
+      if (typeof unsub === 'function') {
+        try { Promise.resolve(unsub()).catch(() => {}); } catch (e) { /* already gone */ }
+      }
     },
 
     // One of the page's App routes, as its smart_sniffer/panel/* command.
@@ -390,13 +450,24 @@ function cc() {
     },
 
     subscribe() {
+      this.unsubscribe();
+      const gen = this.subGen;
       Promise.resolve(BRIDGE.subscribe({ type: `${WS}subscribe` }, (ev) => {
-        if (!ev) return;
+        if (!ev || this.stopped || gen !== this.subGen) return;
         if (ev.type === 'machine' && ev.machine) this.applyMachine(ev.machine);
         else if (ev.type === 'machine_removed') this.dropMachine(ev.entry_id);
         else if (ev.type === 'state') this.applyState(ev.state);
         else if (ev.type === 'info') this.applyInfo(ev.info);
-      })).catch(() => { this.hostsErr = 'SMART Sniffer stopped sending updates. Refresh the page.'; });
+      })).then((unsub) => {
+        // Stopped (or subscribed again) before Home Assistant answered.
+        if (gen !== this.subGen) {
+          if (typeof unsub === 'function') Promise.resolve(unsub()).catch(() => {});
+          return;
+        }
+        this.unsub = unsub;
+      }).catch(() => {
+        if (gen === this.subGen) this.hostsErr = 'SMART Sniffer stopped sending updates. Refresh the page.';
+      });
     },
 
     async loadHost(id) {
@@ -2330,7 +2401,8 @@ function cc() {
       this.scanTimer = setTimeout(async () => {
         this.scanTimer = null;
         if (this.add.scanId !== id) return;
-        if (document.hidden) { this.pollScan(id); return; }
+        // Hidden or stopped: resumeScan() picks it up when the page shows.
+        if (document.hidden || this.stopped) return;
         this.scanPolling = true;
         const r = await this.request(`fleet/scan/${enc(id)}`);
         this.scanPolling = false;
