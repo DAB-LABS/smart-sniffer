@@ -58,6 +58,36 @@ function Write-Ok    { param($msg) Write-Host "  [OK] $msg" -ForegroundColor Gre
 function Write-Warn  { param($msg) Write-Host "  [!] $msg" -ForegroundColor Yellow }
 function Write-Fail  { param($msg) Write-Host "  [X] $msg" -ForegroundColor Red; exit 1 }
 
+# Copy-AgentBinary puts the downloaded binary in place. After the service
+# stops, Windows can keep the old .exe open for a moment (the service
+# manager, an antivirus scan), so a failed copy is retried every
+# $IntervalMilliseconds for up to $TimeoutSeconds. A copy only counts when
+# the file in place has the download's hash. Returns $null when done, or
+# the last error.
+function Copy-AgentBinary {
+    param([string]$Source, [string]$Destination, [string]$ExpectedHash,
+          [double]$TimeoutSeconds = 10, [int]$IntervalMilliseconds = 500)
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $told = $false
+    while ($true) {
+        try {
+            Copy-Item -LiteralPath $Source -Destination $Destination -Force -ErrorAction Stop
+            if ((Get-FileHash -LiteralPath $Destination -Algorithm SHA256).Hash -eq $ExpectedHash) {
+                return $null
+            }
+            $lastError = "the file in place does not match the download"
+        } catch {
+            $lastError = $_.Exception.Message.TrimEnd('.')
+        }
+        if ((Get-Date) -ge $deadline) { return $lastError }
+        if (-not $told) {
+            Write-Warn "The old binary is still in use; retrying for up to $TimeoutSeconds seconds..."
+            $told = $true
+        }
+        Start-Sleep -Milliseconds $IntervalMilliseconds
+    }
+}
+
 # IsInteractive returns $true when we have a console attached and the
 # user can respond to Read-Host prompts. irm ... | iex over a remote
 # session leaves a TTY, but some automation contexts do not. Match
@@ -1017,29 +1047,13 @@ try {
             # from a service in a failed/stopping state.
             sc.exe stop $ServiceName 2>$null | Out-Null
         }
-        # Give the SCM time to fully release the binary file handle.
-        Start-Sleep -Seconds 3
     }
 
-    # Copy with retry. On Windows the SCM can briefly hold a file
-    # handle on the binary after the service process has exited. If
-    # the first copy produces a locked-file error or silently fails
-    # to overwrite, we retry after a short wait.
-    $CopyVerified = $false
-    for ($attempt = 1; $attempt -le 3; $attempt++) {
-        Copy-Item -Path $BinaryTmp -Destination $BinaryPath -Force -ErrorAction SilentlyContinue
-        if (Test-Path $BinaryPath) {
-            $DestHash = (Get-FileHash -Path $BinaryPath -Algorithm SHA256).Hash
-            if ($DestHash -eq $SourceHash) {
-                $CopyVerified = $true
-                break
-            }
-        }
-        Write-Warn "Binary copy attempt $attempt - file hash mismatch, retrying..."
-        Start-Sleep -Seconds 3
-    }
-    if (-not $CopyVerified) {
-        Write-Fail "Could not overwrite the existing binary after 3 attempts. The old service may still hold a file lock. Reboot and re-run the installer."
+    # The old .exe can stay in use for a moment after the service stops:
+    # Copy-AgentBinary retries for up to 10 seconds.
+    $CopyError = Copy-AgentBinary -Source $BinaryTmp -Destination $BinaryPath -ExpectedHash $SourceHash
+    if ($CopyError) {
+        Write-Fail "Could not replace $BinaryPath after 10 seconds: $CopyError. Another program still has it open (the old agent, an antivirus scan). The $ServiceName service is stopped. Close that program, or restart Windows, then run the installer again."
     }
     Write-Ok "Binary installed and verified."
 

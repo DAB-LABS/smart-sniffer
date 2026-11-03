@@ -35,6 +35,30 @@ success() { echo -e "${GREEN}  ✓ $*${NC}"; }
 warn()    { echo -e "${YELLOW}  ⚠ $*${NC}"; }
 fail()    { echo -e "${RED}  ✗ $*${NC}"; exit 1; }
 
+# replace_binary SRC DEST: copies the downloaded binary into place. A
+# running copy of the old binary makes cp fail (Text file busy) until it
+# has exited, so after the service stops a failed copy is retried once a
+# second for up to 10 seconds (REPLACE_TRIES). Returns 1 if it never
+# succeeds, with cp's last message in REPLACE_ERROR.
+replace_binary() {
+  _tries=0
+  _told=false
+  while :; do
+    if REPLACE_ERROR=$(cp "$1" "$2" 2>&1); then
+      return 0
+    fi
+    _tries=$((_tries + 1))
+    if [ "$_tries" -ge "${REPLACE_TRIES:-10}" ]; then
+      return 1
+    fi
+    if [ "$_told" = "false" ]; then
+      warn "The old binary is still in use; retrying for up to 10 seconds..."
+      _told=true
+    fi
+    sleep 1
+  done
+}
+
 # ask VAR "prompt": one prompt, read from the terminal (TTY_IN). With --yes
 # nothing is read: the prompt is shown with "(default)" and VAR is left
 # empty, exactly as if Enter was pressed, so each caller's own default
@@ -1996,7 +2020,9 @@ if [ "$PLATFORM" = "darwin" ] && launchctl list | grep -q com.dablabs.smartha-ag
   launchctl unload /Library/LaunchDaemons/com.dablabs.smartha-agent.plist 2>/dev/null || true
 fi
 info "Installing binary to $INSTALL_BIN..."
-cp "$TMPDIR/$BINARY_FILE" "$INSTALL_BIN"
+if ! replace_binary "$TMPDIR/$BINARY_FILE" "$INSTALL_BIN"; then
+  fail "Could not replace $INSTALL_BIN after 10 seconds: ${REPLACE_ERROR:-cp failed}. If another copy of the agent is still running (pgrep -lx $BINARY_NAME), stop it, then run the installer again."
+fi
 chmod +x "$INSTALL_BIN"
 
 # macOS: remove Gatekeeper quarantine flag so the binary can run without
