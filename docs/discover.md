@@ -151,9 +151,17 @@ No config changes needed -- the agent handles protocol detection automatically.
 
 ## What it writes to config
 
-When drives need `device_overrides`, discovery shows you exactly what it will write and asks for confirmation. It only adds a `device_overrides` section -- it never modifies your existing config fields (port, scan_interval, token, etc.).
+When drives need `device_overrides`, discovery shows you exactly what it will write and asks for confirmation. It only writes the `device_overrides` section -- it never modifies your existing config fields (port, scan_interval, token, etc.).
 
 Before writing, it automatically backs up your config to `config.yaml.bak`.
+
+If your config already has `device_overrides` (from an earlier run, or written by hand), writing replaces them. Discovery lists the entries it would replace and asks `Replace them? [y/N]`; pressing Enter keeps them. With no terminal to ask on (over ssh without a terminal, from a script, or with input from `/dev/null`) it leaves the file alone and tells you how to replace them anyway:
+
+```bash
+sudo smartha-agent --discover --yes
+```
+
+`--yes` (or `-y`) answers yes to the write question, and to the replace question, without asking. Before v1.0 a second run added a second `device_overrides` section, which the agent then refused to start with.
 
 Example addition:
 
@@ -189,7 +197,7 @@ You can re-run `--discover` at any time. Common reasons:
 - **Replaced a drive** -- the new drive may have a different path or protocol
 - **Drives show as UNSUPPORTED after an update** -- re-run to re-test protocol detection
 
-**Important:** `--discover` appends `device_overrides` to your config. If you run it multiple times, you may end up with duplicate entries. Check your `config.yaml` after re-running and remove any duplicates.
+Re-running replaces the `device_overrides` section rather than adding a second one, and asks first when the section already has entries (see [What it writes to config](#what-it-writes-to-config)). Entries you wrote by hand for drives discovery does not propose (a RAID controller, for example) are replaced too, so add them back afterwards; the previous file is in `config.yaml.bak`.
 
 ## When discovery isn't enough
 
@@ -199,15 +207,11 @@ Discovery handles protocol detection and Synology/QNAP platform quirks. It doesn
 - **Hardware RAID controllers** -- if your drives sit behind a hardware RAID controller (MegaRAID, Adaptec, etc.), `smartctl` needs a RAID-specific device type (`-d megaraid,0`). Discovery doesn't probe RAID controllers yet. See the [RAID Controllers guide](guides/raid-controllers.md) for controller identification and config examples.
 - **USB-attached drives** -- some USB enclosures don't pass SMART commands. Try `-d sat` manually with `smartctl` to test.
 
-## Config preservation warning
+## Reinstalling keeps your overrides
 
-If you later reinstall the agent and choose "N" at the "Keep current settings?" prompt, the installer rewrites `config.yaml` from scratch. This will erase your `device_overrides`. The installer does not currently preserve custom config sections during reconfigure.
+If you later reinstall the agent and choose "N" at the "Keep current settings?" prompt, the installer asks its questions again and rewrites `config.yaml` from your answers. From v1.0 it first saves the old file next to it as `config.yaml.bak-<date>-<time>`, and it carries every setting it did not ask about into the new file, `device_overrides` included (also `agent_id`, `mdns`, `smartctl_path` and anything you added by hand). The installer prints which settings it kept.
 
-To avoid losing your overrides:
-
-1. Choose "Y" (keep current settings) during reinstall if you only need to update the agent binary
-2. Back up your `config.yaml` before reinstalling
-3. Re-run `--discover` after reinstalling if you chose "N"
+Before v1.0, choosing "N" erased `device_overrides`. If that happened to you, re-run `--discover`.
 
 ## Manual device_overrides
 

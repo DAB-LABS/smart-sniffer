@@ -42,7 +42,7 @@ Each drive gets its own HA device, and entities are created only for what that d
 
 **Sensors:** Attention Needed, Health (OK / Problem / Unknown), Standby, Temperature, Power-On Hours, SMART Status, Data Written, Data Read (disabled by default).
 
-**Diagnostic sensors** (conditional on what the drive reports): Reallocated Sector Count, Reported Uncorrectable Errors, Wear Leveling / Percentage Used, Power Cycle Count, Reallocated Event Count, Spin Retry Count, Command Timeout, Available Spare, Available Spare Threshold, Current Pending Sector Count.
+**Diagnostic sensors** (conditional on what the drive reports): Reallocated Sector Count, Reported Uncorrectable Errors, Wear Leveling / Percentage Used, Power Cycle Count, Reallocated Event Count, Spin Retry Count, Command Timeout, Available Spare, Available Spare Threshold, Unsafe Shutdowns (NVMe), Current Pending Sector Count.
 
 **Vendor-specific attributes** for any drive smartctl's database recognizes: every named SMART attribute not already covered above, created disabled by default. Enable what you need from the device page.
 
@@ -105,7 +105,7 @@ filesystems:                   # optional -- set by installer's disk usage picke
 |---|---|---|
 | `port` | 9099 | Port the agent serves on. |
 | `token` | none | Bearer token required on every request. Leave unset to serve openly. |
-| `scan_interval` | 60s | How often the agent reads `smartctl` (Go duration syntax: `30s`, `5m`, `1h`). |
+| `scan_interval` | 60s | How often the agent reads `smartctl`: a duration with a unit (`30s`, `5m`, `1h`) or a number of seconds (`3600`). |
 | `standby_mode` | never | `standby` / `sleep` / `idle` skip waking a spun-down drive during a poll and serve its last cached reading instead; `never` wakes every drive on every poll. The very first poll after startup always wakes everything once, to collect a baseline. |
 | `advertise_interface` | auto | Restricts mDNS to one interface. Set this if auto-discovery picks the wrong address on a machine with Docker, a VPN, or several NICs. |
 | `agent_id` | random | Pins the agent's identity (8-64 characters, a-z/0-9/-) instead of the random one generated on first start. |
@@ -136,6 +136,8 @@ docker run -v /:/host:ro -e SMARTHA_MOUNT_PREFIX=/host ...
 | `GET /api/drives/{id}` | Full SMART data for a single drive |
 | `GET /api/filesystems` | Disk usage for all configured mountpoints |
 | `GET /api/pools` | ZFS pool health: state, error counts, problem disks, last scrub |
+
+`/api/health` never needs the token. From v1.0 it also carries `api_version` (an integer, `1` today) and `scan_interval` (the scan interval the agent is using, in whole seconds, for example `60`). `api_version` changes only with a breaking change to this API, such as a key removed or renamed or its meaning changed; new keys and endpoints do not change it.
 
 **Service management:**
 
@@ -410,7 +412,7 @@ Found a bug, or a drive that is not mapping correctly? See [CONTRIBUTING.md](CON
 ## Roadmap
 
 - [ ] MQTT agent mode
-- [ ] Per-drive scan intervals
+- Per-drive scan intervals: parked (not planned for now)
 - [ ] YAML-based SMART attribute definitions (vendor field mapping, transforms, units)
 - [ ] SAS/SCSI full attribute parsing (grown defect list, error counters, endurance indicators)
 - [ ] Agent: runtime interface detection, replacing the static prefix list with OS-level physical NIC detection

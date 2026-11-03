@@ -4,27 +4,38 @@ All notable changes to SMART Sniffer are documented here.
 
 ## v1.0.0 -- DRAFT (date set at tag time)
 
-SMART Sniffer 1.0: config files, entity IDs and the agent API now change only with a major version. Update the integration from HACS and restart, then update each agent (run the install command again). Each agent now shows an update entity under its device with the exact command for that machine. Using the SMART Sniffer App? Update it to 1.0.0 after this.
+SMART Sniffer 1.0: config files, entity IDs and the agent API now change only with a major version. Update the integration from HACS and restart, then update each agent (run the install command again). Each agent now shows an update entity under its device with the exact command for that machine. Using the SMART Sniffer App? Update it to 1.0.0 after this. An automation that reads `in_standby` or `data_as_of` from a drive's Health sensor needs a change: see Upgrade notes.
 
 ### Added
 - **Agent updates show in Home Assistant** (#68). An update entity under each agent's device says when a newer agent is out, what is new, and the install command for that machine (curl on Linux and macOS, irm on Windows, the docs for Docker). Home Assistant never installs anything. Not for the App's own agent, which the App updates.
 - **The App's page judges this box's drives by the integration's thresholds** (#11), when the integration has the box's entry.
 - **Update agents without questions, over SSH or from Ansible** (discussion #68): `curl ... | sudo bash -s -- --yes`, or `$env:SMARTHA_YES=1` before `irm ... | iex` on Windows. Every prompt takes its default, so an update keeps its configuration.
+- **NVMe Unsafe Shutdowns sensor** (#71, thanks @Shiroe93). Each NVMe drive gets an Unsafe Shutdowns diagnostic sensor: how many times it lost power without a clean shutdown. A count only, it never raises Attention; a value that cannot be real shows as unknown.
+- **The agent's `/api/health` gives its API version and scan interval.** `api_version` is 1 and changes only with a breaking API change; `scan_interval` is the interval the agent uses, in seconds.
 
 ### Changed
 - **Serial numbers are masked on the cards**, keeping the last 4 characters, so screenshots and videos are safe to share. Click or tap a serial for the full value and Copy. Agentic access and Home Assistant's own device pages still show full serials.
 - **The App's password reaches only the App's own entry.** With App 1.0.0, Home Assistant picks up the App's agent password by itself. Other Home Assistants that find the agent on the network ask for it: copy it from the App page.
 - **An agent below the minimum version is now an error repair;** an agent that is only behind the newest release gets a lighter warning.
 
+### Removed
+- **The Health sensor's `in_standby` and `data_as_of` attributes** (`binary_sensor.*_health`), deprecated since v0.5.4. The drive's Standby sensor (`binary_sensor.*_standby`) has both: it is on while the drive is in standby, with the same `data_as_of` attribute.
+
 ### Fixed
 - **No more impossible NVMe numbers** (#12). A counter that cannot be real (wider than 64 bits, as some laptops report Media Errors) shows as unknown or "not readable", never as a 34-digit number, and never raises Attention. Details no longer list smartctl's `_s` and `_le` helper fields.
+- **`scan_interval: 120` no longer stops the agent.** A plain number is read as seconds, in config.yaml and `--scan-interval`; `30s`, `5m` and `1h` still work.
+- **Running `--discover` again no longer breaks config.yaml.** It added a second `device_overrides` section, which the agent refused to start with. It now replaces the section, lists the entries it would replace and asks first; with no terminal it changes nothing and says to add `--yes`.
+- **Answering N at "Keep current settings?" no longer loses `device_overrides`.** The installers save the old config.yaml as `config.yaml.bak-<date>-<time>` first and carry over every setting their questions do not ask about (`device_overrides`, `agent_id`, `mdns`, `smartctl_path` and any others).
+- **The Control Center stops when you leave it.** Each visit left its update stream running after you opened another sidebar page; now its timers and updates stop when the panel goes and start again when you come back.
 
 ### Security
 - **The agent slows down repeated wrong passwords.** After 5 wrong tries in a minute from one address it answers "wait" (429), for up to a minute at a time. An address that only sends the correct password is never slowed. The integration says "try again in a minute" instead of "password refused".
+- **The agent logs each block:** one line with the address, how many wrong or missing passwords it sent and how long it waits. Never any part of a password.
 
 ### Upgrade notes
 - The "Beta" label is gone. Home Assistant 2024.4 or later, unchanged.
 - Agents older than 1.0.0 get an "agent update available" repair. It clears once the agent reports 1.0.0.
+- **Automations reading `in_standby` or `data_as_of` from a Health sensor:** read the Standby sensor instead, for example `is_state('binary_sensor.<drive>_standby', 'on')` and `state_attr('binary_sensor.<drive>_standby', 'data_as_of')`.
 
 ## v0.9.2 -- 2026-10-24
 
