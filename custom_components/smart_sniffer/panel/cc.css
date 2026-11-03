@@ -641,7 +641,11 @@ table.attrs .thr-in.pending { color: var(--paper); font-weight: 700; }
 .sub-h { margin: 4px 0 0; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
 .numpop { position: fixed; z-index: 45; display: flex; align-items: center; gap: 8px; padding: 6px 8px;
   background: var(--panel-2); border: 1px solid var(--rule-2); border-radius: 4px; color: var(--paper);
-  font-size: 0.8rem; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6); max-width: calc(100vw - 16px); }
+  font-size: 0.8rem; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6); width: max-content; max-width: calc(100vw - 16px); }
+/* The value on one line while the popover can grow to fit it; only one
+   wider than the window wraps, anywhere (a serial or an id has no spaces). */
+.numpop .cp-v { min-width: 0; white-space: normal; overflow-wrap: anywhere; word-break: break-all; }
+.numpop .copy { flex-shrink: 0; }
 .numpop .copied { color: var(--dim); }
 .toast .toast-act { margin-left: 10px; }
 .card.flash { animation: pick-flash 0.9s ease-out 1; }

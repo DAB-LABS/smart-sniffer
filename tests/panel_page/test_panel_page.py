@@ -1214,12 +1214,7 @@ def test_details_text_values_open_the_popover_and_copy_the_value(page, which, wi
         assert pop.locator("button.copy svg use").get_attribute("href") == "#copy"
         box = pop.evaluate("e => e.getBoundingClientRect().toJSON()")
         assert box["left"] >= 0 and box["right"] <= width, (label, box)
-        # Under the value where it fits, else pulled in from the right edge.
-        left = trigger.evaluate("e => e.getBoundingClientRect().left")
-        if left + box["width"] <= width - 8:
-            assert abs(box["left"] - left) <= 1, (label, left, box)
-        else:
-            assert abs(box["right"] - (width - 8)) <= 1, (label, box)
+        _assert_placed(pop, trigger, label)
         pop.locator("button.copy").click()
         assert p.wait(lambda: pop.locator(".copied").is_visible() and pop.locator(".copied").inner_text() == "copied")
         assert p.page.evaluate("navigator.clipboard.readText()") == value, label
@@ -1737,3 +1732,110 @@ def test_stop_and_start_in_place(page):
     p.page.wait_for_timeout(500)
     assert _subs(p) == 1
     assert p.errors == []
+
+
+# ── The popover's size and place (v1.0) ───────────────────────────────
+# Its right edge on the value's right edge, growing to the left, as wide as
+# the value on one line; pulled in where it would pass either edge of the
+# window (8 px margin). Only a value wider than the window wraps.
+
+LONG_ID = "nvme-SAMSUNG_MZVLQ512HBLU-00BH1_S4ZNNX0R123456_1"
+
+
+def _lines(pop):
+    """The value's line count: the distinct tops of its text's line boxes."""
+    return pop.locator(".cp-v").evaluate(
+        "e => { const r = document.createRange(); r.selectNodeContents(e);"
+        " return new Set([...r.getClientRects()].map(x => Math.round(x.top))).size; }")
+
+
+def _assert_placed(pop, trigger, label=""):
+    vw = pop.evaluate("() => document.documentElement.clientWidth")
+    box = pop.evaluate("e => e.getBoundingClientRect().toJSON()")
+    right = trigger.evaluate("e => e.getBoundingClientRect().right")
+    assert box["left"] >= 8 - 0.5 and box["right"] <= vw - 8 + 0.5, (label, vw, box)
+    if right - box["width"] >= 8 and right <= vw - 8:
+        assert abs(box["right"] - right) <= 1, (label, right, box)
+    elif right > vw - 8:
+        assert abs(box["right"] - (vw - 8)) <= 1, (label, vw, box)
+    else:
+        assert abs(box["left"] - 8) <= 1, (label, box)
+    return box
+
+
+def _open_value(p, trigger, value):
+    """Opens the popover on a trigger for any value, as its click does."""
+    trigger.evaluate("(e, v) => Alpine.$data(e).showExact({ currentTarget: e }, v, v)", value)
+    pop = p.frame.locator(".numpop")
+    pop.wait_for()
+    assert p.wait(lambda: pop.evaluate("e => getComputedStyle(e).visibility") == "visible")
+    return pop
+
+
+@pytest.mark.parametrize("width", [1280, 390])
+def test_the_popover_holds_a_20_character_serial_on_one_line(page, width):
+    p = page(width=width, touch=width == 390)
+    _post(p.base, "/fake/control", {"action": "drive", "entry_id": "01NAS00000000000000000000B",
+                                    "fixture": "v100/hp_laptop_nvme_drive.json"})
+    _clip(p)
+    card = p.card(HP_MODEL)
+    _open(card)
+    row = card.locator("dl.kv.ident > div", has=p.frame.locator("dt", has_text="Serial"))
+    trigger = row.locator(".bign.txt")
+    trigger.click()
+    pop = p.frame.locator(".numpop")
+    pop.wait_for()
+    assert p.wait(lambda: pop.evaluate("e => getComputedStyle(e).visibility") == "visible")
+    assert pop.locator(".cp-v").text_content() == "FIXTURE-HP-NVME-0001"
+    assert len("FIXTURE-HP-NVME-0001") == 20
+    assert _lines(pop) == 1
+    _assert_placed(pop, trigger, "serial")
+    p.shot(f"v100-popover-serial-{width}")
+    pop.locator("button.copy").click()
+    assert p.wait(lambda: pop.locator(".copied").is_visible())
+    assert p.page.evaluate("navigator.clipboard.readText()") == "FIXTURE-HP-NVME-0001"
+    # "copied" beside it: still inside the window.
+    box = pop.evaluate("e => e.getBoundingClientRect().toJSON()")
+    assert box["left"] >= 7.5 and box["right"] <= p.doc.evaluate("document.documentElement.clientWidth") - 7.5
+    assert p.doc.evaluate("document.documentElement.scrollWidth") <= width
+    assert not p.errors, p.errors
+
+
+@pytest.mark.parametrize("width", [1280, 390])
+def test_the_popover_holds_a_long_drive_id_on_one_line_where_it_fits(page, width):
+    p, card, fields = _text_card(page, "field", width=width)
+    _clip(p)
+    trigger = dict((f[0], f[2]) for f in fields)["Model"]
+    pop = _open_value(p, trigger, LONG_ID)
+    box = _assert_placed(pop, trigger, "long id")
+    vw = p.doc.evaluate("document.documentElement.clientWidth")
+    natural = pop.locator(".cp-v").evaluate(
+        "e => { const r = document.createRange(); r.selectNodeContents(e); return r.getBoundingClientRect().width; }")
+    p.shot(f"v100-popover-long-id-{width}")
+    if width == 1280:
+        assert _lines(pop) == 1, box
+    elif box["width"] >= vw - 16 - 1:
+        # Wider than the phone: the widest that fits, wrapped.
+        assert _lines(pop) > 1 and natural <= box["width"]
+    pop.locator("button.copy").click()
+    assert p.wait(lambda: pop.locator(".copied").is_visible())
+    assert p.page.evaluate("navigator.clipboard.readText()") == LONG_ID
+    assert not p.errors, p.errors
+
+
+@pytest.mark.parametrize("width", [1280, 390])
+def test_a_value_wider_than_the_window_wraps_inside_it(page, width):
+    p, card, fields = _text_card(page, "field", width=width)
+    value = "X" * 400
+    for label, _value, trigger in fields:
+        trigger.focus()
+        pop = _open_value(p, trigger, value)
+        box = _assert_placed(pop, trigger, label)
+        vw = p.doc.evaluate("document.documentElement.clientWidth")
+        assert abs(box["left"] - 8) <= 1 and abs(box["right"] - (vw - 8)) <= 1, (label, box)
+        assert _lines(pop) > 1
+        assert pop.locator(".cp-v").text_content() == value
+        p.page.keyboard.press("Escape")
+        assert p.wait(lambda: pop.count() == 0)
+    assert p.doc.evaluate("document.documentElement.scrollWidth") <= width
+    assert not p.errors, p.errors

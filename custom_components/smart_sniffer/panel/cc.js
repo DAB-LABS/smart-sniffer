@@ -1413,22 +1413,29 @@ function cc() {
     // The exact number behind a shown one, in a small popover by it. Copy
     // takes its digits; a text value (model, serial, firmware, host, port)
     // passes its own copy text, the whole value.
+    // Placed in two steps: first unseen, as wide as its content up to the
+    // window less 8 px each side, to learn that width; then its right edge
+    // on the value's right edge, growing to the left, pulled in where it
+    // would run past either edge. A value wider than the window wraps
+    // anywhere; any other stays on one line.
     showExact(ev, text, copyText) {
       const el = ev.currentTarget;
       const r = el.getBoundingClientRect();
       if (this.ui.pop && this.ui.pop.el === el) { this.ui.pop = null; return; }
-      const left = Math.max(8, Math.min(r.left, window.innerWidth - 240));
+      const vw = document.documentElement.clientWidth || window.innerWidth;
       const copy = copyText === undefined ? String(text).replace(/[^0-9]/g, '') : String(copyText);
       this.popOpenedAt = Date.now();
-      this.ui.pop = { el, text, copy, x: left, y: r.bottom + 4 };
-      // Then by its real width: under the value where it fits, else as far
-      // right as the window allows (a long value never runs off the edge).
+      this.ui.pop = { el, text, copy, right: 8, max: vw - 16, y: r.bottom + 4, placed: false };
       this.$nextTick(() => {
         const box = document.querySelector('.numpop');
         if (!box || !this.ui.pop || this.ui.pop.el !== el) return;
-        const x = Math.max(8, Math.min(r.left, window.innerWidth - box.getBoundingClientRect().width - 8));
-        if (x !== this.ui.pop.x) this.ui.pop.x = x;
+        const w = box.getBoundingClientRect().width;
+        const right = Math.max(8, Math.min(vw - r.right, vw - 8 - w));
+        Object.assign(this.ui.pop, { right, max: vw - right - 8, placed: true });
       });
+    },
+    popStyle(pop) {
+      return `right:${pop.right}px;top:${pop.y}px;max-width:${pop.max}px` + (pop.placed ? '' : ';visibility:hidden');
     },
     closeExact() {
       this.ui.pop = null;

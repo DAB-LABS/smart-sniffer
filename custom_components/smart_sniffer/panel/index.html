@@ -70,7 +70,7 @@
   </template>
   <p class="sec-label sec-drives">DRIVES:</p>
   <p class="page-err" x-show="pageErr || hostsErr" x-text="pageErr || hostsErr" role="alert"></p>
-  <template x-if="ui.pop"><div class="numpop" role="dialog" aria-label="Exact value" :style="'left:' + ui.pop.x + 'px;top:' + ui.pop.y + 'px'"><span class="cp-v mono" x-text="ui.pop.text"></span><button class="copy" type="button" aria-label="Copy" title="Copy" @click="copy($event, ui.pop.copy, 'pop')"><svg aria-hidden="true"><use href="#copy"/></svg></button><small class="copied" role="status" x-show="ui.copied === 'pop'" x-text="ui.copiedText"></small></div></template>
+  <template x-if="ui.pop"><div class="numpop" role="dialog" aria-label="Exact value" :style="popStyle(ui.pop)"><span class="cp-v mono" x-text="ui.pop.text"></span><button class="copy" type="button" aria-label="Copy" title="Copy" @click="copy($event, ui.pop.copy, 'pop')"><svg aria-hidden="true"><use href="#copy"/></svg></button><small class="copied" role="status" x-show="ui.copied === 'pop'" x-text="ui.copiedText"></small></div></template>
   <p class="toast" x-show="ui.toast" role="status"><span x-text="ui.toast"></span><template x-if="ui.toastSub"><span class="toast-sub" x-text="' ' + ui.toastSub"></span></template><template x-if="ui.toastAct"><button class="btn btn-sm toast-act" type="button" @click="toastGo()" x-text="ui.toastAct.label"></button></template></p>
   <template x-if="movedNote">
     <p class="ha-notice moved-note" role="note"><span>Replicas moved into the integration. Create them again from + &gt; Replica.</span><button class="notice-x" type="button" aria-label="Dismiss" title="Dismiss" @click="dismissMovedNote()">&times;</button></p>
