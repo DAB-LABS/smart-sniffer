@@ -101,23 +101,69 @@ function Read-Answer {
 }
 
 # Read-YamlScalar pulls a single top-level scalar value out of a
-# simple flat YAML file. Matches the install.sh approach of using
-# grep+awk rather than introducing a YAML parser dependency. Works
-# for port, token, scan_interval, advertise_interface, mdns_name;
-# does NOT work for the nested filesystems: block (that requires
-# multi-line parsing and is out of scope for Change 5 -- see
-# docs/internal/trackers/windows-installer-parity-backlog.md).
+# simple flat YAML file. Matches the install.sh approach (read_yaml_scalar)
+# rather than introducing a YAML parser dependency. Works for port, token,
+# scan_interval, advertise_interface, mdns_name, smartctl_path; does NOT
+# work for the nested filesystems: block. v1.0: the value is unquoted the
+# way YAML reads it ('single', '' is one '; "double", \" and \\ undone;
+# plain, a " #" comment dropped), so a token with quotes, spaces or # comes
+# back as written.
+function ConvertFrom-YamlScalarText {
+    param([string]$Text)
+    $v = $Text.TrimStart()
+    if ($v.StartsWith("'")) {
+        $sb = New-Object System.Text.StringBuilder
+        $i = 1
+        while ($i -lt $v.Length) {
+            $c = $v[$i]
+            if ($c -eq "'") {
+                if ($i + 1 -lt $v.Length -and $v[$i + 1] -eq "'") { [void]$sb.Append("'"); $i += 2; continue }
+                break
+            }
+            [void]$sb.Append($c); $i++
+        }
+        return $sb.ToString()
+    }
+    if ($v.StartsWith('"')) {
+        $sb = New-Object System.Text.StringBuilder
+        $i = 1
+        while ($i -lt $v.Length) {
+            $c = $v[$i]
+            if ($c -eq '\' -and $i + 1 -lt $v.Length) { [void]$sb.Append($v[$i + 1]); $i += 2; continue }
+            if ($c -eq '"') { break }
+            [void]$sb.Append($c); $i++
+        }
+        return $sb.ToString()
+    }
+    $plain = $v -replace '\s#.*$', ''
+    return $plain.TrimEnd()
+}
+
 function Read-YamlScalar {
     param(
         [string]$Path,
         [string]$Key
     )
     if (-not (Test-Path $Path)) { return $null }
-    $line = Get-Content -Path $Path | Where-Object { $_ -match "^$Key\s*:" } | Select-Object -First 1
+    $line = Get-Content -Path $Path | Where-Object { $_ -cmatch "^$Key\s*:" } | Select-Object -First 1
     if (-not $line) { return $null }
-    $value = ($line -split ':', 2)[1].Trim().Trim('"').Trim("'")
+    $value = ConvertFrom-YamlScalarText (($line -split ':', 2)[1])
     if ($value -eq '') { return $null }
     return $value
+}
+
+# ConvertTo-YamlSingleQuoted (v1.0): a value as a single-quoted YAML scalar,
+# ' doubled; the token is written this way, as smartctl_path is.
+function ConvertTo-YamlSingleQuoted {
+    param([string]$Value)
+    return "'" + ($Value -replace "'", "''") + "'"
+}
+
+# Test-TokenText (v1.0): a typed token may hold any character but a control
+# character (a tab, a newline), which the config could not carry as typed.
+function Test-TokenText {
+    param([string]$Value)
+    return -not ($Value -match '[\x00-\x1F\x7F]')
 }
 
 # Get-CarriedConfigBlocks (v1.0): the top-level blocks of config.yaml whose
@@ -559,8 +605,8 @@ function Format-SmartctlPathYaml {
 
 # ConvertTo-ScanInterval turns what the user typed into a duration the agent
 # can parse (60s, 30m, 24h, 1h30m). A bare number is seconds, as in
-# install.sh: the agent itself rejects "3600" and the service will not start
-# (GH #69). Returns $null for anything else, so the caller can ask again.
+# install.sh: agents before 1.0 reject "3600" and the service would not
+# start (GH #69); a unit is written for every agent version. Returns $null for anything else, so the caller can ask again.
 function ConvertTo-ScanInterval {
     param([string]$Value)
     $v = "$Value".Trim().Trim('"', "'")
@@ -890,6 +936,10 @@ try {
         if (-not $Port) { $Port = "9099" }
 
         $Token = Read-Answer "  Bearer token for API auth (leave blank to disable)"
+        while (-not (Test-TokenText $Token)) {
+            Write-Warn "The token cannot hold control characters (a tab, a newline). Type it again."
+            $Token = Read-Answer "  Bearer token for API auth (leave blank to disable)"
+        }
 
         while ($true) {
             $RawInterval = Read-Answer "  Scan interval (e.g. 60s, 30m, 24h) [60s]"
@@ -1008,7 +1058,7 @@ try {
         Protect-ConfigFile $ConfigFile
         $ConfigContent = "port: $Port`nscan_interval: $ScanInterval"
         if ($Token) {
-            $ConfigContent += "`ntoken: `"$Token`""
+            $ConfigContent += "`ntoken: " + (ConvertTo-YamlSingleQuoted $Token)
         }
         if ($PickedIface) {
             $ConfigContent += "`nadvertise_interface: $PickedIface"

@@ -36,7 +36,7 @@ def _helpers() -> str:
     source = (ROOT / "install.sh").read_text()
     return "".join(
         re.search(rf"^{name}\(\) \{{\n.*?^\}}\n", source, re.MULTILINE | re.DOTALL).group(0)
-        for name in ("carry_config_blocks", "config_block_keys"))
+        for name in ("carry_config_blocks", "config_block_keys", "yaml_single_quote"))
 
 
 def _run_config_step(folder: Path, keep: bool) -> subprocess.CompletedProcess:

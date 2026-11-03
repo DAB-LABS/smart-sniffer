@@ -49,6 +49,69 @@ ask() {
 }
 
 # ---------------------------------------------------------------------------
+# The token in config.yaml (v1.0): written single-quoted with ' doubled, so
+# any character but a control character survives as typed ("$\ # : and
+# spaces included), and read back in either quote style an installer ever
+# wrote, the escaping undone. Control characters (newlines, tabs) are refused
+# when the token is typed. The token never goes on a command line: curl
+# reads its header from stdin (agent_get).
+# ---------------------------------------------------------------------------
+
+# Prints VALUE as a single-quoted YAML scalar.
+yaml_single_quote() {
+  printf "'%s'" "${1//\'/\'\'}"
+}
+
+# Prints the value of a top-level scalar KEY in FILE, unquoted: 'single'
+# ('' is one '), "double" (\" and \\ undone) or plain (a " #" comment and
+# trailing spaces dropped). Nothing when the key is absent.
+read_yaml_scalar() {
+  local line v out c i n
+  line=$(grep -m1 -E "^$2[[:space:]]*:" "$1" 2>/dev/null || true)
+  [ -n "$line" ] || return 0
+  v="${line#*:}"
+  v="${v#"${v%%[![:space:]]*}"}"
+  out=""
+  case "$v" in
+    "'"*)
+      v="${v:1}"; i=0; n=${#v}
+      while [ "$i" -lt "$n" ]; do
+        c="${v:$i:1}"
+        if [ "$c" = "'" ]; then
+          if [ "${v:$((i + 1)):1}" = "'" ]; then out+="'"; i=$((i + 2)); continue; fi
+          break
+        fi
+        out+="$c"; i=$((i + 1))
+      done ;;
+    '"'*)
+      v="${v:1}"; i=0; n=${#v}
+      while [ "$i" -lt "$n" ]; do
+        c="${v:$i:1}"
+        if [ "$c" = '\' ]; then out+="${v:$((i + 1)):1}"; i=$((i + 2)); continue; fi
+        [ "$c" = '"' ] && break
+        out+="$c"; i=$((i + 1))
+      done ;;
+    *)
+      out="${v%%[[:space:]]#*}"
+      out="${out%"${out##*[![:space:]]}"}" ;;
+  esac
+  printf '%s' "$out"
+}
+
+# GET http://localhost:$PORT<path> from the agent, silently. With a token the
+# Authorization header goes to curl on stdin (a curl config line), never as
+# an argument, so it is not in the process list. No eval.
+agent_get() {
+  if [ -n "$TOKEN" ]; then
+    local quoted="${TOKEN//\\/\\\\}"
+    quoted="${quoted//\"/\\\"}"
+    printf 'header = "Authorization: Bearer %s"\n' "$quoted" | curl -sf -K - "http://localhost:$PORT$1"
+  else
+    curl -sf "http://localhost:$PORT$1"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Rewriting an existing config.yaml (v1.0): the old file is saved first as
 # config.yaml.bak-<date>-<time>, and every top-level key the installer does
 # not write is carried into the new file (device_overrides, agent_id, mdns,
@@ -1704,7 +1767,7 @@ KEEP_CONFIG=false
 if [ -f "$EXISTING_CONFIG" ]; then
   # Parse existing values from config.yaml
   _EXISTING_PORT=$(grep -E '^port:' "$EXISTING_CONFIG" 2>/dev/null | awk '{print $2}' | tr -d '"' || true)
-  _EXISTING_TOKEN=$(grep -E '^token:' "$EXISTING_CONFIG" 2>/dev/null | awk '{print $2}' | tr -d '"' || true)
+  _EXISTING_TOKEN=$(read_yaml_scalar "$EXISTING_CONFIG" token)
   _EXISTING_INTERVAL=$(grep -E '^scan_interval:' "$EXISTING_CONFIG" 2>/dev/null | awk '{print $2}' | tr -d '"' || true)
   _EXISTING_IFACE=$(grep -E '^advertise_interface:' "$EXISTING_CONFIG" 2>/dev/null | awk '{print $2}' | tr -d '"' || true)
   _EXISTING_FS=$(grep -E '^\s+- path:' "$EXISTING_CONFIG" 2>/dev/null | sed 's/.*path:\s*//' | tr -d '"' || true)
@@ -1819,6 +1882,10 @@ if [ "$KEEP_CONFIG" = "false" ] && [ -n "$TTY_IN" ]; then
 
   ask PORT "  Port [9099]: "
   ask TOKEN "  Bearer token for API auth (leave blank to disable): "
+  while [[ "$TOKEN" == *[[:cntrl:]]* ]]; do
+    warn "The token cannot hold control characters (a tab, a newline). Type it again."
+    ask TOKEN "  Bearer token for API auth (leave blank to disable): "
+  done
   ask SCAN_INTERVAL "  Scan interval (e.g. 60s, 30m, 24h) [60s]: "
 
   # --- Drive picker (exclude iSCSI/FC/unknown) ---
@@ -1954,7 +2021,7 @@ scan_interval: $SCAN_INTERVAL
 CONFEOF
 
   if [ -n "$TOKEN" ]; then
-    echo "token: \"$TOKEN\"" >> "$INSTALL_CFG/config.yaml"
+    echo "token: $(yaml_single_quote "$TOKEN")" >> "$INSTALL_CFG/config.yaml"
   fi
   if [ -n "$ADV_IFACE" ]; then
     echo "advertise_interface: $ADV_IFACE" >> "$INSTALL_CFG/config.yaml"
@@ -1995,16 +2062,12 @@ fi
 # ---------------------------------------------------------------------------
 info "Waiting for agent to start..."
 HEALTH_OK=false
-HEALTH_CURL="curl -sf http://localhost:$PORT/api/health"
-if [ -n "$TOKEN" ]; then
-  HEALTH_CURL="curl -sf -H \"Authorization: Bearer $TOKEN\" http://localhost:$PORT/api/health"
-fi
 # The agent answers /api/health only after its first pass over the drives.
 # Hosts with many disks, or disks that must wake from standby, can take well
 # over the old 10s (GH #50), so wait up to 90s and say so at the 10s mark.
 for i in {1..45}; do
   sleep 2
-  if eval "$HEALTH_CURL" &>/dev/null; then
+  if agent_get /api/health &>/dev/null; then
     HEALTH_OK=true
     success "Health check passed — agent is running!"
     break
@@ -2079,11 +2142,7 @@ if [ -n "$EXCLUDE_YAML" ] && [ "${#exclude_paths[@]}" -eq "${_pick_drives_total:
   echo -e "  ${RED}✗${NC} SMART drives:   all excluded"
   echo "                    ${EXCLUDE_DISPLAY}"
 else
-  _DRIVE_CURL="curl -sf http://localhost:$PORT/api/drives"
-  if [ -n "$TOKEN" ]; then
-    _DRIVE_CURL="curl -sf -H \"Authorization: Bearer $TOKEN\" http://localhost:$PORT/api/drives"
-  fi
-  _DRIVE_JSON=$(eval "$_DRIVE_CURL" 2>/dev/null || true)
+  _DRIVE_JSON=$(agent_get /api/drives 2>/dev/null || true)
   if [ -n "$_DRIVE_JSON" ]; then
     _DRIVE_COUNT=$(echo "$_DRIVE_JSON" | grep -o '"id"' | wc -l)
     _DRIVE_NAMES=$(echo "$_DRIVE_JSON" | sed -n 's/.*"model" *: *"\([^"]*\)".*/\1/p' | awk '{printf "%s%s", sep, $0; sep=", "} END{print ""}')

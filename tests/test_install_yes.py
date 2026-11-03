@@ -133,10 +133,12 @@ def test_install_ps1_prompts_all_go_through_ask():
 STUBS = {
     # The download (binary and checksums) and the health check.
     "curl": r"""#!/bin/bash
-out=""; url=""
+out=""; url=""; config=""
+echo "curl-args $*" >> "$STUB_LOG"
 while [ $# -gt 0 ]; do
-  case "$1" in -o) out="$2"; shift ;; http*) url="$1" ;; esac; shift
+  case "$1" in -o) out="$2"; shift ;; -K) config="$2"; shift ;; http*) url="$1" ;; esac; shift
 done
+[ "$config" = "-" ] && cat >> "$STUB_DIR/curl-config"
 echo "curl $url" >> "$STUB_LOG"
 if [ -n "$out" ]; then
   case "$url" in
@@ -430,6 +432,7 @@ def test_a_fresh_install_writes_no_backup(tmp_path):
     folder = tmp_path / "agent"
     result, _ = _run(tmp_path, ["--yes", f"--install-dir={folder}"])
     assert result.returncode == 0, (result.stdout + result.stderr)[-3000:]
+    assert set(_keys((folder / "config.yaml").read_text())) <= _agent_keys()
     assert not list(folder.glob("config.yaml.bak*"))
     assert "Kept from the previous config" not in result.stdout
 
@@ -625,3 +628,73 @@ def test_install_ps1_saves_the_old_file_before_it_rewrites_it():
     assert "$ConfigFile.bak-\" + (Get-Date -Format 'yyyyMMdd-HHmmss')" in write
     assert "Protect-ConfigFile $ConfigBak" in write
     assert "if ($StandbyAsked) { $Managed += 'standby_mode' }" in write
+
+
+# --- The token, written and read back safely (v1.0, J13) -----------------------------
+
+TRICKY = "a b'c\"d\\e $HOME #f:g"
+
+
+def test_no_eval_and_no_token_on_a_command_line():
+    source = INSTALL_SH.read_text()
+    code = [line for line in source.splitlines() if not line.strip().startswith("#")]
+    assert not any(re.search(r"\beval\b", line) for line in code)
+    assert not any("Bearer $TOKEN" in line for line in code)
+    assert 'echo "token: $(yaml_single_quote "$TOKEN")"' in source
+
+
+@needs_namespace
+def test_a_typed_token_is_written_quoted_and_sent_on_stdin(tmp_path):
+    folder = tmp_path / "agent"
+    folder.mkdir()
+    (folder / "config.yaml").write_text("port: 9099\n")
+    # N, Enter at the port, the token, then Enter at everything else.
+    result, log = _run(tmp_path, [f"--install-dir={folder}"],
+                       answers="n\n\n" + TRICKY + "\n" + "\n" * 30)
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out[-3000:]
+    config = (folder / "config.yaml").read_text()
+    quoted = "'" + TRICKY.replace("'", "''") + "'"
+    assert f"token: {quoted}\n" in config, config
+    # Never an argument of curl (the process list); the header went on stdin.
+    for line in log.splitlines():
+        if line.startswith("curl-args"):
+            assert TRICKY not in line and "Bearer" not in line, line
+    sent = (tmp_path / "stubs" / "curl-config").read_text()
+    escaped = TRICKY.replace("\\", "\\\\").replace('"', '\\"')
+    assert f'header = "Authorization: Bearer {escaped}"' in sent, sent
+    assert "Health check passed" in out
+    # Every key install.sh wrote is one the agent reads (J7: no warning).
+    assert set(_keys(config)) <= _agent_keys(), set(_keys(config)) - _agent_keys()
+
+
+def _agent_keys() -> set[str]:
+    """The top-level keys the agent reads: Config's yaml tags (config.go)."""
+    source = (ROOT / "agent" / "config.go").read_text()
+    return set(re.findall(r'yaml:"([a-z_]+)"', source)) | {"scan_interval"}
+
+
+@needs_namespace
+def test_a_token_with_a_control_character_is_asked_again(tmp_path):
+    folder = tmp_path / "agent"
+    folder.mkdir()
+    (folder / "config.yaml").write_text("port: 9099\n")
+    result, _ = _run(tmp_path, [f"--install-dir={folder}"],
+                     answers="n\n\nbad\ttoken\ngood-token\n" + "\n" * 30)
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out[-3000:]
+    assert "cannot hold control characters" in out
+    assert "token: 'good-token'" in (folder / "config.yaml").read_text()
+
+
+@needs_namespace
+def test_keeping_the_config_reads_a_quoted_token_back(tmp_path):
+    """Kept config, token single-quoted with a doubled quote: the health check
+    sends the token as written, not with its quotes."""
+    folder = tmp_path / "agent"
+    folder.mkdir()
+    (folder / "config.yaml").write_text("port: 9099\ntoken: 'it''s # here'\n")
+    result, _ = _run(tmp_path, ["--yes", f"--install-dir={folder}"])
+    assert result.returncode == 0, (result.stdout + result.stderr)[-3000:]
+    sent = (tmp_path / "stubs" / "curl-config").read_text()
+    assert 'header = "Authorization: Bearer it\'s # here"' in sent, sent
