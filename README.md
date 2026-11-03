@@ -101,23 +101,31 @@ filesystems:                   # optional -- set by installer's disk usage picke
     device: /dev/sda1
 ```
 
-| Option | Default | What it does |
-|---|---|---|
-| `port` | 9099 | Port the agent serves on. |
-| `token` | none | Bearer token required on every request. Leave unset to serve openly. |
-| `scan_interval` | 60s | How often the agent reads `smartctl`: a duration with a unit (`30s`, `5m`, `1h`) or a number of seconds (`3600`). |
-| `standby_mode` | never | `standby` / `sleep` / `idle` skip waking a spun-down drive during a poll and serve its last cached reading instead; `never` wakes every drive on every poll. The very first poll after startup always wakes everything once, to collect a baseline. |
-| `advertise_interface` | auto | Restricts mDNS to one interface. Set this if auto-discovery picks the wrong address on a machine with Docker, a VPN, or several NICs. |
-| `agent_id` | random | Pins the agent's identity (8-64 characters, a-z/0-9/-) instead of the random one generated on first start. |
-| `exclude_devices` | none | Device paths skipped on every scan; symlinks resolve at startup, so `/dev/disk/by-id/...` and `/dev/sdX` both match. |
-| `smartctl_path` | auto | Full path to `smartctl`, when it is not on PATH or in the usual install locations. |
-| `zfs_pool_status` | true | Reports ZFS pool health when `zpool` is found. Set false to turn it off. |
-| `device_statistics` | true | Reads each SATA drive's Device Statistics log for Data Written and some error counts. Always off on macOS. |
-| `filesystems` | none | Mountpoints to report disk usage for; set by the installer's picker. |
-| `mount_prefix` | none | For an agent running in a container: where the host root is mounted, so disk usage reflects the host rather than the container. |
-| `verbose` | false | Restores per-cycle logging. By default a repeated message logs once, then at most hourly. |
+Every key, with its command-line flag and environment variable where there is one. A flag wins over an environment variable, which wins over the file.
 
-All options can also be set via CLI flags: `--port`, `--token`, `--scan-interval`, `--interface`, `--config`, `--verbose`, `--no-device-statistics`.
+| Key | Default | Flag | Env var | What it does |
+|---|---|---|---|---|
+| `port` | 9099 | `--port` | | Port the agent serves on. |
+| `token` | none | `--token` | `SMARTHA_TOKEN` | Bearer token required on every request but `/api/health`. Leave unset to serve openly. An empty `SMARTHA_TOKEN` counts as not set. The log says where the token came from, never its value. |
+| `scan_interval` | 60s | `--scan-interval` | | How often the agent reads `smartctl`: a duration with a unit (`30s`, `5m`, `1h`) or a number of seconds (`3600`). At least 5 s. |
+| `standby_mode` | never | | | `standby` / `sleep` / `idle` skip waking a spun-down drive during a poll and serve its last cached reading instead; `never` wakes every drive on every poll. The very first poll after startup always wakes everything once, to collect a baseline. |
+| `mdns` | true | `--no-mdns` | | Advertises the agent on the network so Home Assistant finds it. |
+| `advertise_interface` | auto | `--interface`, `--advertise-interface` | | Restricts mDNS to one interface. Set this if auto-discovery picks the wrong address on a machine with Docker, a VPN, or several NICs. Give one of the two flags, not both. |
+| `mdns_name` | smartha-&lt;hostname&gt; | `--mdns-name` | | The name the agent advertises under. |
+| `agent_id` | random | | | Pins the agent's identity (8-64 characters, a-z/0-9/-) instead of the random one generated on first start. |
+| `exclude_devices` | none | | | Device paths skipped on every scan; symlinks resolve at startup, so `/dev/disk/by-id/...` and `/dev/sdX` both match. |
+| `device_overrides` | none | | | A protocol per device path, for drives the scan misses or misreads; `--discover` can write them. |
+| `smartctl_path` | auto | | | Full path to `smartctl`, when it is not on PATH or in the usual install locations. |
+| `zfs_pool_status` | true | | | Reports ZFS pool health when `zpool` is found. Set false to turn it off. |
+| `zpool_path` | auto | | | Full path to `zpool`, when it is not on PATH or in the usual locations. |
+| `device_statistics` | true | `--no-device-statistics` | | Reads each SATA drive's Device Statistics log for Data Written and some error counts. Always off on macOS. |
+| `filesystems` | none | | | Mountpoints to report disk usage for; set by the installer's picker. |
+| `mount_prefix` | none | | `SMARTHA_MOUNT_PREFIX` | For an agent running in a container: where the host root is mounted, so disk usage reflects the host rather than the container. |
+| `verbose` | false | `--verbose` | | Restores per-cycle logging. By default a repeated message logs once, then at most hourly. `--verbose` can turn it on, never off. |
+
+`--config` names the file (default: `config.yaml` in the working directory, then `/etc/smartha-agent/config.yaml`). An unknown top-level key is ignored with one WARNING at startup that names the key, never its value; keys inside a list item (`filesystems`, `device_overrides`) are not checked. [`agent/config.yaml.example`](agent/config.yaml.example) lists every key with its default.
+
+The "smartha" names (`smartha-agent`, the `SMARTHA_*` variables, `/etc/smartha-agent`, the `_smartha._tcp` mDNS service) are permanent: they will not be renamed.
 
 **Running in a container**, to report the host's disk usage rather than the container's own filesystem:
 
@@ -137,7 +145,7 @@ docker run -v /:/host:ro -e SMARTHA_MOUNT_PREFIX=/host ...
 | `GET /api/filesystems` | Disk usage for all configured mountpoints |
 | `GET /api/pools` | ZFS pool health: state, error counts, problem disks, last scrub |
 
-`/api/health` never needs the token. From v1.0 it also carries `api_version` (an integer, `1` today) and `scan_interval` (the scan interval the agent is using, in whole seconds, for example `60`). `api_version` changes only with a breaking change to this API, such as a key removed or renamed or its meaning changed; new keys and endpoints do not change it.
+`/api/health` never needs the token. From v1.0 it also carries `api_version` (an integer, `1` today) and `scan_interval` (the scan interval the agent is using, in whole seconds, for example `60`). `api_version` changes only with a breaking change to this API, such as a key removed or renamed or its meaning changed; new keys and endpoints do not change it. The API is read-only (GET and HEAD), and every error answers `{"error": "<code>", "message": "..."}`. Every field is described in [docs/agent-api.md](docs/agent-api.md).
 
 **Service management:**
 
@@ -325,7 +333,7 @@ For the full SMART dump of every drive on an agent: **Settings > Devices & Servi
 
 ## AI & automation
 
-The `smart_sniffer.get_drive_data` service call returns the full cached SMART dataset for one agent: raw attributes, the Attention evaluation with its reasons, filesystem usage and agent metadata, everything an LLM needs for a real assessment.
+The `smart_sniffer.get_drive_data` service call returns the full cached SMART dataset for one agent: raw attributes, the Attention evaluation with its reasons, filesystem usage and agent metadata, everything an LLM needs for a real assessment. Its response is described in [docs/get-drive-data.md](docs/get-drive-data.md).
 
 One example: run it weekly, call `smart_sniffer.get_drive_data` for each agent, pass the result to a conversation agent (Google AI, OpenAI, Claude, Ollama) with a prompt like "analyze these SMART readings and flag anything concerning," and email yourself the answer. An AI can catch patterns, like a rising reallocated-sector count, that the raw numbers alone do not make obvious.
 

@@ -158,10 +158,15 @@ Before writing, it automatically backs up your config to `config.yaml.bak`.
 If your config already has `device_overrides` (from an earlier run, or written by hand), writing replaces them. Discovery lists the entries it would replace and asks `Replace them? [y/N]`; pressing Enter keeps them. With no terminal to ask on (over ssh without a terminal, from a script, or with input from `/dev/null`) it leaves the file alone and tells you how to replace them anyway:
 
 ```bash
-sudo smartha-agent --discover --yes
+sudo smartha-agent --discover --force
 ```
 
-`--yes` (or `-y`) answers yes to the write question, and to the replace question, without asking. Before v1.0 a second run added a second `device_overrides` section, which the agent then refused to start with.
+- `--force` replaces existing `device_overrides` without asking (and writes without asking when there are none).
+- `--yes` (or `-y`) takes the default answer at every question, as the installers' `--yes` does: it writes when there are no `device_overrides` yet, and keeps existing ones.
+- No flag: discovery asks. With no terminal and no flag, nothing is replaced.
+- Both: `--force` wins.
+
+Before v1.0 a second run added a second `device_overrides` section, which the agent then refused to start with.
 
 Example addition:
 
