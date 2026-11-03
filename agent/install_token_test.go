@@ -24,7 +24,7 @@ var installTokens = []string{
 	`hash # not a comment#`,
 	`colon: and key: value`,
 	`all "of' \ $x # : together`,
-	`unicode-ünïcödé-🔐`,
+	`unicode-ünïcödé-€`,
 }
 
 // shellFunction is one function's text, cut out of install.sh.

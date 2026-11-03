@@ -109,7 +109,7 @@ The integration also fires persistent notifications automatically on state trans
 
 ## Clearing Attention / Acknowledgment
 
-The `attention_needed` sensor is **self-clearing**: when the underlying condition resolves, it automatically returns to `no`. In practice, for most failure-type attributes (reallocated sectors, uncorrectable errors), the count will not go back to zero — the sensor stays in `yes` or `maybe` until the drive is replaced.
+The `attention_needed` sensor is **self-clearing**: when the underlying condition resolves, it automatically returns to `no`. In practice, for most failure-type attributes (reallocated sectors, uncorrectable errors), the count will not go back to zero; the sensor stays in `yes` or `maybe` until the drive is replaced.
 
 **Optional HA automation pattern for custom alerting:**
 

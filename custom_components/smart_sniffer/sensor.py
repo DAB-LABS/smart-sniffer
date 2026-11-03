@@ -510,7 +510,7 @@ class SmartSnifferSensor(CoordinatorEntity[SmartSnifferCoordinator], SensorEntit
             if value >= 90:
                 return _ALERT_ICON_WARNING
 
-        # SMART Status — failed = critical.
+        # SMART Status: failed = critical.
         if key == "smart_status" and value == "failed":
             return _ALERT_ICON_CRITICAL
 
