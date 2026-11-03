@@ -265,6 +265,23 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return {"Authorization": f"Bearer {self.token}"}
         return {}
 
+    def _warn_duplicate_filesystem_ids(self, filesystems: Any) -> None:
+        """One warning per run when an agent lists two filesystems under one
+        id (agents before 1.0: btrfs subvolumes and bind mounts share their
+        UUID's id). Only the first of them gets a sensor; agent 1.0 gives
+        the others ids of their own."""
+        if getattr(self, "_fs_dup_warned", False) or not isinstance(filesystems, list):
+            return
+        ids = [fs.get("id") for fs in filesystems if isinstance(fs, dict)]
+        dupes = sorted({i for i in ids if isinstance(i, str) and ids.count(i) > 1})
+        if dupes:
+            self._fs_dup_warned = True
+            _LOGGER.warning(
+                "SMART Sniffer %s: the agent lists several filesystems under one id (%s); "
+                "only the first of each has a Disk Usage sensor. Agent 1.0 gives each its own id",
+                self.host, ", ".join(dupes),
+            )
+
     def _check_agent_version(self, agent_version: str,
                              health: dict[str, Any] | None = None) -> None:
         """Create or clear the repair issues about the agent's version. Never
@@ -395,6 +412,7 @@ class SmartSnifferCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         "SMART Sniffer: /api/filesystems fetch failed, skipping"
                     )
 
+            self._warn_duplicate_filesystem_ids(filesystems)
             result["_filesystems"] = filesystems
 
             # ZFS pool status, when the agent advertises it (GH #50). Agents

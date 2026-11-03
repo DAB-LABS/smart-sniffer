@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import logging
+from functools import partial
 from typing import Any
 
 import voluptuous as vol
@@ -56,8 +57,11 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Once per Home Assistant run: the SMART Sniffer panel (v0.9). Guarded:
-    whatever happens there, the entries are set up and monitored."""
+    """Once per Home Assistant run: the get_drive_data service (v1.0: here,
+    so it stays registered with no entry loaded) and the SMART Sniffer panel
+    (v0.9). Guarded: whatever happens there, the entries are set up and
+    monitored."""
+    async_register_services(hass)
     try:
         from .panel_setup import async_setup_panel  # noqa: PLC0415
 
@@ -73,6 +77,90 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     except Exception:  # noqa: BLE001
         _LOGGER.exception("SMART Sniffer: old Replica machines not checked")
     return True
+
+
+def async_register_services(hass: HomeAssistant) -> None:
+    """smart_sniffer.get_drive_data, registered once per run (async_setup)
+    and never removed: with no agent loaded it answers with a clear error."""
+    if hass.services.has_service(DOMAIN, SERVICE_GET_DRIVE_DATA):
+        return
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_GET_DRIVE_DATA,
+        partial(_handle_get_drive_data, hass),
+        schema=vol.Schema({vol.Required("config_entry_id"): str}),
+        supports_response=SupportsResponse.ONLY,
+    )
+
+
+async def _handle_get_drive_data(hass: HomeAssistant, call: ServiceCall) -> dict[str, Any]:
+    """smart_sniffer.get_drive_data: one agent's cached data, for scripts and
+    AI. The response is documented in docs/get-drive-data.md; keys are only
+    added within 1.x. ``uptime`` is the deprecated name of ``uptime_seconds``
+    (both through 1.x, docs/internal/process/deprecations.md)."""
+    entry_id: str = call.data["config_entry_id"]
+    domain_data = {k: v for k, v in hass.data.get(DOMAIN, {}).items()
+                   if isinstance(v, dict) and "coordinator" in v}
+    if entry_id not in domain_data:
+        if not domain_data:
+            raise ServiceValidationError(
+                "No SMART Sniffer agent is loaded. Check Settings > Devices & services."
+            )
+        raise ServiceValidationError(
+            f"No loaded SMART Sniffer entry with ID {entry_id}. Pick an agent that is set up."
+        )
+    coord = domain_data[entry_id]["coordinator"]
+    health = domain_data[entry_id]["health_coordinator"]
+
+    drives: dict[str, Any] = {}
+    for drive_id, drive_data in (coord.data or {}).items():
+        if drive_id.startswith("_"):
+            continue
+        state, severity, reasons, accepted = evaluate_attention(
+            drive_data, get_thresholds(coord.config_entry, drive_id)
+        )
+        drives[drive_id] = {
+            "model": drive_data.get("model"),
+            "serial": drive_data.get("serial"),
+            "protocol": drive_data.get("protocol"),
+            "device_path": drive_data.get("device_path"),
+            "attention": {
+                "state": state,
+                "severity": severity,
+                "reasons": list(reasons or []),
+                "accepted": list(accepted or []),
+            },
+            "smart_data": drive_data.get("smart_data"),
+            # v0.8.0 agents; absent from older ones. No identifiers.
+            "device_statistics": drive_data.get("device_statistics"),
+            "derived": drive_data.get("derived"),
+        }
+
+    raw_filesystems: list[dict[str, Any]] = (coord.data or {}).get(FILESYSTEMS_KEY, [])
+    filesystems = [
+        {
+            "mountpoint": fs.get("mountpoint"),
+            "total_bytes": fs.get("total_bytes"),
+            "used_bytes": fs.get("used_bytes"),
+            "use_percent": fs.get("use_percent"),
+        }
+        for fs in raw_filesystems
+    ]
+
+    health_data = health.data or {}
+    uptime = health_data.get("uptime_seconds")
+    return {
+        "agent": {
+            "name": health.config_entry.title,
+            "host": health.host,
+            "os": health_data.get("os"),
+            "uptime_seconds": uptime,
+            "uptime": uptime,  # deprecated in 1.0, removed in 2.0: use uptime_seconds
+            "version": health_data.get("version"),
+        },
+        "drives": drives,
+        "filesystems": filesystems,
+    }
 
 
 def _panel_hooks(hass: HomeAssistant, entry: ConfigEntry,
@@ -153,73 +241,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # names the devices they are added to; this also renames the ones whose
     # entities are all disabled. Never raises.
     async_sync_names(hass, entry)
-
-    # Register the get_drive_data service once per domain.
-    if not hass.services.has_service(DOMAIN, SERVICE_GET_DRIVE_DATA):
-        async def handle_get_drive_data(call: ServiceCall) -> dict[str, Any]:
-            entry_id: str = call.data["config_entry_id"]
-            domain_data = hass.data.get(DOMAIN, {})
-            if entry_id not in domain_data:
-                raise ServiceValidationError(
-                    f"No SMART Sniffer entry found with ID: {entry_id}"
-                )
-            coord = domain_data[entry_id]["coordinator"]
-            health = domain_data[entry_id]["health_coordinator"]
-
-            drives: dict[str, Any] = {}
-            for drive_id, drive_data in coord.data.items():
-                if drive_id.startswith("_"):
-                    continue
-                state, severity, reasons, accepted = evaluate_attention(
-                    drive_data, get_thresholds(coord.config_entry, drive_id)
-                )
-                drives[drive_id] = {
-                    "model": drive_data.get("model"),
-                    "serial": drive_data.get("serial"),
-                    "protocol": drive_data.get("protocol"),
-                    "device_path": drive_data.get("device_path"),
-                    "attention": {
-                        "state": state,
-                        "severity": severity,
-                        "reasons": reasons,
-                        "accepted": accepted,
-                    },
-                    "smart_data": drive_data.get("smart_data"),
-                    # v0.8.0 agents; absent from older ones. No identifiers.
-                    "device_statistics": drive_data.get("device_statistics"),
-                    "derived": drive_data.get("derived"),
-                }
-
-            raw_filesystems: list[dict[str, Any]] = coord.data.get(FILESYSTEMS_KEY, [])
-            filesystems = [
-                {
-                    "mountpoint": fs.get("mountpoint"),
-                    "total_bytes": fs.get("total_bytes"),
-                    "used_bytes": fs.get("used_bytes"),
-                    "use_percent": fs.get("use_percent"),
-                }
-                for fs in raw_filesystems
-            ]
-
-            return {
-                "agent": {
-                    "name": health.config_entry.title,
-                    "host": health.host,
-                    "os": health.data.get("os"),
-                    "uptime": health.data.get("uptime_seconds"),
-                    "version": health.data.get("version"),
-                },
-                "drives": drives,
-                "filesystems": filesystems,
-            }
-
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_GET_DRIVE_DATA,
-            handle_get_drive_data,
-            schema=vol.Schema({vol.Required("config_entry_id"): str}),
-            supports_response=SupportsResponse.ONLY,
-        )
 
     # Reload the integration when options are changed via the UI, but not
     # when the coordinator only stored what it learned about the agent, and
@@ -317,8 +338,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
-        if not hass.data[DOMAIN]:
-            hass.services.async_remove(DOMAIN, SERVICE_GET_DRIVE_DATA)
     return unload_ok
 
 

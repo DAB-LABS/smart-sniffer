@@ -563,8 +563,8 @@ def _parse_errors_line(value: Any) -> int | None:
 # all on /api/filesystems as the agent's FilesystemInfo list (a bare JSON
 # list, agent/filesystem.go). A record keeps total_bytes, used_bytes and its
 # status; available_bytes and use_percent are computed from them, and an
-# unavailable filesystem is served with zeros, as the agent serves a
-# mountpoint it could not statfs.
+# unavailable filesystem is served with null sizes, as the agent (v1.0)
+# serves a mountpoint it could not statfs.
 
 FS_STATUSES = ("ok", "unavailable")
 _FS_KEYS = ("id", "uuid", "mountpoint", "device", "fstype", "total_bytes", "used_bytes", "status")
@@ -592,9 +592,11 @@ def fs_payload(fs: dict, unavailable: bool = False, stored: bool = False) -> dic
     datasets). stored keeps the bytes of an unavailable one, for a file.
     """
     status = "unavailable" if unavailable else fs["status"]
+    # The agent's api_version 1 shape: an unavailable filesystem's sizes are
+    # null, not 0 (v1.0).
     out = {"id": fs["id"], "uuid": fs["uuid"], "mountpoint": fs["mountpoint"], "device": fs["device"],
-           "fstype": fs["fstype"], "total_bytes": 0, "used_bytes": 0, "available_bytes": 0,
-           "use_percent": 0.0, "status": status}
+           "fstype": fs["fstype"], "total_bytes": None, "used_bytes": None, "available_bytes": None,
+           "use_percent": None, "status": status}
     if status == "ok" or stored:
         total, used = fs["total_bytes"], fs["used_bytes"]
         available = max(total - used, 0)

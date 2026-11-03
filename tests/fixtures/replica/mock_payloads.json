@@ -1998,15 +1998,15 @@
   ],
   "filesystems": [
    {
-    "available_bytes": 0,
+    "available_bytes": null,
     "device": "/dev/sdy1",
     "fstype": "xfs",
     "id": "fs-1d000004",
     "mountpoint": "/mnt/archive",
     "status": "unavailable",
-    "total_bytes": 0,
-    "use_percent": 0.0,
-    "used_bytes": 0,
+    "total_bytes": null,
+    "use_percent": null,
+    "used_bytes": null,
     "uuid": "1d000004-0000-4000-8000-000000000004"
    }
   ],

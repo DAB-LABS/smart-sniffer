@@ -26,7 +26,8 @@ REPO = Path(__file__).resolve().parents[1]
 PROMISED = {
     "sata-hdd-healthy": {"/": (40.0, "ok"), "/data": (82.0, "ok")},
     "sata-hdd-reallocated": {"/srv/media": (91.0, "ok")},
-    "sata-hdd-devstat-uncorrectables": {"/mnt/archive": (0.0, "unavailable")},
+    # Unavailable: null sizes, as the agent sends them from v1.0.
+    "sata-hdd-devstat-uncorrectables": {"/mnt/archive": (None, "unavailable")},
     "nvme-wear": {"/": (97.0, "ok"), "/home": (30.0, "ok")},
     "zfs-pool-degraded": {"/tank": (21.0, "ok"), "/tank/media": (88.0, "ok"), "/tank/backups": (55.0, "ok")},
     "smart-failed": {"/mnt/backup": (47.0, "ok")},
@@ -119,7 +120,7 @@ def test_the_served_list_is_the_agents_bare_list(started):
         "/", "/data", "/", "/home", "/mnt/archive", "/tank", "/tank/media", "/tank/backups"]
     archive = _by_mount(items)["/mnt/archive"]
     assert archive["status"] == "unavailable"
-    assert (archive["total_bytes"], archive["used_bytes"], archive["use_percent"]) == (0, 0, 0.0)
+    assert (archive["total_bytes"], archive["used_bytes"], archive["use_percent"]) == (None, None, None)
     # The control state carries them too: all of them, and each record's own.
     state = client.get("/api/state")
     assert state["filesystems"] == items
@@ -176,7 +177,7 @@ def test_patch_used_bytes_percent_and_status(started):
     assert (got["used_bytes"], got["use_percent"]) == (1_615_000_000_000, 95.0)
 
     got = client.ok("PATCH", path, {"status": "unavailable"})["filesystem"]
-    assert got["status"] == "unavailable" and got["used_bytes"] == 0 and got["use_percent"] == 0.0
+    assert got["status"] == "unavailable" and got["used_bytes"] is None and got["use_percent"] is None
     got = client.ok("PATCH", path, {"status": "ok"})["filesystem"]
     assert (got["status"], got["use_percent"]) == ("ok", 95.0)
     assert _by_mount(client.get("/api/filesystems"))["/data"] == got

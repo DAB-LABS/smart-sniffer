@@ -113,11 +113,10 @@ def test_the_values_are_v070s():
         if row["class"] == "SmartSnifferSensor":
             key = row["unique_id"].split(f"{drive_id}_", 1)[1]
             assert _extract_attribute(drive, key) == row["value"], row["unique_id"]
-            standby = (
-                {"in_standby": True, "data_as_of": drive["last_updated"]}
-                if drive.get("in_standby") else {}
-            )
-            assert {**standby, **page_attributes(drive, key)} == row["attributes"]
+            # v1.0 (J16): in_standby and data_as_of are no longer on these.
+            golden_attrs = {k: v for k, v in row["attributes"].items()
+                            if k not in ("in_standby", "data_as_of")}
+            assert page_attributes(drive, key) == golden_attrs
             checked += 1
         elif row["class"] == "SmartSnifferDiagnosticAttrSensor":
             attr_id = int(row["unique_id"].rsplit("smart_attr_", 1)[1])

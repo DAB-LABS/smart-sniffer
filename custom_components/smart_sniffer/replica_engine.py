@@ -336,9 +336,11 @@ def fs_payload(fs: dict, unavailable: bool = False, stored: bool = False) -> dic
     datasets). stored keeps the bytes of an unavailable one, for a file.
     """
     status = "unavailable" if unavailable else fs["status"]
+    # The agent's api_version 1 shape: an unavailable filesystem's sizes are
+    # null, not 0 (v1.0).
     out = {"id": fs["id"], "uuid": fs["uuid"], "mountpoint": fs["mountpoint"], "device": fs["device"],
-           "fstype": fs["fstype"], "total_bytes": 0, "used_bytes": 0, "available_bytes": 0,
-           "use_percent": 0.0, "status": status}
+           "fstype": fs["fstype"], "total_bytes": None, "used_bytes": None, "available_bytes": None,
+           "use_percent": None, "status": status}
     if status == "ok" or stored:
         total, used = fs["total_bytes"], fs["used_bytes"]
         available = max(total - used, 0)

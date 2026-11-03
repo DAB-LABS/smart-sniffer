@@ -101,20 +101,22 @@ def golden_payload() -> dict[str, Any]:
 # SMART sensors.
 V100_ADDED_SUFFIX = "_unsafe_shutdowns"
 
-# Deprecated in v0.5.4, removed in v1.0 (docs/internal/process/deprecations.md).
+# Deprecated in v0.5.4, removed in v1.0 (docs/internal/process/deprecations.md):
+# from the Health sensor and from every SMART attribute sensor (J16).
 V100_REMOVED_HEALTH_ATTRIBUTES = ("in_standby", "data_as_of")
+V100_REMOVED_FROM = ("SmartSnifferHealthSensor", "SmartSnifferSensor", "SmartSnifferDiagnosticAttrSensor")
 
 
-def v100_golden(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+def v100_golden(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, int]]:
     """The v0.7.0 golden rows as v1.0 shows them (without the added sensors),
-    and how many Health rows lost the removed attributes."""
+    and, per entity class, how many rows lost the removed attributes."""
     out = copy.deepcopy(rows)
-    removed = 0
+    removed: dict[str, int] = {}
     for row in out:
-        if row["class"] == "SmartSnifferHealthSensor":
+        if row["class"] in V100_REMOVED_FROM:
             attrs = row.get("attributes") or {}
             if any(key in attrs for key in V100_REMOVED_HEALTH_ATTRIBUTES):
-                removed += 1
+                removed[row["class"]] = removed.get(row["class"], 0) + 1
             for key in V100_REMOVED_HEALTH_ATTRIBUTES:
                 attrs.pop(key, None)
     return out, removed

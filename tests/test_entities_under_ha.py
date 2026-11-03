@@ -168,8 +168,10 @@ def test_the_v070_golden_rebuilt(force):
     assert renamed == len(V083_RENAMED)
     # v1.0: the Health sensor's in_standby and data_as_of are gone (the
     # standby drive's Health row had them).
+    # v1.0 (J16): and the standby drive's SMART sensors lost them too.
     golden, removed = v100_golden(golden)
-    assert removed == 1
+    assert removed["SmartSnifferHealthSensor"] == 1
+    assert removed["SmartSnifferSensor"] >= 5
     data = golden_payload()
     _, added = _setup(data, force)
     rows = [_describe(e, "sensor") for e in added["sensor"]] + [
@@ -1063,3 +1065,25 @@ def test_entity_names_are_unique_per_device():
         assert None not in names, device
         dupes = sorted({n for n in names if names.count(n) > 1})
         assert dupes == [], (device, dupes)
+
+
+def test_duplicate_filesystem_ids_from_an_old_agent_warn_once(caplog):
+    """v1.0 (J10): an agent before 1.0 can list two filesystems under one id;
+    the integration says so once per run, naming the id, never the paths."""
+    coord = coordinator_mod.SmartSnifferCoordinator.__new__(coordinator_mod.SmartSnifferCoordinator)
+    coord.host = "10.0.0.5"
+    fss = [{"id": "fs-1d000004", "mountpoint": "/"}, {"id": "fs-1d000004", "mountpoint": "/home"},
+           {"id": "fs-2e000005", "mountpoint": "/data"}]
+    with caplog.at_level("WARNING"):
+        coord._warn_duplicate_filesystem_ids(fss)
+        coord._warn_duplicate_filesystem_ids(fss)
+        coord._warn_duplicate_filesystem_ids([{"id": "a"}, {"id": "a"}])
+    lines = [r.getMessage() for r in caplog.records if "several filesystems" in r.getMessage()]
+    assert len(lines) == 1 and "fs-1d000004" in lines[0] and "fs-2e000005" not in lines[0]
+    assert "/home" not in lines[0]
+    fresh = coordinator_mod.SmartSnifferCoordinator.__new__(coordinator_mod.SmartSnifferCoordinator)
+    fresh.host = "x"
+    with caplog.at_level("WARNING"):
+        caplog.clear()
+        fresh._warn_duplicate_filesystem_ids([{"id": "a"}, {"id": "b"}, "junk"])
+    assert not [r for r in caplog.records if "several filesystems" in r.getMessage()]

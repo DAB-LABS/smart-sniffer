@@ -499,14 +499,12 @@ class SmartSnifferSensor(CoordinatorEntity[SmartSnifferCoordinator], SensorEntit
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Standby attributes when the drive is sleeping, and the Device
-        Statistics readings this sensor shows beside its value (this poll's
-        pages only, never held)."""
+        """The Device Statistics readings this sensor shows beside its value
+        (this poll's pages only, never held). The in_standby and data_as_of
+        attributes, deprecated in v0.5.4, were removed in v1.0: the drive's
+        Standby sensor has both."""
         drive_data = self.coordinator.data.get(self._drive_id, {})
         attrs: dict[str, Any] = {}
-        if drive_data.get("in_standby"):
-            attrs["in_standby"] = True
-            attrs["data_as_of"] = drive_data.get("last_updated", "unknown")
         if self.entity_description.key == _NVME_WEAR_KEY:
             # Why a WD wear reading is unknown, or that it came from Device
             # Statistics (GH #63). Absent for every other drive.
@@ -785,8 +783,11 @@ class SmartSnifferAttentionReasonsSensor(
 # Filesystem usage sensor (one per monitored mountpoint)
 # ---------------------------------------------------------------------------
 
-def _bytes_to_gb(b: int | float) -> float:
-    """Convert bytes to GB, rounded to 1 decimal."""
+def _bytes_to_gb(b: int | float | None) -> float | None:
+    """Convert bytes to GiB, rounded to 1 decimal. None (an agent from v1.0
+    sends null sizes for a filesystem it could not read) stays None."""
+    if isinstance(b, bool) or not isinstance(b, (int, float)):
+        return None
     return round(b / (1024 ** 3), 1)
 
 

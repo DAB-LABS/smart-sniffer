@@ -197,6 +197,7 @@ async def _set_up(hass, thresholds=None):
     entry._async_set_state(hass, ConfigEntryState.SETUP_IN_PROGRESS, None)
     config_entries.current_entry.set(entry)
     harness.setups += 1
+    init.async_register_services(hass)  # async_setup's part (v1.0)
     assert await init.async_setup_entry(hass, entry)
     entry._async_set_state(hass, ConfigEntryState.LOADED, None)
     await hass.async_block_till_done()
@@ -328,4 +329,53 @@ def test_a_title_change_still_reloads(tmp_path, agent, notes):
         hass.config_entries.async_update_entry(h.entry, title="SMART Sniffer (nas one)")
         await hass.async_block_till_done()
         assert h.reloads == ["E1"]
+    _run(tmp_path, body)
+
+
+# --- smart_sniffer.get_drive_data (v1.0, J9) ------------------------------------------
+
+
+def test_get_drive_data_has_uptime_under_both_names(tmp_path, agent, notes):
+    async def body(hass):
+        h = await _set_up(hass)
+        response = await hass.services.async_call(
+            DOMAIN, "get_drive_data", {"config_entry_id": "E1"},
+            blocking=True, return_response=True)
+        assert response["agent"]["uptime_seconds"] == 100
+        assert response["agent"]["uptime"] == 100  # deprecated name, kept through 1.x
+        assert set(response) == {"agent", "drives", "filesystems"}
+        assert set(response["agent"]) == {"name", "host", "os", "uptime_seconds", "uptime", "version"}
+        drive = response["drives"][DRIVE]
+        assert set(drive) == {"model", "serial", "protocol", "device_path", "attention",
+                              "smart_data", "device_statistics", "derived"}
+        assert set(drive["attention"]) == {"state", "severity", "reasons", "accepted"}
+        assert isinstance(drive["attention"]["reasons"], list)
+        del h
+    _run(tmp_path, body)
+
+
+def test_get_drive_data_stays_registered_and_explains_with_nothing_loaded(tmp_path, agent, notes):
+    from homeassistant.exceptions import ServiceValidationError  # noqa: PLC0415
+
+    async def body(hass):
+        h = await _set_up(hass)
+        init = _package_init()
+        assert await init.async_unload_entry(hass, h.entry)
+        assert hass.services.has_service(DOMAIN, "get_drive_data")
+        with pytest.raises(ServiceValidationError, match="No SMART Sniffer agent is loaded"):
+            await hass.services.async_call(
+                DOMAIN, "get_drive_data", {"config_entry_id": "E1"},
+                blocking=True, return_response=True)
+    _run(tmp_path, body)
+
+
+def test_get_drive_data_names_an_unknown_entry(tmp_path, agent, notes):
+    from homeassistant.exceptions import ServiceValidationError  # noqa: PLC0415
+
+    async def body(hass):
+        await _set_up(hass)
+        with pytest.raises(ServiceValidationError, match="No loaded SMART Sniffer entry with ID nope"):
+            await hass.services.async_call(
+                DOMAIN, "get_drive_data", {"config_entry_id": "nope"},
+                blocking=True, return_response=True)
     _run(tmp_path, body)
