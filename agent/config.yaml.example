@@ -10,7 +10,7 @@ port: 9099
 token: ""
 
 # How often to re-scan drives and refresh SMART data (default: 60s).
-# Accepts Go duration strings: 30s, 1m, 5m, etc.
+# A duration with a unit (30s, 5m, 1h) or a number of seconds (3600).
 scan_interval: 60s
 
 # Enable mDNS/Zeroconf service advertisement (default: true).

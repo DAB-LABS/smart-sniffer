@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -18,6 +19,7 @@ func testLimiter() (*authLimiter, *fakeClock) {
 	clock := &fakeClock{t: time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)}
 	l := newAuthLimiter()
 	l.now = clock.now
+	l.logf = func(string, ...any) {} // the block line is tested on its own below
 	return l, clock
 }
 
@@ -241,5 +243,70 @@ func TestDefaultCap(t *testing.T) {
 	}
 	if newAuthLimiter().max != authMaxTracked {
 		t.Fatal("newAuthLimiter does not use the cap")
+	}
+}
+
+// v1.0: one log line when a block starts, none while it lasts, and never any
+// part of the password sent.
+func TestABlockLogsOneLine(t *testing.T) {
+	h, l, clock := limitedHandler()
+	var lines []string
+	l.logf = func(format string, args ...any) { lines = append(lines, fmt.Sprintf(format, args...)) }
+	const guess = "wrong-guess-falcon-1234"
+
+	for i := 1; i < authFailLimit; i++ {
+		call(h, "10.0.0.5", "/api/drives", guess)
+	}
+	if len(lines) != 0 {
+		t.Fatalf("logged before the block: %q", lines)
+	}
+	call(h, "10.0.0.5", "/api/drives", guess) // the 5th: the block starts
+	if len(lines) != 1 {
+		t.Fatalf("lines after the block started = %q, want one", lines)
+	}
+	if want := "Auth: blocking 10.0.0.5 for 1s after 5 wrong or missing passwords"; lines[0] != want {
+		t.Errorf("line = %q, want %q", lines[0], want)
+	}
+
+	// Requests during the block are answered 429 and log nothing.
+	for i := 0; i < 20; i++ {
+		if got := call(h, "10.0.0.5", "/api/drives", guess).Code; got != http.StatusTooManyRequests {
+			t.Fatalf("during the block: got %d, want 429", got)
+		}
+	}
+	call(h, "10.0.0.5", "/api/drives", "") // no password at all, still blocked
+	if len(lines) != 1 {
+		t.Fatalf("logged during the block: %q", lines)
+	}
+
+	// The next failure after the block is a new, doubled block: one more line.
+	clock.advance(authBlockStart)
+	call(h, "10.0.0.5", "/api/drives", "")
+	if len(lines) != 2 {
+		t.Fatalf("lines after the second block = %q, want two", lines)
+	}
+	if want := "Auth: blocking 10.0.0.5 for 2s after 6 wrong or missing passwords"; lines[1] != want {
+		t.Errorf("second line = %q, want %q", lines[1], want)
+	}
+
+	for _, line := range lines {
+		for _, secret := range []string{guess, testPassword, "Bearer"} {
+			if strings.Contains(line, secret) {
+				t.Errorf("line %q contains %q", line, secret)
+			}
+		}
+	}
+}
+
+func TestAnotherAddressGetsItsOwnLine(t *testing.T) {
+	h, l, _ := limitedHandler()
+	var lines []string
+	l.logf = func(format string, args ...any) { lines = append(lines, fmt.Sprintf(format, args...)) }
+	for i := 0; i < authFailLimit; i++ {
+		call(h, "10.0.0.5", "/api/drives", "wrong")
+		call(h, "10.0.0.6", "/api/drives", "wrong")
+	}
+	if len(lines) != 2 || !strings.Contains(lines[0], "10.0.0.5") || !strings.Contains(lines[1], "10.0.0.6") {
+		t.Fatalf("lines = %q, want one per address", lines)
 	}
 }

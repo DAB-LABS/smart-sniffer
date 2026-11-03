@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -208,18 +209,131 @@ func RunDiscover(cfg *Config, noWrite bool) error {
 		return nil
 	}
 
-	fmt.Println()
-	fmt.Printf("Write to %s? [Y/n]: ", configPath)
-
-	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Scan()
-	answer := strings.TrimSpace(scanner.Text())
-	if answer != "" && !strings.EqualFold(answer, "y") {
-		fmt.Println("Skipped. Add the device_overrides above to your config manually.")
+	ask := discoverAsk{in: os.Stdin, terminal: stdinIsTerminal(), yes: cfg.AssumeYes, out: os.Stdout}
+	write, err := ask.confirmWrite(configPath)
+	if err != nil {
+		return err
+	}
+	if !write {
 		return nil
 	}
-
 	return writeDeviceOverrides(configPath, needsOverride)
+}
+
+// discoverAsk is how --discover decides whether to write config.yaml: its
+// input, whether that input is a terminal, and --yes.
+type discoverAsk struct {
+	in       io.Reader
+	terminal bool
+	yes      bool
+	out      io.Writer
+}
+
+// confirmWrite asks before writing device_overrides to configPath.
+//
+// With no device_overrides in the file it asks "Write to ...? [Y/n]" as it
+// always has (Enter, or no input at all, means yes). When the file already
+// has device_overrides entries, writing replaces them, so it lists them and
+// asks "Replace them? [y/N]" (Enter means no). With no terminal to ask on it
+// leaves the file alone and says how to replace them anyway: --yes. --yes
+// answers yes to either question without reading input.
+func (a discoverAsk) confirmWrite(configPath string) (bool, error) {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return false, fmt.Errorf("reading %s: %w", configPath, err)
+	}
+	current, err := existingDeviceOverrides(data)
+	if err != nil {
+		return false, fmt.Errorf("reading device_overrides in %s: %w", configPath, err)
+	}
+
+	fmt.Fprintln(a.out)
+	if len(current) == 0 {
+		if a.yes {
+			fmt.Fprintf(a.out, "Writing to %s (--yes).\n", configPath)
+			return true, nil
+		}
+		fmt.Fprintf(a.out, "Write to %s? [Y/n]: ", configPath)
+		answer := readAnswer(a.in)
+		if answer != "" && !strings.EqualFold(answer, "y") && !strings.EqualFold(answer, "yes") {
+			fmt.Fprintln(a.out, "Skipped. Add the device_overrides above to your config manually.")
+			return false, nil
+		}
+		return true, nil
+	}
+
+	fmt.Fprintf(a.out, "WARNING: %s already has device_overrides:\n\n", configPath)
+	for _, ov := range current {
+		fmt.Fprintf(a.out, "    - device: %s\n      protocol: %s\n", ov.Device, ov.Protocol)
+	}
+	fmt.Fprintln(a.out)
+	fmt.Fprintf(a.out, "Writing replaces them with the entries above. The current file is kept as %s.bak.\n", configPath)
+	if a.yes {
+		fmt.Fprintln(a.out, "Replacing them (--yes).")
+		return true, nil
+	}
+	if !a.terminal {
+		fmt.Fprintf(a.out, "Not changed: there is no terminal to confirm on. To replace them, run again with --yes:\n")
+		fmt.Fprintln(a.out, "  smartha-agent --discover --yes")
+		return false, nil
+	}
+	fmt.Fprint(a.out, "Replace them? [y/N]: ")
+	answer := readAnswer(a.in)
+	if !strings.EqualFold(answer, "y") && !strings.EqualFold(answer, "yes") {
+		fmt.Fprintln(a.out, "Not changed. Edit device_overrides in your config by hand if you need to.")
+		return false, nil
+	}
+	return true, nil
+}
+
+// readAnswer reads one line of input, trimmed; "" on end of input.
+func readAnswer(in io.Reader) string {
+	scanner := bufio.NewScanner(in)
+	scanner.Scan()
+	return strings.TrimSpace(scanner.Text())
+}
+
+// existingDeviceOverrides returns the device_overrides entries already in a
+// config file's contents (none when the key is absent or empty).
+func existingDeviceOverrides(data []byte) ([]DeviceOverride, error) {
+	var doc struct {
+		DeviceOverrides []DeviceOverride `yaml:"device_overrides"`
+	}
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, err
+	}
+	return doc.DeviceOverrides, nil
+}
+
+// withoutTopLevelKey returns content with a top-level YAML key's block
+// removed (the "key:" line and the indented or "- " lines under it), and the
+// line index where the block was, or -1 when the key is not there.
+func withoutTopLevelKey(content, key string) (string, int) {
+	lines := strings.SplitAfter(content, "\n")
+	start := -1
+	for i, line := range lines {
+		if strings.HasPrefix(line, key+":") {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return content, -1
+	}
+	end := start + 1 // one past the last line of the block
+	for i := start + 1; i < len(lines); i++ {
+		line := lines[i]
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case trimmed == "":
+			continue // a blank line belongs to the block only if more of it follows
+		case line[0] == ' ' || line[0] == '\t' || line[0] == '-':
+			end = i + 1
+			continue
+		}
+		break
+	}
+	return strings.Join(lines[:start], "") + strings.Join(lines[end:], ""), start
 }
 
 // probeOneDrive attempts to read SMART data from a single drive path, trying
@@ -427,7 +541,29 @@ func resolveConfigPath(cfg *Config) string {
 	return ""
 }
 
-// writeDeviceOverrides backs up the config file and appends the device_overrides section.
+// spliceDeviceOverrides puts the device_overrides section into a config
+// file's contents: where the old section was, or appended at the end.
+func spliceDeviceOverrides(existing, section string) string {
+	rest, at := withoutTopLevelKey(existing, "device_overrides")
+	if at < 0 {
+		if existing != "" && !strings.HasSuffix(existing, "\n") {
+			existing += "\n"
+		}
+		return existing + section
+	}
+	lines := strings.SplitAfter(rest, "\n")
+	if at > len(lines) {
+		at = len(lines)
+	}
+	head := strings.Join(lines[:at], "")
+	if head != "" && !strings.HasSuffix(head, "\n") {
+		head += "\n"
+	}
+	return head + section + strings.Join(lines[at:], "")
+}
+
+// writeDeviceOverrides backs up the config file and writes the
+// device_overrides section.
 func writeDeviceOverrides(configPath string, drives []discoverDriveResult) error {
 	// Read existing config.
 	existing, err := os.ReadFile(configPath)
@@ -464,20 +600,22 @@ func writeDeviceOverrides(configPath string, drives []discoverDriveResult) error
 		return fmt.Errorf("marshalling device_overrides: %w", err)
 	}
 
-	// Append to existing config (preserving all existing fields).
-	var newContent []byte
-	if len(existing) > 0 && existing[len(existing)-1] != '\n' {
-		newContent = append(existing, '\n')
-	} else {
-		newContent = existing
+	// Every other line of the file is kept as it is. An existing
+	// device_overrides section (confirmed by confirmWrite) is replaced in
+	// place; otherwise the section is appended. Appending a second
+	// device_overrides key, as before v1.0, left a file the agent refused to
+	// start with.
+	newContent := spliceDeviceOverrides(string(existing), string(addition))
+	var check Config
+	if err := decodeConfigFile([]byte(newContent), &check); err != nil {
+		return fmt.Errorf("not writing %s: the result would not parse (%v); add the device_overrides above by hand", configPath, err)
 	}
-	newContent = append(newContent, addition...)
 
-	if err := os.WriteFile(configPath, newContent, 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(newContent), 0644); err != nil {
 		return fmt.Errorf("writing %s: %w", configPath, err)
 	}
 
-	fmt.Printf("\nAdded to %s:\n\n", configPath)
+	fmt.Printf("\nWrote to %s:\n\n", configPath)
 	fmt.Print("  " + strings.ReplaceAll(string(addition), "\n", "\n  "))
 	fmt.Println()
 	fmt.Println("Restart the agent to apply:")

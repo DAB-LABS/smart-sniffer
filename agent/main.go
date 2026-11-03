@@ -533,15 +533,22 @@ func authMiddlewareWith(token string, limiter *authLimiter, next http.Handler) h
 // Handlers
 // ---------------------------------------------------------------------------
 
+// apiVersion is api_version in /api/health. It changes only with a breaking
+// change to the agent's HTTP API (a key removed or renamed, a meaning or type
+// changed, an endpoint removed). Added keys and endpoints do not change it.
+const apiVersion = 1
+
 // healthResponse is the JSON payload for GET /api/health.
 type healthResponse struct {
 	Status      string   `json:"status"`
 	Version     string   `json:"version"`
+	APIVersion  int      `json:"api_version"` // v1.0: see apiVersion
 	OS          string   `json:"os"`
 	Hostname    string   `json:"hostname,omitempty"`   // short host name, as in the mDNS TXT record; omitted if it cannot be read
 	OSName      string   `json:"os_name,omitempty"`    // friendly OS name with version, read once at startup
 	OSVersion   string   `json:"os_version,omitempty"` // OS version alone
 	Uptime      int      `json:"uptime_seconds"`
+	Interval    int      `json:"scan_interval"` // v1.0: the scan interval in use, in whole seconds
 	Endpoints   []string `json:"endpoints"`
 	Drives      int      `json:"drives"`
 	Filesystems int      `json:"filesystems"`
@@ -580,11 +587,13 @@ func handleHealth(cache *DriveCache) http.HandlerFunc {
 		resp := healthResponse{
 			Status:      "ok",
 			Version:     version,
+			APIVersion:  apiVersion,
 			OS:          detectOS(),
 			Hostname:    shortHostname(),
 			OSName:      agentSystem.Name,
 			OSVersion:   agentSystem.Version,
 			Uptime:      int(time.Since(startTime).Seconds()),
+			Interval:    int(cache.interval.Round(time.Second) / time.Second),
 			Endpoints:   endpoints,
 			Drives:      driveCount,
 			Filesystems: fsCount,

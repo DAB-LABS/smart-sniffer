@@ -4,8 +4,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,7 +35,7 @@ type DeviceOverride struct {
 type Config struct {
 	Port               int                `yaml:"port"`
 	Token              string             `yaml:"token"`
-	ScanInterval       time.Duration      `yaml:"scan_interval"`
+	ScanInterval       time.Duration      `yaml:"-"`                   // read by decodeConfigFile: a duration (60s, 5m) or a bare number of seconds (3600)
 	MDNS               *bool              `yaml:"mdns"`                // pointer so we can detect "not set" vs "set to false"
 	AdvertiseInterface string             `yaml:"advertise_interface"` // restrict mDNS to this interface (e.g. "eth0")
 	MDNSName           string             `yaml:"mdns_name"`           // custom mDNS instance name (default: smartha-<hostname>)
@@ -48,6 +50,7 @@ type Config struct {
 	DeviceStatistics   *bool              `yaml:"device_statistics"`   // read ATA Device Statistics with a second smartctl call per poll (default: true); pointer to tell "not set" from false
 	Discover           bool               `yaml:"-"`                   // set by --discover flag; not read from config file
 	NoWrite            bool               `yaml:"-"`                   // set by --no-write flag; skips config write in discover mode
+	AssumeYes          bool               `yaml:"-"`                   // set by --yes / -y; with --discover, answers yes to its questions without reading stdin
 	SmartctlPathConfig string             `yaml:"smartctl_path"`       // smartctl binary from config; empty = PATH, then the usual install locations
 	SmartctlPath       string             `yaml:"-"`                   // resolved path to smartctl binary; set by resolveSmartctlPath()
 	AgentID            string             `yaml:"agent_id"`            // pins the agent ID; empty = random ID saved in agent_id.json
@@ -162,12 +165,15 @@ func LoadConfig() (*Config, error) {
 	configPath := flag.String("config", "", "Path to config.yaml (default: auto-detect)")
 	port := flag.Int("port", 0, "HTTP listen port (default 9099)")
 	token := flag.String("token", "", "Bearer token for API auth (optional)")
-	interval := flag.Duration("scan-interval", 0, "Drive rescan interval (e.g. 30s, 2m)")
+	var interval scanIntervalFlag
+	flag.Var(&interval, "scan-interval", "Drive rescan interval: a duration (30s, 5m, 1h) or a number of seconds (3600)")
 	noMDNS := flag.Bool("no-mdns", false, "Disable mDNS/Zeroconf service advertisement")
 	advIface := flag.String("interface", "", "Restrict mDNS advertisement to this network interface")
 	mdnsName := flag.String("mdns-name", "", "Custom mDNS instance name (default: smartha-<hostname>)")
 	discover := flag.Bool("discover", false, "Probe drives and detect protocols (diagnostic tool)")
 	noWrite := flag.Bool("no-write", false, "With --discover: print proposed overrides but do not write config")
+	assumeYes := flag.Bool("yes", false, "With --discover: write without asking, replacing any device_overrides already in config.yaml")
+	flag.BoolVar(assumeYes, "y", false, "Short for --yes")
 	verbose := flag.Bool("verbose", false, "Log every poll cycle instead of suppressing repeated lines")
 	noDevstat := flag.Bool("no-device-statistics", false, "Do not read ATA Device Statistics (one extra smartctl call per SATA drive per poll)")
 	flag.Parse()
@@ -179,7 +185,7 @@ func LoadConfig() (*Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("reading config file %s: %w", *configPath, err)
 		}
-		if err := yaml.Unmarshal(data, &cfg); err != nil {
+		if err := decodeConfigFile(data, &cfg); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", *configPath, err)
 		}
 		cfg.ConfigPath = absPath(*configPath)
@@ -190,7 +196,7 @@ func LoadConfig() (*Config, error) {
 			if err != nil {
 				continue // file not found — that's fine
 			}
-			if err := yaml.Unmarshal(data, &cfg); err != nil {
+			if err := decodeConfigFile(data, &cfg); err != nil {
 				return nil, fmt.Errorf("parsing %s: %w", path, err)
 			}
 			cfg.ConfigPath = absPath(path)
@@ -205,8 +211,8 @@ func LoadConfig() (*Config, error) {
 	if *token != "" {
 		cfg.Token = *token
 	}
-	if *interval != 0 {
-		cfg.ScanInterval = *interval
+	if interval.set {
+		cfg.ScanInterval = interval.d
 	}
 	if *noMDNS {
 		f := false
@@ -227,6 +233,9 @@ func LoadConfig() (*Config, error) {
 	}
 	if *noWrite {
 		cfg.NoWrite = true
+	}
+	if *assumeYes {
+		cfg.AssumeYes = true
 	}
 	// --verbose is enable-only: the flag can turn verbose logging on, but its
 	// absence must not clobber a "verbose: true" config-file setting back to
@@ -314,6 +323,92 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// decodeConfigFile reads config.yaml into cfg. scan_interval is read on its
+// own (scanIntervalYAML) so that a bare number of seconds is accepted as well
+// as a duration with a unit; every other key is decoded as before.
+func decodeConfigFile(data []byte, cfg *Config) error {
+	if err := yaml.Unmarshal(data, cfg); err != nil {
+		return err
+	}
+	// A yaml.Node, not a pointer: an empty "scan_interval:" is an error, as
+	// it was before, rather than quietly the default.
+	var raw struct {
+		ScanInterval yaml.Node `yaml:"scan_interval"`
+	}
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if raw.ScanInterval.Kind == 0 {
+		return nil // not in the file: the default stands
+	}
+	var v scanIntervalYAML
+	if err := v.UnmarshalYAML(&raw.ScanInterval); err != nil {
+		return err
+	}
+	cfg.ScanInterval = time.Duration(v)
+	return nil
+}
+
+// parseScanInterval reads a scan interval as written in config.yaml or on
+// the command line: a Go duration with a unit ("30s", "5m", "1h30m") or a
+// bare whole number of seconds ("3600"). Since v1.0; before that a bare
+// number stopped the agent at startup.
+func parseScanInterval(s string) (time.Duration, error) {
+	v := strings.TrimSpace(s)
+	if v == "" {
+		return 0, fmt.Errorf("scan_interval is empty (use a number of seconds such as 3600, or a duration such as 30s, 5m or 1h)")
+	}
+	if n, err := strconv.ParseUint(v, 10, 64); err == nil {
+		if n > uint64(math.MaxInt64/int64(time.Second)) {
+			return 0, fmt.Errorf("invalid scan_interval %q: too long", s)
+		}
+		return time.Duration(n) * time.Second, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return 0, fmt.Errorf("invalid scan_interval %q (use a number of seconds such as 3600, or a duration such as 30s, 5m or 1h)", s)
+	}
+	return d, nil
+}
+
+// scanIntervalYAML is scan_interval as read from config.yaml: 3600, "3600"
+// and 60s all decode.
+type scanIntervalYAML time.Duration
+
+func (v *scanIntervalYAML) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind != yaml.ScalarNode || node.Tag == "!!null" {
+		return fmt.Errorf("line %d: scan_interval must be a number of seconds such as 3600, or a duration such as 30s, 5m or 1h", node.Line)
+	}
+	d, err := parseScanInterval(node.Value)
+	if err != nil {
+		return fmt.Errorf("line %d: %w", node.Line, err)
+	}
+	*v = scanIntervalYAML(d)
+	return nil
+}
+
+// scanIntervalFlag is --scan-interval, read with the same rules as the file.
+type scanIntervalFlag struct {
+	d   time.Duration
+	set bool
+}
+
+func (f *scanIntervalFlag) String() string {
+	if f == nil || !f.set {
+		return ""
+	}
+	return f.d.String()
+}
+
+func (f *scanIntervalFlag) Set(s string) error {
+	d, err := parseScanInterval(s)
+	if err != nil {
+		return err
+	}
+	f.d, f.set = d, true
+	return nil
 }
 
 // absPath returns p made absolute, or p unchanged if that fails.

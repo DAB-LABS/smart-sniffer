@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net"
 	"net/http"
 	"strconv"
@@ -27,6 +28,11 @@ import (
 // Memory is bounded: at most authMaxTracked IPs are kept. When the table is
 // full, forgotten entries are dropped first, then the entry closest to being
 // forgotten.
+//
+// Each new block logs one line: the address, how many wrong or missing
+// passwords it has sent, and how long it is blocked. Requests answered 429
+// during a block log nothing, and nothing about the password sent is ever
+// logged.
 //
 // The client IP is the TCP peer address. X-Forwarded-For and similar headers
 // are ignored: the agent is not meant to sit behind a proxy, and a header
@@ -62,10 +68,11 @@ type authLimiter struct {
 	now     func() time.Time
 	records map[string]*authRecord
 	max     int
+	logf    func(format string, args ...any) // one line per new block; log.Printf in the agent
 }
 
 func newAuthLimiter() *authLimiter {
-	return &authLimiter{now: time.Now, records: make(map[string]*authRecord), max: authMaxTracked}
+	return &authLimiter{now: time.Now, records: make(map[string]*authRecord), max: authMaxTracked, logf: log.Printf}
 }
 
 // blocked reports whether ip must wait, and for how long.
@@ -87,8 +94,18 @@ func (l *authLimiter) blocked(ip string) (bool, time.Duration) {
 	return false, 0
 }
 
-// fail records a wrong or missing password from ip.
+// fail records a wrong or missing password from ip, and logs one line when
+// that starts a block.
 func (l *authLimiter) fail(ip string) {
+	failures, block := l.record(ip)
+	if block > 0 && l.logf != nil {
+		l.logf("Auth: blocking %s for %s after %d wrong or missing passwords", ip, block, failures)
+	}
+}
+
+// record counts the failure and returns the failure count and, when this
+// failure started a block, its length (0 otherwise).
+func (l *authLimiter) record(ip string) (int, time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := l.now()
@@ -114,7 +131,9 @@ func (l *authLimiter) fail(ip string) {
 			}
 		}
 		r.blockedUntil = now.Add(r.block)
+		return r.failures, r.block
 	}
+	return r.failures, 0
 }
 
 // succeed forgets ip: a correct password resets it.
